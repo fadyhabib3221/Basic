@@ -5,12 +5,13 @@
 // 4) Copy the firebaseConfig object Firebase gives you and paste its values below.
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyBUoKVFXJRmLz69GrsBOTJs4S15-20WDYg",
-  authDomain: "basic-3d4ac.firebaseapp.com",
-  projectId: "basic-3d4ac",
-  storageBucket: "basic-3d4ac.firebasestorage.app",
-  messagingSenderId: "638212034626",
-  appId: "1:638212034626:web:49a8bcd66bdf9fc00e5ddb"
+    apiKey: "AIzaSyA8iRE4U6EN7yevjWC8saGgo09E-zDHo2A",
+    authDomain: "basic-442e4.firebaseapp.com",
+    projectId: "basic-442e4",
+    storageBucket: "basic-442e4.firebasestorage.app",
+    messagingSenderId: "101682937860",
+    appId: "1:101682937860:web:2a2d135bf5008d55057551",
+    measurementId: "G-6BXHXRL9Q4"
 };
 
 // Recommended Firestore security rules (Firestore console -> Rules tab).
