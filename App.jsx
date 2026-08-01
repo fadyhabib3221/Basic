@@ -27,6 +27,19 @@ const monthLabel = (key) => {
   return `${MONTHS[idx] || m} ${y}`;
 };
 
+// Formats an ISO timestamp as DD-MM-YYYY HH:MM for showing when a note edit happened.
+const formatDateTime = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${dd}-${mm}-${yyyy} ${hh}:${min}`;
+};
+
 const emptyCustomerRow = () => ({ name: "", ticketNumber: "" });
 
 const emptyForm = {
@@ -269,7 +282,7 @@ const AIRPORTS = [
   ["APW", "Apia, Samoa"], ["TBU", "Nuku'alofa, Tonga"], ["GUM", "Guam"], ["SPN", "Saipan"],
 ].map(([code, place]) => `${code} - ${place}`.toUpperCase());
 
-export default function TicketsApp() {
+export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [tickets, setTickets] = useState([]);
   const [employees, setEmployees] = useState(null); // null = not loaded yet
   const [currentUser, setCurrentUser] = useState(null); // { username, name, isAdmin }
@@ -565,22 +578,29 @@ export default function TicketsApp() {
     }
     const next = [
       ...(employees || []),
-      { ...newEmployee, username: newEmployee.username.trim(), isAdmin: false, canViewAll: false },
+      { ...newEmployee, username: newEmployee.username.trim(), isAdmin: false, canViewAll: false, isAccounting: false },
     ];
     await persistEmployees(next);
     setNewEmployee(emptyNewEmployee);
   };
 
-  // Lets the main account grant or revoke an employee's permission to see everyone's tickets
-  // (instead of only the tickets they personally entered).
-  const toggleEmployeePermission = async (username) => {
+  // Lets the main account set an employee's access level:
+  // - "own": can only see and add their own tickets (default)
+  // - "all": can see every ticket, and add/see like a normal employee
+  // - "accounting": can see every ticket but cannot add tickets — the only edit
+  //   they're allowed is the Notes field on a ticket's detail page (each note edit
+  //   is timestamped and attributed to them, see saveTicketNotes).
+  const handleAccessChange = async (username, value) => {
     if (!currentUser.isAdmin) {
       setManageError("Only the main account can change employee permissions");
       return;
     }
-    const next = (employees || []).map((e) =>
-      e.username === username ? { ...e, canViewAll: !e.canViewAll } : e
-    );
+    const next = (employees || []).map((e) => {
+      if (e.username !== username) return e;
+      if (value === "accounting") return { ...e, isAccounting: true, canViewAll: true };
+      if (value === "all") return { ...e, isAccounting: false, canViewAll: true };
+      return { ...e, isAccounting: false, canViewAll: false };
+    });
     await persistEmployees(next);
   };
 
@@ -862,8 +882,20 @@ export default function TicketsApp() {
     setNotesSaved(false);
   };
   // Saves an edit to just the notes field of a ticket, without touching anything else.
+  // Every save appends an entry to notesHistory recording who made the change and when,
+  // so the full edit trail (including accounting-account edits) stays visible.
   const saveTicketNotes = (id) => {
-    const next = tickets.map((t) => (t.id === id ? { ...t, notes: notesDraft.toUpperCase() } : t));
+    const now = new Date().toISOString();
+    const nextNotes = notesDraft.toUpperCase();
+    const next = tickets.map((t) => {
+      if (t.id !== id) return t;
+      const history = Array.isArray(t.notesHistory) ? t.notesHistory : [];
+      return {
+        ...t,
+        notes: nextNotes,
+        notesHistory: [...history, { value: nextNotes, by: currentUser.name, at: now }],
+      };
+    });
     persistTickets(next);
     setNotesSaved(true);
   };
@@ -941,7 +973,13 @@ export default function TicketsApp() {
     ? (employees || []).find((e) => e.username === currentUser.username)
     : null;
   const canViewAllTickets =
-    !!currentUser && (currentUser.isAdmin || !!(currentEmployeeRecord && currentEmployeeRecord.canViewAll));
+    !!currentUser &&
+    (currentUser.isAdmin ||
+      !!(currentEmployeeRecord && (currentEmployeeRecord.canViewAll || currentEmployeeRecord.isAccounting)));
+  // Accounting accounts can see everything but cannot add tickets — their only allowed
+  // edit anywhere in the app is the Notes field on a ticket's detail page.
+  const isAccountingUser =
+    !!currentUser && !currentUser.isAdmin && !!(currentEmployeeRecord && currentEmployeeRecord.isAccounting);
   const visibleTickets = !currentUser
     ? []
     : canViewAllTickets
@@ -1096,13 +1134,8 @@ export default function TicketsApp() {
   // ---------- Render: loading ----------
   if (loading || setupComplete === null) {
     return (
-      <div className="w-full min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/40 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="bg-brand-gradient text-white rounded-2xl p-3 shadow-elevated animate-pulse">
-            <Plane size={22} />
-          </div>
-          <p className="text-slate-400 text-sm">Loading…</p>
-        </div>
+      <div className="w-full min-h-screen bg-slate-50 flex items-center justify-center">
+        <p className="text-slate-400 text-sm">Loading...</p>
       </div>
     );
   }
@@ -1110,47 +1143,39 @@ export default function TicketsApp() {
   // ---------- Render: first-run setup (only ever shown once, before any account exists) ----------
   if (employees && employees.length === 0 && !setupComplete) {
     return (
-      <div className="w-full min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/40 flex items-center justify-center p-4">
-        <div className="w-full max-w-sm">
-          <div className="flex flex-col items-center mb-6">
-            <div className="bg-brand-gradient text-white rounded-2xl p-3.5 shadow-elevated mb-3">
-              <Plane size={26} />
-            </div>
-            <h1 className="text-lg font-bold text-slate-900 tracking-tight">Flight Ticket Manager</h1>
+      <div className="w-full min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl border border-slate-200 p-6 w-full max-w-sm">
+          <div className="flex items-center gap-2 mb-1">
+            <Lock size={18} className="text-teal-700" />
+            <h1 className="font-bold text-slate-900">Create the admin account</h1>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-elevated p-6 animate-slide-up">
-            <div className="flex items-center gap-2 mb-1">
-              <Lock size={18} className="text-teal-700" />
-              <h2 className="font-semibold text-slate-900 tracking-tight">Create the admin account</h2>
+          <p className="text-xs text-slate-500 mb-4">
+            No employees exist yet. Create the first account — it will be the main account, and only it will be able to add or remove other employees.
+          </p>
+          {loginError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{loginError}</div>}
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Full name</label>
+              <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                value={setupName} onChange={(e) => setSetupName(e.target.value)} placeholder="e.g. Sara Ahmed" />
             </div>
-            <p className="text-xs text-slate-500 mb-5 leading-relaxed">
-              No employees exist yet. Create the first account — it will be the main account, and only it will be able to add or remove other employees.
-            </p>
-            {loginError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 border border-red-100 mb-3">{loginError}</div>}
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-slate-500 block mb-1">Full name</label>
-                <input className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2.5 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
-                  value={setupName} onChange={(e) => setSetupName(e.target.value)} placeholder="e.g. Sara Ahmed" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 block mb-1">Username</label>
-                <input className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2.5 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
-                  value={setupUsername} onChange={(e) => setSetupUsername(e.target.value)} placeholder="sara" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 block mb-1">Password</label>
-                <input type="password" className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2.5 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
-                  value={setupPassword} onChange={(e) => setSetupPassword(e.target.value)} placeholder="••••••" />
-              </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Username</label>
+              <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                value={setupUsername} onChange={(e) => setSetupUsername(e.target.value)} placeholder="sara" />
             </div>
-            <button onClick={handleCreateFirstAdmin}
-              className="w-full mt-5 bg-brand-gradient hover:brightness-110 text-white text-sm font-semibold rounded-lg shadow-soft transition-all active:scale-[0.98] px-4 py-2.5">
-              Create account and continue
-            </button>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Password</label>
+              <input type="password" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                value={setupPassword} onChange={(e) => setSetupPassword(e.target.value)} placeholder="••••••" />
+            </div>
           </div>
-          <p className="text-xs text-slate-400 mt-4 text-center leading-relaxed">
-            This is a simple access gate stored with the app's data, not a secure authentication system. Don't reuse an important password here.
+          <button onClick={handleCreateFirstAdmin}
+            className="w-full mt-4 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg px-4 py-2">
+            Create account and continue
+          </button>
+          <p className="text-xs text-slate-400 mt-4">
+            Note: this is a simple access gate stored with the app's data, not a secure authentication system — anyone with technical access to the app's data can read stored passwords. Don't reuse an important password here.
           </p>
         </div>
       </div>
@@ -1164,13 +1189,11 @@ export default function TicketsApp() {
   // anyone create a brand-new admin account without any credentials.
   if (employees && employees.length === 0 && setupComplete) {
     return (
-      <div className="w-full min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/40 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-elevated p-6 w-full max-w-sm text-center animate-slide-up">
-          <div className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-            <Lock size={20} className="text-slate-400" />
-          </div>
-          <h1 className="font-semibold text-slate-900 mb-1 tracking-tight">No accounts available</h1>
-          <p className="text-xs text-slate-500 leading-relaxed">
+      <div className="w-full min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl border border-slate-200 p-6 w-full max-w-sm text-center">
+          <Lock size={22} className="text-slate-400 mx-auto mb-2" />
+          <h1 className="font-bold text-slate-900 mb-1">No accounts available</h1>
+          <p className="text-xs text-slate-500">
             This app was already set up before, but no employee accounts currently exist. Restore a backup that contains employee accounts, or contact whoever manages this app.
           </p>
         </div>
@@ -1181,44 +1204,40 @@ export default function TicketsApp() {
   // ---------- Render: login screen ----------
   if (!currentUser) {
     return (
-      <div className="w-full min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/40 flex items-center justify-center p-4">
-        <div className="w-full max-w-sm">
-          <div className="flex flex-col items-center mb-6">
-            <div className="bg-brand-gradient text-white rounded-2xl p-3.5 shadow-elevated mb-3">
-              <Plane size={26} />
-            </div>
-            <h1 className="text-lg font-bold text-slate-900 tracking-tight">Flight Ticket Manager</h1>
-            <p className="text-xs text-slate-400 mt-0.5">Sign in with your employee account</p>
+      <div className="w-full min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl border border-slate-200 p-6 w-full max-w-sm">
+          <div className="flex items-center gap-2 mb-1">
+            <Lock size={18} className="text-teal-700" />
+            <h1 className="font-bold text-slate-900">Sign in</h1>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-elevated p-6 animate-slide-up">
-            {loginError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 border border-red-100 mb-3">{loginError}</div>}
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-slate-500 block mb-1">Username</label>
-                <input className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2.5 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
-                  value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleLogin()} placeholder="Username" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 block mb-1">Password</label>
-                <div className="relative">
-                  <input type={showPassword ? "text" : "password"}
-                    className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2.5 pr-9 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
-                    value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleLogin()} placeholder="Password" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
+          <p className="text-xs text-slate-500 mb-4">Flight Ticket Manager — sign in with your employee account.</p>
+          {loginError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{loginError}</div>}
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Username</label>
+              <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleLogin()} placeholder="Username" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Password</label>
+              <div className="relative">
+                <input type={showPassword ? "text" : "password"}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleLogin()} placeholder="Password" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
-            <button onClick={handleLogin}
-              className="w-full mt-5 bg-brand-gradient hover:brightness-110 text-white text-sm font-semibold rounded-lg shadow-soft transition-all active:scale-[0.98] px-4 py-2.5">
-              Sign in
-            </button>
           </div>
-          <p className="text-xs text-slate-400 mt-4 text-center">
+          <button onClick={handleLogin}
+            className="w-full mt-4 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg px-4 py-2">
+            Sign in
+          </button>
+          <p className="text-xs text-slate-400 mt-4">
             Ask your admin if you don't have an account yet.
           </p>
         </div>
@@ -1228,16 +1247,15 @@ export default function TicketsApp() {
 
   // ---------- Render: main app ----------
   return (
-    <div dir="ltr" className="w-full min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/40 text-slate-800">
-      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 shadow-soft mb-6">
-        <div className="max-w-5xl mx-auto px-4 md:px-6 py-3">
-        <header className="flex items-center justify-between flex-wrap gap-3">
+    <div dir="ltr" className="w-full min-h-screen bg-slate-50 text-slate-800">
+      <div className="max-w-5xl mx-auto p-4 md:p-6">
+        <header className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <div className="bg-brand-gradient text-white rounded-2xl p-3 shadow-elevated">
+            <div className="bg-teal-700 text-white rounded-xl p-3">
               <Plane size={24} />
             </div>
             <div>
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Flight Ticket Manager</h1>
+              <h1 className="text-xl md:text-2xl font-bold text-slate-900">Flight Ticket Manager</h1>
               <p className="text-slate-500 text-sm flex items-center gap-1.5 flex-wrap">
                 Signed in as {currentUser.name}
                 {currentUser.isAdmin && (
@@ -1248,6 +1266,11 @@ export default function TicketsApp() {
                 {!currentUser.isAdmin && !canViewAllTickets && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5">
                     Your own tickets only
+                  </span>
+                )}
+                {isAccountingUser && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full px-2 py-0.5">
+                    Accounting — view only
                   </span>
                 )}
                 {currentUser.isAdmin && (
@@ -1262,13 +1285,13 @@ export default function TicketsApp() {
           <div className="flex items-center gap-2 flex-wrap">
             {currentUser.isAdmin && (
               <button onClick={handleBackup}
-                className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-800 transition-colors">
+                className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5">
                 <Download size={15} /> Backup
               </button>
             )}
             {currentUser.isAdmin && (
               <button onClick={triggerRestore}
-                className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-800 transition-colors">
+                className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5">
                 <Upload size={15} /> Restore
               </button>
             )}
@@ -1283,7 +1306,7 @@ export default function TicketsApp() {
             )}
             {currentUser.isAdmin && (
               <button onClick={() => setShowManage(!showManage)}
-                className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-800 transition-colors">
+                className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5">
                 <Users size={15} /> Manage employees
               </button>
             )}
@@ -1296,18 +1319,32 @@ export default function TicketsApp() {
                 setNewPasswordInput("");
                 setConfirmPasswordInput("");
               }}
-              className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-800 transition-colors">
+              className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5">
               <Lock size={15} /> Change password
             </button>
             <button onClick={handleLogout}
-              className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5 hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-colors">
+              className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5">
               <LogOut size={15} /> Sign out
             </button>
+            {onChangeServer && (
+              <button
+                onClick={() => {
+                  requestConfirm(
+                    `Disconnect from the current server${currentServerUrl ? ` (${currentServerUrl})` : ""} and connect to a different one?`,
+                    () => {
+                      setConfirmDialog(null);
+                      onChangeServer();
+                    }
+                  );
+                }}
+                title="Change data server"
+                className="border border-slate-300 text-slate-500 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5"
+              >
+                <Wifi size={15} /> Server
+              </button>
+            )}
           </div>
         </header>
-        </div>
-      </div>
-      <div className="max-w-5xl mx-auto p-4 md:p-6 pt-0">
 
         {currentUser.isAdmin && (restoreError || restoreSuccess) && (
           <div className={`text-sm rounded-lg px-3 py-2 mb-4 ${restoreError ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
@@ -1316,26 +1353,26 @@ export default function TicketsApp() {
         )}
 
         {showManage && currentUser.isAdmin && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-4 md:p-5 mb-6">
-            <h2 className="font-semibold text-slate-900 mb-1 tracking-tight">Employee accounts</h2>
+          <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-5 mb-6">
+            <h2 className="font-semibold text-slate-900 mb-1">Employee accounts</h2>
             <p className="text-xs text-slate-400 mb-4">
               As the main account, you can view and change every employee's password, edit their name or username, add or remove accounts, control who can see all tickets, and grant or remove main-account access. This is a basic access gate, not a secure authentication system — anyone with technical access to the app's stored data can read these passwords. Avoid reusing important passwords here.
             </p>
-            {manageError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 border border-red-100 mb-3">{manageError}</div>}
+            {manageError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{manageError}</div>}
             <p className="text-xs text-slate-500 mb-3 flex items-center gap-1.5">
               <Wifi size={13} className="text-emerald-600" />
               {Object.keys(presenceMap).filter((u) => isOnline(u)).length} of {(employees || []).length} employees connected right now
             </p>
-            <div className="border border-slate-200 rounded-xl overflow-hidden mb-4 shadow-soft">
+            <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50/80 text-slate-500 text-[11px] uppercase tracking-wide font-semibold">
+                  <tr className="bg-slate-50 text-slate-500 text-xs">
                     <th className="text-left px-3 py-2 font-medium">Status</th>
                     <th className="text-left px-3 py-2 font-medium">Name</th>
                     <th className="text-left px-3 py-2 font-medium">Username</th>
                     <th className="text-left px-3 py-2 font-medium">Password</th>
                     <th className="text-left px-3 py-2 font-medium">Role</th>
-                    <th className="text-left px-3 py-2 font-medium">View all tickets</th>
+                    <th className="text-left px-3 py-2 font-medium">Access</th>
                     <th className="text-left px-3 py-2 font-medium"></th>
                   </tr>
                 </thead>
@@ -1353,14 +1390,14 @@ export default function TicketsApp() {
                           </td>
                           <td className="px-3 py-2">
                             <input
-                              className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-2 py-1.5 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                              className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                               value={editDraft.name}
                               onChange={(ev) => setEditDraft({ ...editDraft, name: ev.target.value })}
                             />
                           </td>
                           <td className="px-3 py-2">
                             <input
-                              className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-2 py-1.5 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                              className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                               value={editDraft.username}
                               onChange={(ev) => setEditDraft({ ...editDraft, username: ev.target.value })}
                             />
@@ -1369,7 +1406,7 @@ export default function TicketsApp() {
                             <div className="relative">
                               <input
                                 type={editShowPassword ? "text" : "password"}
-                                className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 pl-2 pr-8 py-1.5 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                                className="w-full border border-slate-300 rounded-lg pl-2 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                                 value={editDraft.password}
                                 onChange={(ev) => setEditDraft({ ...editDraft, password: ev.target.value })}
                               />
@@ -1395,12 +1432,15 @@ export default function TicketsApp() {
                             {e.isAdmin ? (
                               <span className="text-xs">Always (Main account)</span>
                             ) : (
-                              <input
-                                type="checkbox"
-                                checked={!!e.canViewAll}
-                                onChange={() => toggleEmployeePermission(e.username)}
-                                className="w-4 h-4 accent-teal-700"
-                              />
+                              <select
+                                value={e.isAccounting ? "accounting" : e.canViewAll ? "all" : "own"}
+                                onChange={(ev) => handleAccessChange(e.username, ev.target.value)}
+                                className="border border-slate-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white"
+                              >
+                                <option value="own">Own tickets only</option>
+                                <option value="all">All tickets (view &amp; edit)</option>
+                                <option value="accounting">Accounting (view + notes only)</option>
+                              </select>
                             )}
                           </td>
                           <td className="px-3 py-2">
@@ -1417,7 +1457,7 @@ export default function TicketsApp() {
                       );
                     }
                     return (
-                      <tr key={e.username} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
+                      <tr key={e.username} className="border-t border-slate-100">
                         <td className="px-3 py-2">
                           <span className={`inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 ${isOnline(e.username) ? "text-emerald-700 bg-emerald-50 border border-emerald-200" : "text-slate-400 bg-slate-100 border border-slate-200"}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${isOnline(e.username) ? "bg-emerald-500" : "bg-slate-300"}`} />
@@ -1449,15 +1489,15 @@ export default function TicketsApp() {
                           {e.isAdmin ? (
                             <span className="text-xs">Always (Main account)</span>
                           ) : (
-                            <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={!!e.canViewAll}
-                                onChange={() => toggleEmployeePermission(e.username)}
-                                className="w-4 h-4 accent-teal-700"
-                              />
-                              <span className="text-xs text-slate-500">{e.canViewAll ? "All tickets" : "Own tickets only"}</span>
-                            </label>
+                            <select
+                              value={e.isAccounting ? "accounting" : e.canViewAll ? "all" : "own"}
+                              onChange={(ev) => handleAccessChange(e.username, ev.target.value)}
+                              className="border border-slate-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white"
+                            >
+                              <option value="own">Own tickets only</option>
+                              <option value="all">All tickets (view &amp; edit)</option>
+                              <option value="accounting">Accounting (view + notes only)</option>
+                            </select>
                           )}
                         </td>
                         <td className="px-3 py-2 text-right">
@@ -1496,55 +1536,55 @@ export default function TicketsApp() {
               </table>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <input className="border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+              <input className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 placeholder="Full name" value={newEmployee.name}
                 onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
-              <input className="border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+              <input className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 placeholder="Username" value={newEmployee.username}
                 onChange={(e) => setNewEmployee({ ...newEmployee, username: e.target.value })} />
-              <input type="password" className="border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+              <input type="password" className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 placeholder="Password" value={newEmployee.password}
                 onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
             </div>
             <button onClick={handleAddEmployee}
-              className="mt-3 bg-brand-gradient hover:brightness-110 text-white text-sm font-semibold rounded-lg shadow-soft transition-all active:scale-[0.98] px-4 py-2 flex items-center gap-1.5">
+              className="mt-3 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center gap-1.5">
               <UserPlus size={15} /> Add employee
             </button>
           </div>
         )}
 
         {showChangePassword && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-4 md:p-5 mb-6 max-w-sm">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-5 mb-6 max-w-sm">
             <h2 className="font-semibold text-slate-900 mb-1 flex items-center gap-2">
               <Lock size={16} className="text-teal-700" /> Change your password
             </h2>
             <p className="text-xs text-slate-400 mb-4">
               Signed in as {currentUser.name} ({currentUser.username})
             </p>
-            {passwordError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 border border-red-100 mb-3">{passwordError}</div>}
-            {passwordSuccess && <div className="bg-emerald-50 text-emerald-700 text-sm rounded-lg px-3 py-2 border border-emerald-100 mb-3">{passwordSuccess}</div>}
+            {passwordError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{passwordError}</div>}
+            {passwordSuccess && <div className="bg-emerald-50 text-emerald-700 text-sm rounded-lg px-3 py-2 mb-3">{passwordSuccess}</div>}
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-slate-500 block mb-1">Current password</label>
                 <input type="password"
-                  className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                   value={currentPasswordInput} onChange={(e) => setCurrentPasswordInput(e.target.value)} />
               </div>
               <div>
                 <label className="text-xs text-slate-500 block mb-1">New password</label>
                 <input type="password"
-                  className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                   value={newPasswordInput} onChange={(e) => setNewPasswordInput(e.target.value)} />
               </div>
               <div>
                 <label className="text-xs text-slate-500 block mb-1">Confirm new password</label>
                 <input type="password"
-                  className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                   value={confirmPasswordInput} onChange={(e) => setConfirmPasswordInput(e.target.value)} />
               </div>
             </div>
             <button onClick={handleChangePassword}
-              className="w-full mt-4 bg-brand-gradient hover:brightness-110 text-white text-sm font-semibold rounded-lg shadow-soft transition-all active:scale-[0.98] px-4 py-2">
+              className="w-full mt-4 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg px-4 py-2">
               Update password
             </button>
           </div>
@@ -1560,27 +1600,27 @@ export default function TicketsApp() {
           </p>
           <button
             onClick={() => (selectedMonth ? exportMonth(selectedMonth) : exportAllMonths())}
-            className="text-teal-700 border border-teal-600 hover:bg-teal-600 hover:text-white text-xs font-semibold rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors shadow-soft"
+            className="text-teal-700 border border-teal-700 hover:bg-teal-50 text-xs font-semibold rounded-lg px-3 py-1.5 flex items-center gap-1.5"
           >
             <Download size={14} /> {selectedMonth ? "Export this month to Excel" : "Export all months to Excel"}
           </button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-card hover:shadow-elevated hover:-translate-y-0.5 transition-all p-4 flex items-center gap-3">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
             <div className="bg-slate-100 rounded-lg p-2 text-slate-600"><Ticket size={20} /></div>
             <div>
               <p className="text-xs text-slate-500">Tickets</p>
               <p className="text-lg font-bold">{byCompany.length}</p>
             </div>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-card hover:shadow-elevated hover:-translate-y-0.5 transition-all p-4 flex items-center gap-3">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
             <div className="bg-blue-50 rounded-lg p-2 text-blue-700"><Wallet size={20} /></div>
             <div>
               <p className="text-xs text-slate-500">Total sales</p>
               <p className="text-lg font-bold">{fmt(totals.total)}</p>
             </div>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-card hover:shadow-elevated hover:-translate-y-0.5 transition-all p-4 flex items-center gap-3">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
             <div className="bg-emerald-50 rounded-lg p-2 text-emerald-700"><TrendingUp size={20} /></div>
             <div>
               <p className="text-xs text-slate-500">Total profit</p>
@@ -1589,11 +1629,12 @@ export default function TicketsApp() {
           </div>
         </div>
 
-        {/* Entry form */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-4 md:p-5 mb-6">
-          <h2 className="font-semibold text-slate-900 mb-4 tracking-tight">{form.id ? "Edit ticket" : "Add a new ticket"}</h2>
+        {/* Entry form (accounting accounts are view-only + notes-only, so this is hidden for them) */}
+        {!isAccountingUser && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-5 mb-6">
+          <h2 className="font-semibold text-slate-900 mb-4">{form.id ? "Edit ticket" : "Add a new ticket"}</h2>
           {error && (
-            <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 border border-red-100 mb-3">{error}</div>
+            <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{error}</div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
@@ -1605,7 +1646,7 @@ export default function TicketsApp() {
             <div>
               <label className="text-xs text-slate-500 block mb-1">Company (optional)</label>
               <input
-                className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 value={form.company}
                 onChange={(e) => setForm({ ...form, company: e.target.value.toUpperCase() })}
                 placeholder="e.g. Acme Corp"
@@ -1618,7 +1659,7 @@ export default function TicketsApp() {
                 type="number"
                 min={1}
                 max={50}
-                className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 value={form.customersCount}
                 onChange={(e) => handleCustomersCountChange(e.target.value)}
                 onBlur={(e) => {
@@ -1640,14 +1681,14 @@ export default function TicketsApp() {
               {form.customers.map((c, i) => (
                 <div key={i} className="grid grid-cols-2 gap-2 md:gap-3">
                   <input
-                    className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                     value={c.name}
                     onChange={(e) => handleCustomerFieldChange(i, "name", e.target.value)}
                     placeholder={`Customer ${i + 1} name`}
                     list="customer-suggestions"
                   />
                   <input
-                    className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                     value={c.ticketNumber}
                     onChange={(e) => handleCustomerFieldChange(i, "ticketNumber", e.target.value)}
                     placeholder={`Ticket number ${i + 1} (e.g. 077-1234567890)`}
@@ -1661,7 +1702,7 @@ export default function TicketsApp() {
             <div>
               <label className="text-xs text-slate-500 block mb-1">From</label>
               <input
-                className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 value={form.from}
                 onChange={(e) => handleCityChange("from", e.target.value)}
                 placeholder="Cairo"
@@ -1671,7 +1712,7 @@ export default function TicketsApp() {
             <div>
               <label className="text-xs text-slate-500 block mb-1">To</label>
               <input
-                className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 value={form.to}
                 onChange={(e) => handleCityChange("to", e.target.value)}
                 placeholder="Dubai"
@@ -1681,7 +1722,7 @@ export default function TicketsApp() {
             <div>
               <label className="text-xs text-slate-500 block mb-1">Airline</label>
               <input
-                className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 value={form.airline}
                 onChange={(e) => handleAirlineChange(e.target.value)}
                 placeholder="EgyptAir"
@@ -1692,7 +1733,7 @@ export default function TicketsApp() {
               <label className="text-xs text-slate-500 block mb-1">Ticket issue date</label>
               <input
                 type="date"
-                className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
               />
@@ -1701,7 +1742,7 @@ export default function TicketsApp() {
               <label className="text-xs text-slate-500 block mb-1">Base price</label>
               <input
                 type="number"
-                className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 value={form.basePrice}
                 onChange={(e) => setForm({ ...form, basePrice: e.target.value })}
                 placeholder="0"
@@ -1711,7 +1752,7 @@ export default function TicketsApp() {
               <label className="text-xs text-slate-500 block mb-1">Taxes</label>
               <input
                 type="number"
-                className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 value={form.tax}
                 onChange={(e) => setForm({ ...form, tax: e.target.value })}
                 placeholder="0"
@@ -1721,7 +1762,7 @@ export default function TicketsApp() {
               <label className="text-xs text-slate-500 block mb-1">Total price</label>
               <input
                 type="number"
-                className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 value={form.totalPrice}
                 onChange={(e) => setForm({ ...form, totalPrice: e.target.value })}
                 placeholder="0"
@@ -1736,7 +1777,7 @@ export default function TicketsApp() {
             <div className="md:col-span-3">
               <label className="text-xs text-slate-500 block mb-1">Notes</label>
               <input
-                className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value.toUpperCase() })}
                 placeholder="Optional"
@@ -1747,27 +1788,28 @@ export default function TicketsApp() {
           <div className="flex gap-2 mt-4">
             <button
               onClick={handleSubmit}
-              className="bg-brand-gradient hover:brightness-110 text-white text-sm font-semibold rounded-lg shadow-soft transition-all active:scale-[0.98] px-4 py-2 flex items-center gap-1.5"
+              className="bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center gap-1.5"
             >
               <Check size={16} /> {form.id ? "Save changes" : "Add ticket"}
             </button>
             {form.id && (
               <button
                 onClick={handleCancel}
-                className="border border-slate-300 text-slate-600 text-sm rounded-lg px-4 py-2 flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-800 transition-colors"
+                className="border border-slate-300 text-slate-600 text-sm rounded-lg px-4 py-2 flex items-center gap-1.5"
               >
                 <X size={16} /> Cancel
               </button>
             )}
           </div>
         </div>
+        )}
 
         {/* Search and filters */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
-              className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 pl-9 pr-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600"
+              className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
               placeholder="Search by employee, company, ticket number, customer, destination, or airline"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -1776,7 +1818,7 @@ export default function TicketsApp() {
           <div className="relative sm:w-56">
             <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <select
-              className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 pl-9 pr-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600 bg-white appearance-none"
+              className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white appearance-none"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
             >
@@ -1789,7 +1831,7 @@ export default function TicketsApp() {
           <div className="relative sm:w-56">
             <Building2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <select
-              className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 pl-9 pr-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600 bg-white appearance-none"
+              className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white appearance-none"
               value={selectedCompany}
               onChange={(e) => setSelectedCompany(e.target.value)}
             >
@@ -1829,7 +1871,7 @@ export default function TicketsApp() {
         </datalist>
 
         {/* Ticket list */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           {filtered.length === 0 ? (
             <p className="text-center text-slate-400 text-sm py-10">
               {visibleTickets.length === 0 ? "No tickets recorded yet" : "No results match your search"}
@@ -1838,7 +1880,7 @@ export default function TicketsApp() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse">
                 <thead>
-                  <tr className="bg-slate-50/80 text-slate-500 text-[11px] uppercase tracking-wide">
+                  <tr className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Employee</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Company</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Ticket #</th>
@@ -1858,7 +1900,7 @@ export default function TicketsApp() {
                     <tr
                       key={t.id}
                       onClick={() => openTicketDetail(t)}
-                      className="border-t border-slate-100 hover:bg-teal-50/50 leading-tight cursor-pointer transition-colors"
+                      className="border-t border-slate-100 hover:bg-slate-50 leading-tight cursor-pointer"
                     >
                       <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.employee || "-"}</td>
                       <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.company || "-"}</td>
@@ -1898,14 +1940,14 @@ export default function TicketsApp() {
         </div>
 
         {!selectedMonth && monthlyBreakdown.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden mt-6">
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mt-6">
             <div className="px-4 py-3 border-b border-slate-100">
-              <h2 className="font-semibold text-slate-900 text-sm tracking-tight">Totals by month</h2>
+              <h2 className="font-semibold text-slate-900 text-sm">Totals by month</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50/80 text-slate-500 text-[11px] uppercase tracking-wide font-semibold">
+                  <tr className="bg-slate-50 text-slate-500 text-xs">
                     <th className="text-left px-3 py-2 font-medium">Month</th>
                     <th className="text-left px-3 py-2 font-medium">Tickets</th>
                     <th className="text-left px-3 py-2 font-medium">Total sales</th>
@@ -1915,7 +1957,7 @@ export default function TicketsApp() {
                 </thead>
                 <tbody>
                   {monthlyBreakdown.map((m) => (
-                    <tr key={m.key} className="border-t border-slate-100 hover:bg-teal-50/40 transition-colors">
+                    <tr key={m.key} className="border-t border-slate-100 hover:bg-slate-50">
                       <td className="px-3 py-2 font-medium text-slate-800">{monthLabel(m.key)}</td>
                       <td className="px-3 py-2 text-slate-600">{m.count}</td>
                       <td className="px-3 py-2 text-slate-600">{fmt(m.total)}</td>
@@ -1945,9 +1987,9 @@ export default function TicketsApp() {
         )}
 
         {!selectedCompany && companyBreakdown.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden mt-6">
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mt-6">
             <div className="px-4 py-3 border-b border-slate-100">
-              <h2 className="font-semibold text-slate-900 text-sm tracking-tight">Companies and their customers</h2>
+              <h2 className="font-semibold text-slate-900 text-sm">Companies and their customers</h2>
             </div>
             <div className="divide-y divide-slate-100">
               {companyBreakdown.map((c) => (
@@ -1983,24 +2025,24 @@ export default function TicketsApp() {
       </div>
 
       {viewingTicket && (
-        <div className="fixed inset-0 bg-white z-40 overflow-y-auto animate-fade-in">
+        <div className="fixed inset-0 bg-white z-40 overflow-y-auto">
           <div className="max-w-3xl mx-auto p-4 md:p-6">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
-                <div className="bg-brand-gradient text-white rounded-xl p-2 shadow-soft">
+                <div className="bg-teal-700 text-white rounded-lg p-2">
                   <Ticket size={18} />
                 </div>
                 <h1 className="text-lg md:text-xl font-bold text-slate-900">Ticket details</h1>
               </div>
               <button
                 onClick={closeTicketDetail}
-                className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-800 transition-colors"
+                className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5"
               >
                 <X size={15} /> Close
               </button>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100 shadow-card">
+            <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 md:p-5">
                 <div>
                   <p className="text-xs text-slate-400 mb-1">Entered by</p>
@@ -2033,14 +2075,14 @@ export default function TicketsApp() {
                 <div className="border border-slate-200 rounded-lg overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-slate-50/80 text-slate-500 text-[11px] uppercase tracking-wide font-semibold">
+                      <tr className="bg-slate-50 text-slate-500 text-xs">
                         <th className="text-left px-3 py-2 font-medium">Customer</th>
                         <th className="text-left px-3 py-2 font-medium">Ticket number</th>
                       </tr>
                     </thead>
                     <tbody>
                       {getCustomers(viewingTicket).map((c, i) => (
-                        <tr key={i} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
+                        <tr key={i} className="border-t border-slate-100">
                           <td className="px-3 py-2 text-slate-700">{c.name || "-"}</td>
                           <td className="px-3 py-2 text-slate-700 font-mono">{c.ticketNumber || "-"}</td>
                         </tr>
@@ -2074,7 +2116,7 @@ export default function TicketsApp() {
               <div className="p-4 md:p-5">
                 <p className="text-xs text-slate-400 mb-2">Notes</p>
                 <textarea
-                  className="w-full border border-slate-300 rounded-lg transition-colors hover:border-slate-400 px-3 py-2 text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-teal-600/25 focus:border-teal-600 min-h-[100px]"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 min-h-[100px]"
                   value={notesDraft}
                   onChange={(e) => { setNotesDraft(e.target.value.toUpperCase()); setNotesSaved(false); }}
                   placeholder="No notes yet — add some here"
@@ -2083,7 +2125,7 @@ export default function TicketsApp() {
                   <button
                     onClick={() => saveTicketNotes(viewingTicket.id)}
                     disabled={notesDraft === (viewingTicket.notes || "")}
-                    className="bg-brand-gradient hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100 text-white text-sm font-semibold rounded-lg shadow-soft transition-all px-4 py-2 flex items-center gap-1.5"
+                    className="bg-teal-700 hover:bg-teal-800 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center gap-1.5"
                   >
                     <Check size={15} /> Save notes
                   </button>
@@ -2091,6 +2133,25 @@ export default function TicketsApp() {
                     <span className="text-xs text-emerald-700 font-medium">Saved</span>
                   )}
                 </div>
+
+                {Array.isArray(viewingTicket.notesHistory) && viewingTicket.notesHistory.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-slate-100">
+                    <p className="text-xs text-slate-400 mb-2">Edit history (most recent first)</p>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {[...viewingTicket.notesHistory].reverse().map((h, idx) => (
+                        <div
+                          key={idx}
+                          className="text-xs bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5 flex items-start justify-between gap-3"
+                        >
+                          <span className="text-slate-600 break-words">{h.value || "(cleared)"}</span>
+                          <span className="text-slate-400 whitespace-nowrap shrink-0">
+                            {h.by} · {formatDateTime(h.at)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -2098,19 +2159,19 @@ export default function TicketsApp() {
       )}
 
       {confirmDialog && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-elevated p-5 w-full max-w-sm animate-slide-up">
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 w-full max-w-sm">
             <p className="text-sm text-slate-700 mb-4">{confirmDialog.message}</p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setConfirmDialog(null)}
-                className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 hover:bg-slate-50 hover:border-slate-400 transition-colors"
+                className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2"
               >
                 Cancel
               </button>
               <button
                 onClick={() => confirmDialog.onConfirm()}
-                className="bg-brand-gradient hover:brightness-110 text-white text-sm font-semibold rounded-lg shadow-soft transition-all active:scale-[0.98] px-3 py-2"
+                className="bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg px-3 py-2"
               >
                 Confirm
               </button>
