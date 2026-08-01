@@ -79,7 +79,16 @@ const resizeCustomers = (customers, count) => {
   return next;
 };
 
-const emptyNewEmployee = { name: "", username: "", password: "" };
+const emptyNewEmployee = {
+  name: "",
+  username: "",
+  password: "",
+  // Default permissions for a newly created employee: can only see and add
+  // their own tickets, cannot edit anything, and is not an accounting account.
+  canViewAll: false,
+  canEdit: false,
+  isAccounting: false,
+};
 
 // IATA 3-digit airline accounting/ticketing prefix codes — the first 3 digits of a
 // standard e-ticket number identify the issuing airline. Used to link the ticket
@@ -309,6 +318,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const [showManage, setShowManage] = useState(false);
   const [newEmployee, setNewEmployee] = useState(emptyNewEmployee);
+  const [showNewEmployeePerms, setShowNewEmployeePerms] = useState(false);
   const [manageError, setManageError] = useState("");
   const [visiblePasswords, setVisiblePasswords] = useState({});
   const [editingUsername, setEditingUsername] = useState(null);
@@ -578,10 +588,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     const next = [
       ...(employees || []),
-      { ...newEmployee, username: newEmployee.username.trim(), isAdmin: false, canViewAll: false, isAccounting: false },
+      {
+        ...newEmployee,
+        username: newEmployee.username.trim(),
+        isAdmin: false,
+        // Accounting is a fixed bundle: full view access, notes-only editing —
+        // it overrides whatever was picked for canViewAll / canEdit.
+        canViewAll: newEmployee.isAccounting ? true : newEmployee.canViewAll,
+        canEdit: newEmployee.isAccounting ? false : newEmployee.canEdit,
+        isAccounting: newEmployee.isAccounting,
+      },
     ];
     await persistEmployees(next);
     setNewEmployee(emptyNewEmployee);
+    setShowNewEmployeePerms(false);
   };
 
   // Lets the main account set an employee's access level:
@@ -849,10 +869,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setForm(emptyForm);
   };
 
-  // Only the main account may edit or delete tickets — employees can add tickets but
-  // cannot modify or remove any ticket afterward, including ones they entered themselves.
+  // The main account can always edit tickets; an employee can too, but only if they've
+  // been granted the "edit tickets" permission. Deleting stays main-account only either way.
   const handleEdit = (t) => {
-    if (!currentUser.isAdmin) return;
+    if (!currentUser.isAdmin && !canEditTickets) return;
     // Backward compatibility: older records stored a single customer/ticketNumber pair
     const customers =
       Array.isArray(t.customers) && t.customers.length > 0
@@ -980,6 +1000,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // edit anywhere in the app is the Notes field on a ticket's detail page.
   const isAccountingUser =
     !!currentUser && !currentUser.isAdmin && !!(currentEmployeeRecord && currentEmployeeRecord.isAccounting);
+  // A non-admin employee can be granted permission to edit tickets (within whatever
+  // set of tickets they can already see). Accounting accounts are excluded even if the
+  // flag is set — their only allowed edit is the Notes field, never the ticket itself.
+  const canEditTickets =
+    !!currentUser &&
+    (currentUser.isAdmin ||
+      !!(currentEmployeeRecord && currentEmployeeRecord.canEdit && !currentEmployeeRecord.isAccounting));
   const visibleTickets = !currentUser
     ? []
     : canViewAllTickets
@@ -1546,6 +1573,73 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 placeholder="Password" value={newEmployee.password}
                 onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
             </div>
+
+            {/* Multi-select permissions picker: choose any combination of view/edit
+                access to grant this employee before creating the account. */}
+            <div className="relative mt-3 max-w-sm">
+              <button
+                type="button"
+                onClick={() => setShowNewEmployeePerms(!showNewEmployeePerms)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between gap-2"
+              >
+                <span className="font-medium">Permissions</span>
+                <span className="text-xs text-slate-500 truncate">
+                  {newEmployee.isAccounting
+                    ? "Accounting (view all, notes only)"
+                    : newEmployee.canViewAll && newEmployee.canEdit
+                    ? "View all + edit tickets"
+                    : newEmployee.canViewAll
+                    ? "View all tickets, no edit"
+                    : newEmployee.canEdit
+                    ? "Own tickets + edit"
+                    : "Own tickets only"}
+                </span>
+              </button>
+
+              {showNewEmployeePerms && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg p-3 space-y-2.5">
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={newEmployee.canViewAll}
+                      disabled={newEmployee.isAccounting}
+                      onChange={(e) => setNewEmployee({ ...newEmployee, canViewAll: e.target.checked })}
+                    />
+                    View all tickets
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={newEmployee.canEdit}
+                      disabled={newEmployee.isAccounting}
+                      onChange={(e) => setNewEmployee({ ...newEmployee, canEdit: e.target.checked })}
+                    />
+                    Edit tickets
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700 border-t border-slate-100 pt-2.5">
+                    <input
+                      type="checkbox"
+                      checked={newEmployee.isAccounting}
+                      onChange={(e) =>
+                        setNewEmployee({
+                          ...newEmployee,
+                          isAccounting: e.target.checked,
+                          // Accounting always implies full view access and no ticket editing.
+                          canViewAll: e.target.checked ? true : newEmployee.canViewAll,
+                          canEdit: e.target.checked ? false : newEmployee.canEdit,
+                        })
+                      }
+                    />
+                    Accounting (view all, notes only)
+                  </label>
+                  <p className="text-[11px] text-slate-400 border-t border-slate-100 pt-2">
+                    Leave everything unchecked for "own tickets only" (default): the employee
+                    will only see and add the tickets they personally enter.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <button onClick={handleAddEmployee}
               className="mt-3 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center gap-1.5">
               <UserPlus size={15} /> Add employee
@@ -1918,14 +2012,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <td className="px-2.5 py-1 text-slate-600 text-right whitespace-nowrap">{fmt(t.totalPrice)}</td>
                       <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.basePrice, t.totalPrice, t.tax))}</td>
                       <td className="px-2.5 py-1 text-right whitespace-nowrap">
-                        {currentUser.isAdmin ? (
+                        {(currentUser.isAdmin || canEditTickets) ? (
                           <div className="flex gap-0.5 justify-end">
                             <button onClick={(ev) => { ev.stopPropagation(); handleEdit(t); }} className="text-slate-400 hover:text-teal-700 p-0.5">
                               <Pencil size={13} />
                             </button>
-                            <button onClick={(ev) => { ev.stopPropagation(); handleDelete(t.id); }} className="text-slate-400 hover:text-red-600 p-0.5">
-                              <Trash2 size={13} />
-                            </button>
+                            {currentUser.isAdmin && (
+                              <button onClick={(ev) => { ev.stopPropagation(); handleDelete(t.id); }} className="text-slate-400 hover:text-red-600 p-0.5">
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <span className="text-slate-300 text-[11px] block text-right">—</span>
