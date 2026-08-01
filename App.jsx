@@ -1338,6 +1338,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <Plane size={26} className="text-blue-700 rotate-45" />
               </div>
               <h1 className="relative text-white font-bold text-lg tracking-tight">Flight Ticket Manager</h1>
+              <p className="relative text-sky-200/70 text-[11px] mt-0.5">By Fady Habib</p>
               <p className="relative text-sky-100/90 text-xs mt-1">Sign in to manage tickets, sales &amp; bookings</p>
             </div>
 
@@ -1394,7 +1395,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <Plane size={24} />
             </div>
             <div>
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900">Flight Ticket Manager</h1>
+              <h1 className="text-xl md:text-2xl font-bold text-slate-900">
+                Flight Ticket Manager <span className="text-slate-400 font-medium text-sm md:text-base">By Fady Habib</span>
+              </h1>
               <p className="text-slate-500 text-sm flex items-center gap-1.5 flex-wrap">
                 Signed in as {currentUser.name}
                 {currentUser.isAdmin && (
