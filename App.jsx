@@ -841,6 +841,48 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   // ---------- Tickets ----------
+  // Builds a plain-language list of what changed between the ticket's previous version and
+  // the edited one (e.g. "From: CAI → JED"), used to log every ticket edit — not just notes —
+  // into the same edit-history trail, along with who made the change.
+  const describeTicketChanges = (before, after) => {
+    const changes = [];
+    const fieldLabels = {
+      company: "Company",
+      from: "From",
+      to: "To",
+      airline: "Airline",
+      date: "Date",
+      basePrice: "Base price",
+      tax: "Tax",
+      totalPrice: "Total price",
+    };
+    Object.keys(fieldLabels).forEach((key) => {
+      const beforeVal = before[key] ?? "";
+      const afterVal = after[key] ?? "";
+      if (String(beforeVal) !== String(afterVal)) {
+        changes.push(`${fieldLabels[key]}: ${beforeVal || "—"} → ${afterVal || "—"}`);
+      }
+    });
+
+    const beforeCustomers = Array.isArray(before.customers) ? before.customers : [];
+    const afterCustomers = Array.isArray(after.customers) ? after.customers : [];
+    if (beforeCustomers.length !== afterCustomers.length) {
+      changes.push(`Customers: ${beforeCustomers.length} → ${afterCustomers.length}`);
+    }
+    const maxLen = Math.max(beforeCustomers.length, afterCustomers.length);
+    for (let i = 0; i < maxLen; i++) {
+      const b = beforeCustomers[i] || { name: "", ticketNumber: "" };
+      const a = afterCustomers[i] || { name: "", ticketNumber: "" };
+      if ((b.name || "") !== (a.name || "")) {
+        changes.push(`Customer ${i + 1} name: ${b.name || "—"} → ${a.name || "—"}`);
+      }
+      if ((b.ticketNumber || "") !== (a.ticketNumber || "")) {
+        changes.push(`Customer ${i + 1} ticket number: ${b.ticketNumber || "—"} → ${a.ticketNumber || "—"}`);
+      }
+    }
+    return changes;
+  };
+
   const handleSubmit = () => {
     setError("");
     const customers = form.customers || [];
@@ -853,7 +895,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // Keep the original owner when editing an existing ticket (so an admin editing someone
     // else's ticket doesn't reassign it to themselves); new tickets belong to whoever adds them.
     const isEditingExisting = !!(form.id && form.employeeUsername);
-    const record = {
+    const original = form.id ? tickets.find((t) => t.id === form.id) : null;
+    let record = {
       ...form,
       customers,
       customersCount: customers.length,
@@ -861,6 +904,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       employeeUsername: isEditingExisting ? form.employeeUsername : currentUser.username,
       id: form.id || Date.now().toString(),
     };
+    // Every edit to an existing ticket — any field, not just notes — gets logged into the
+    // same edit-history trail shown under Notes, recording what changed and who changed it.
+    if (original) {
+      const changes = describeTicketChanges(original, record);
+      if (changes.length > 0) {
+        const history = Array.isArray(original.notesHistory) ? original.notesHistory : [];
+        record = {
+          ...record,
+          notesHistory: [
+            ...history,
+            { type: "edit", changes, by: currentUser.name, at: new Date().toISOString() },
+          ],
+        };
+      }
+    }
     let next;
     if (form.id) {
       next = tickets.map((t) => (t.id === form.id ? record : t));
@@ -2279,7 +2337,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           key={idx}
                           className="text-xs bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5 flex items-start justify-between gap-3"
                         >
-                          <span className="text-slate-600 break-words">{h.value || "(cleared)"}</span>
+                          {h.type === "edit" ? (
+                            <span className="text-slate-600 break-words">
+                              <span className="font-semibold text-slate-700">Ticket edited: </span>
+                              {(h.changes || []).join("; ")}
+                            </span>
+                          ) : (
+                            <span className="text-slate-600 break-words">{h.value || "(cleared)"}</span>
+                          )}
                           <span className="text-slate-400 whitespace-nowrap shrink-0">
                             {h.by} · {formatDateTime(h.at)}
                           </span>
