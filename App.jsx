@@ -299,6 +299,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Presence: which employees are currently connected (main account only)
   const [presenceMap, setPresenceMap] = useState({}); // username -> last-seen timestamp
+  const [showOnlineList, setShowOnlineList] = useState(false);
   const [restoreError, setRestoreError] = useState("");
   const [restoreSuccess, setRestoreSuccess] = useState("");
   const fileInputRef = useRef(null);
@@ -468,6 +469,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const ts = presenceMap[username];
     return !!ts && Date.now() - ts < ONLINE_THRESHOLD_MS;
   };
+  const onlineUsernames = Object.keys(presenceMap).filter((u) => isOnline(u));
 
   const persistTickets = async (next) => {
     setTickets(next);
@@ -593,8 +595,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         username: newEmployee.username.trim(),
         isAdmin: false,
         // Accounting is a fixed bundle: full view access, notes-only editing —
-        // it overrides whatever was picked for canViewAll / canEdit.
-        canViewAll: newEmployee.isAccounting ? true : newEmployee.canViewAll,
+        // it overrides whatever was picked for canViewAll / canEdit. Edit access on its
+        // own also implies full view access, since editing every ticket requires seeing them.
+        canViewAll: newEmployee.isAccounting || newEmployee.canEdit ? true : newEmployee.canViewAll,
         canEdit: newEmployee.isAccounting ? false : newEmployee.canEdit,
         isAccounting: newEmployee.isAccounting,
       },
@@ -987,7 +990,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   // The main account always sees everything; employees see only what they entered,
-  // unless the main account has granted them permission to view all tickets.
+  // unless the main account has granted them permission to view all tickets — or granted
+  // them permission to edit tickets, since editing every ticket requires seeing every ticket.
   // Guarded against currentUser being null (e.g. on the login/setup screens).
   const currentEmployeeRecord = currentUser
     ? (employees || []).find((e) => e.username === currentUser.username)
@@ -995,7 +999,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const canViewAllTickets =
     !!currentUser &&
     (currentUser.isAdmin ||
-      !!(currentEmployeeRecord && (currentEmployeeRecord.canViewAll || currentEmployeeRecord.isAccounting)));
+      !!(
+        currentEmployeeRecord &&
+        (currentEmployeeRecord.canViewAll || currentEmployeeRecord.isAccounting || currentEmployeeRecord.canEdit)
+      ));
   // Accounting accounts can see everything but cannot add tickets — their only allowed
   // edit anywhere in the app is the Notes field on a ticket's detail page.
   const isAccountingUser =
@@ -1301,9 +1308,37 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </span>
                 )}
                 {currentUser.isAdmin && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
-                    <Wifi size={11} />
-                    {Object.keys(presenceMap).filter((u) => isOnline(u)).length} online now
+                  <span className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowOnlineList(!showOnlineList)}
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 hover:bg-emerald-100"
+                    >
+                      <Wifi size={11} />
+                      {onlineUsernames.length} online now
+                    </button>
+                    {showOnlineList && (
+                      <div className="absolute z-20 top-full mt-1 left-0 w-52 bg-white border border-slate-300 rounded-lg shadow-lg p-2">
+                        {onlineUsernames.length === 0 ? (
+                          <p className="text-xs text-slate-400 px-1 py-1">No one online right now</p>
+                        ) : (
+                          <ul className="space-y-1 max-h-48 overflow-y-auto">
+                            {onlineUsernames.map((u) => {
+                              const emp = (employees || []).find((e) => e.username === u);
+                              return (
+                                <li key={u} className="flex items-center gap-1.5 text-xs text-slate-700 px-1 py-0.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                  {emp ? emp.name : u}
+                                  {emp && emp.isAdmin && (
+                                    <span className="text-[9px] text-teal-600 font-semibold">(main)</span>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    )}
                   </span>
                 )}
               </p>
@@ -1388,7 +1423,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {manageError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{manageError}</div>}
             <p className="text-xs text-slate-500 mb-3 flex items-center gap-1.5">
               <Wifi size={13} className="text-emerald-600" />
-              {Object.keys(presenceMap).filter((u) => isOnline(u)).length} of {(employees || []).length} employees connected right now
+              {onlineUsernames.length} of {(employees || []).length} employees connected right now
             </p>
             <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
               <table className="w-full text-sm">
@@ -1586,12 +1621,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <span className="text-xs text-slate-500 truncate">
                   {newEmployee.isAccounting
                     ? "Accounting (view all, notes only)"
-                    : newEmployee.canViewAll && newEmployee.canEdit
-                    ? "View all + edit tickets"
+                    : newEmployee.canEdit
+                    ? "View all tickets + edit"
                     : newEmployee.canViewAll
                     ? "View all tickets, no edit"
-                    : newEmployee.canEdit
-                    ? "Own tickets + edit"
                     : "Own tickets only"}
                 </span>
               </button>
@@ -1601,8 +1634,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <label className="flex items-center gap-2 text-sm text-slate-700">
                     <input
                       type="checkbox"
-                      checked={newEmployee.canViewAll}
-                      disabled={newEmployee.isAccounting}
+                      checked={newEmployee.canViewAll || newEmployee.canEdit}
+                      disabled={newEmployee.isAccounting || newEmployee.canEdit}
                       onChange={(e) => setNewEmployee({ ...newEmployee, canViewAll: e.target.checked })}
                     />
                     View all tickets
@@ -1612,9 +1645,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       type="checkbox"
                       checked={newEmployee.canEdit}
                       disabled={newEmployee.isAccounting}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, canEdit: e.target.checked })}
+                      onChange={(e) =>
+                        setNewEmployee({
+                          ...newEmployee,
+                          canEdit: e.target.checked,
+                          // Editing every ticket requires seeing every ticket first.
+                          canViewAll: e.target.checked ? true : newEmployee.canViewAll,
+                        })
+                      }
                     />
-                    Edit tickets
+                    Edit tickets (all tickets, view access included automatically)
                   </label>
                   <label className="flex items-center gap-2 text-sm text-slate-700 border-t border-slate-100 pt-2.5">
                     <input
