@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import {
   Plane, Search, Trash2, Pencil, X, Check, TrendingUp, Ticket, Wallet,
   Calendar, Download, Upload, Building2, Lock, LogOut, UserPlus, Users, Eye, EyeOff,
-  ShieldCheck, Wifi,
+  ShieldCheck, Wifi, User, Cloud, Globe2,
 } from "lucide-react";
 
 const MONTHS = [
@@ -1312,42 +1312,73 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // ---------- Render: login screen ----------
   if (!currentUser) {
     return (
-      <div className="w-full min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-6 w-full max-w-sm">
-          <div className="flex items-center gap-2 mb-1">
-            <Lock size={18} className="text-teal-700" />
-            <h1 className="font-bold text-slate-900">Sign in</h1>
-          </div>
-          <p className="text-xs text-slate-500 mb-4">Flight Ticket Manager — sign in with your employee account.</p>
-          {loginError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{loginError}</div>}
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-slate-500 block mb-1">Username</label>
-              <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
-                value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleLogin()} placeholder="Username" />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 block mb-1">Password</label>
-              <div className="relative">
-                <input type={showPassword ? "text" : "password"}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
-                  value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleLogin()} placeholder="Password" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+      <div className="w-full min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-sky-600 via-blue-700 to-indigo-900">
+        {/* Decorative sky backdrop */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-24 -left-24 w-72 h-72 bg-sky-400/30 rounded-full blur-3xl" />
+          <div className="absolute -bottom-24 -right-16 w-80 h-80 bg-indigo-400/20 rounded-full blur-3xl" />
+          <Globe2 size={260} className="absolute -bottom-16 -right-16 text-white/5" />
+          <Cloud size={70} className="absolute top-[12%] left-[10%] text-white/20" />
+          <Cloud size={46} className="absolute top-[22%] right-[14%] text-white/15" />
+          <Cloud size={54} className="absolute bottom-[18%] left-[16%] text-white/10" />
+          {/* Dashed flight path with a plane at the tip */}
+          <svg className="absolute top-[8%] left-[8%] w-[84%] h-40 opacity-40" viewBox="0 0 600 140" fill="none">
+            <path d="M10 120 C 160 20, 380 20, 560 60" stroke="white" strokeWidth="2" strokeDasharray="6 8" strokeLinecap="round" />
+            <circle cx="10" cy="120" r="4" fill="white" />
+          </svg>
+          <Plane size={26} className="absolute top-[15%] right-[10%] text-white/70 rotate-45 animate-pulse" />
+        </div>
+
+        <div className="relative w-full max-w-sm">
+          <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
+            {/* Branded header */}
+            <div className="relative bg-gradient-to-r from-sky-600 to-blue-700 px-6 pt-9 pb-12 text-center overflow-hidden">
+              <Plane size={90} className="absolute -bottom-4 -left-6 text-white/10 rotate-12" />
+              <div className="relative w-14 h-14 mx-auto rounded-2xl bg-white shadow-lg flex items-center justify-center mb-3">
+                <Plane size={26} className="text-blue-700 rotate-45" />
               </div>
+              <h1 className="relative text-white font-bold text-lg tracking-tight">Flight Ticket Manager</h1>
+              <p className="relative text-sky-100/90 text-xs mt-1">Sign in to manage tickets, sales &amp; bookings</p>
+            </div>
+
+            {/* Form card, slightly overlapping the header for a layered feel */}
+            <div className="relative -mt-6 bg-white rounded-t-3xl px-6 pt-6 pb-6">
+              {loginError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{loginError}</div>}
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-slate-500 block mb-1">Username</label>
+                  <div className="relative">
+                    <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+                      value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleLogin()} placeholder="Username" autoFocus />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 block mb-1">Password</label>
+                  <div className="relative">
+                    <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input type={showPassword ? "text" : "password"}
+                      className="w-full border border-slate-300 rounded-lg pl-9 pr-9 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+                      value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleLogin()} placeholder="Password" />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <button onClick={handleLogin}
+                className="group w-full mt-5 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-500 hover:to-blue-600 text-white text-sm font-semibold rounded-lg px-4 py-2.5 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-all">
+                Sign in
+                <Plane size={15} className="rotate-45 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
+              </button>
+              <p className="text-xs text-slate-400 mt-4 text-center flex items-center justify-center gap-1">
+                <ShieldCheck size={13} /> Ask your admin if you don't have an account yet.
+              </p>
             </div>
           </div>
-          <button onClick={handleLogin}
-            className="w-full mt-4 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg px-4 py-2">
-            Sign in
-          </button>
-          <p className="text-xs text-slate-400 mt-4">
-            Ask your admin if you don't have an account yet.
-          </p>
         </div>
       </div>
     );
