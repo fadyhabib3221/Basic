@@ -61,13 +61,22 @@ const emptyForm = {
 // Given a ticket number like "077-1234567890", returns the same prefix with the numeric
 // part increased by one, keeping the same digit width (e.g. "077-1234567891").
 // Returns "" if the ticket number doesn't match the expected PREFIX-DIGITS shape.
+// Auto-sequencing only ever advances the LAST TWO digits of the serial number (wrapping
+// 99 back to 00); everything before them — including the rest of the serial — stays fixed,
+// since that part identifies the batch/booking rather than the individual ticket.
 const nextTicketNumber = (ticketNumber) => {
   if (!ticketNumber) return "";
   const match = ticketNumber.match(/^([A-Z0-9]{3})-(\d+)$/);
   if (!match) return "";
   const [, prefix, digits] = match;
-  const incremented = (BigInt(digits) + 1n).toString().padStart(digits.length, "0");
-  return `${prefix}-${incremented}`;
+  if (digits.length <= 2) {
+    const wrapped = ((parseInt(digits, 10) + 1) % (10 ** digits.length)).toString().padStart(digits.length, "0");
+    return `${prefix}-${wrapped}`;
+  }
+  const head = digits.slice(0, -2);
+  const tail = digits.slice(-2);
+  const nextTail = ((parseInt(tail, 10) + 1) % 100).toString().padStart(2, "0");
+  return `${prefix}-${head}${nextTail}`;
 };
 
 // Fills/trims the customers array to match the requested count, keeping existing entries
@@ -1023,17 +1032,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const customers = form.customers.map((c, i) => (i === index ? { ...c, [field]: nextValue } : c));
     let airline = form.airline;
     if (field === "ticketNumber") {
-      // Cascade forward: auto-fill any following ticket numbers that are still empty,
-      // each one increasing the previous number by one. Stops at the first one a
-      // person has already typed something into, so manual entries are never overwritten.
-      let last = nextValue;
-      for (let i = index + 1; i < customers.length; i++) {
-        if (customers[i].ticketNumber) break;
-        const generated = nextTicketNumber(last);
-        if (!generated) break;
-        customers[i] = { ...customers[i], ticketNumber: generated };
-        last = generated;
-      }
       // Auto-detect the airline from the ticket number's 3-digit prefix (only if the
       // airline field hasn't been filled in yet, so it never overrides a manual choice)
       if (!airline) {
@@ -1045,6 +1043,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
     }
     setForm({ ...form, customers, airline });
+  };
+
+  // Runs once the person leaves the ticket number field (not on every keystroke), using
+  // whatever they finished typing, and auto-fills any following ticket numbers that are
+  // still empty — each one increasing the previous by one. Stops at the first one someone
+  // has already typed something into, so manual entries are never overwritten.
+  const handleTicketNumberBlur = (index) => {
+    const customers = form.customers.map((c) => ({ ...c }));
+    let last = customers[index] && customers[index].ticketNumber;
+    if (!last) return;
+    for (let i = index + 1; i < customers.length; i++) {
+      if (customers[i].ticketNumber) break;
+      const generated = nextTicketNumber(last);
+      if (!generated) break;
+      customers[i] = { ...customers[i], ticketNumber: generated };
+      last = generated;
+    }
+    setForm({ ...form, customers });
   };
 
   // The main account always sees everything; employees see only what they entered,
@@ -1302,7 +1318,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <Lock size={18} className="text-teal-700" />
             <h1 className="font-bold text-slate-900">Sign in</h1>
           </div>
-          <p className="text-xs text-slate-500 mb-4">Flight Ticket Manager — sign in with your employee account.</p>
+          <p className="text-xs text-slate-500 mb-4">Flight Ticket Manager by Fady Habib — sign in with your employee account.</p>
           {loginError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{loginError}</div>}
           <div className="space-y-3">
             <div>
@@ -1347,7 +1363,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <Plane size={24} />
             </div>
             <div>
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900">Flight Ticket Manager</h1>
+              <h1 className="text-xl md:text-2xl font-bold text-slate-900">Flight Ticket Manager by Fady Habib</h1>
               <p className="text-slate-500 text-sm flex items-center gap-1.5 flex-wrap">
                 Signed in as {currentUser.name}
                 {currentUser.isAdmin && (
@@ -1883,6 +1899,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                     value={c.ticketNumber}
                     onChange={(e) => handleCustomerFieldChange(i, "ticketNumber", e.target.value)}
+                    onBlur={() => handleTicketNumberBlur(i)}
                     placeholder={`Ticket number ${i + 1} (e.g. 077-1234567890)`}
                   />
                 </div>
