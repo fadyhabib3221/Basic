@@ -1032,17 +1032,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const customers = form.customers.map((c, i) => (i === index ? { ...c, [field]: nextValue } : c));
     let airline = form.airline;
     if (field === "ticketNumber") {
-      // Cascade forward: auto-fill any following ticket numbers that are still empty,
-      // each one increasing the previous number by one. Stops at the first one a
-      // person has already typed something into, so manual entries are never overwritten.
-      let last = nextValue;
-      for (let i = index + 1; i < customers.length; i++) {
-        if (customers[i].ticketNumber) break;
-        const generated = nextTicketNumber(last);
-        if (!generated) break;
-        customers[i] = { ...customers[i], ticketNumber: generated };
-        last = generated;
-      }
       // Auto-detect the airline from the ticket number's 3-digit prefix (only if the
       // airline field hasn't been filled in yet, so it never overrides a manual choice)
       if (!airline) {
@@ -1054,6 +1043,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
     }
     setForm({ ...form, customers, airline });
+  };
+
+  // Runs once the person leaves the ticket number field (not on every keystroke), using
+  // whatever they finished typing, and auto-fills any following ticket numbers that are
+  // still empty — each one increasing the previous by one. Stops at the first one someone
+  // has already typed something into, so manual entries are never overwritten.
+  const handleTicketNumberBlur = (index) => {
+    const customers = form.customers.map((c) => ({ ...c }));
+    let last = customers[index] && customers[index].ticketNumber;
+    if (!last) return;
+    for (let i = index + 1; i < customers.length; i++) {
+      if (customers[i].ticketNumber) break;
+      const generated = nextTicketNumber(last);
+      if (!generated) break;
+      customers[i] = { ...customers[i], ticketNumber: generated };
+      last = generated;
+    }
+    setForm({ ...form, customers });
   };
 
   // The main account always sees everything; employees see only what they entered,
@@ -1892,6 +1899,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                     value={c.ticketNumber}
                     onChange={(e) => handleCustomerFieldChange(i, "ticketNumber", e.target.value)}
+                    onBlur={() => handleTicketNumberBlur(i)}
                     placeholder={`Ticket number ${i + 1} (e.g. 077-1234567890)`}
                   />
                 </div>
