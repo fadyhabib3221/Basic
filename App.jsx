@@ -17,12 +17,14 @@ const MONTHS = [
 
 const monthKey = (dateStr) => (dateStr ? dateStr.slice(0, 7) : "No date");
 // Storage stays in the native YYYY-MM-DD format (required by <input type="date">),
-// but everywhere we display the date to the user we show it starting with the day.
+// but everywhere we display the date to the user we show it as DD-MMM-YYYY, with the
+// month written as its first three letters, capitalized (e.g. "03-AUG-2026").
 const formatDisplayDate = (dateStr) => {
   if (!dateStr) return "";
   const [y, m, d] = dateStr.split("-");
   if (!y || !m || !d) return dateStr;
-  return `${d}-${m}-${y}`;
+  const monthAbbr = (MONTHS[parseInt(m, 10) - 1] || m).slice(0, 3).toUpperCase();
+  return `${d}-${monthAbbr}-${y}`;
 };
 const monthLabel = (key) => {
   if (key === "No date") return key;
@@ -31,17 +33,17 @@ const monthLabel = (key) => {
   return `${MONTHS[idx] || m} ${y}`;
 };
 
-// Formats an ISO timestamp as DD-MM-YYYY HH:MM for showing when a note edit happened.
+// Formats an ISO timestamp as DD-MMM-YYYY HH:MM for showing when a note edit happened.
 const formatDateTime = (iso) => {
   if (!iso) return "";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "";
   const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const monthAbbr = MONTHS[d.getMonth()].slice(0, 3).toUpperCase();
   const yyyy = d.getFullYear();
   const hh = String(d.getHours()).padStart(2, "0");
   const min = String(d.getMinutes()).padStart(2, "0");
-  return `${dd}-${mm}-${yyyy} ${hh}:${min}`;
+  return `${dd}-${monthAbbr}-${yyyy} ${hh}:${min}`;
 };
 
 const emptyCustomerRow = () => ({ name: "", ticketNumber: "" });
@@ -1928,7 +1930,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // A booking is Corporate when a company name was entered; otherwise it's an
   // Individual booking automatically — no separate toggle needed.
   const hotelBookingType = (h) => (h.customer && h.customer.trim() ? "Corporate" : "Individual");
-  // A short readable summary of a booking's room lines, e.g. "1x Single (BB, EGP, 01-08-2026→05-08-2026), 2x Double (AI, USD, 01-08-2026→03-08-2026)".
+  // A short readable summary of a booking's room lines, e.g. "1x Single (BB, EGP, 01-AUG-2026→05-AUG-2026), 2x Double (AI, USD, 01-AUG-2026→03-AUG-2026)".
   const hotelLinesSummary = (h) =>
     (h.roomLines || [])
       .map((l) => {
@@ -1936,7 +1938,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         const meal = MEAL_PLANS.find((m) => m.value === l.mealPlan)?.value.toUpperCase() || "";
         const checkIn = l.checkIn || h.checkIn;
         const checkOut = l.checkOut || h.checkOut;
-        const dates = checkIn && checkOut ? `, ${checkIn}→${checkOut}` : "";
+        const dates = checkIn && checkOut ? `, ${formatDisplayDate(checkIn)}→${formatDisplayDate(checkOut)}` : "";
         return `${l.count}× ${type} (${meal}, ${l.currency}${dates})`;
       })
       .join(", ");
@@ -3503,7 +3505,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         className={`border-t border-stone-100 leading-tight cursor-pointer ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-teal-50/60"}`}
                       >
                         <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.employee || "-"}</td>
-                        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.company || "-"}</td>
+                        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
+                          {t.company && t.company.trim() ? (
+                            t.company
+                          ) : (
+                            <span className="text-stone-400 italic">Individual</span>
+                          )}
+                        </td>
                         <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.supplier || "-"}</td>
                         <td className="px-2.5 py-1 text-stone-600 font-mono whitespace-nowrap">
                           <span className="inline-flex items-center gap-1.5">
@@ -3767,7 +3775,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             Save rate
           </button>
           {usdToEgpRateDate && (
-            <span className="text-xs text-stone-400">Last updated: {usdToEgpRateDate}</span>
+            <span className="text-xs text-stone-400">Last updated: {formatDisplayDate(usdToEgpRateDate)}</span>
           )}
         </div>
 
@@ -3900,11 +3908,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="space-y-3">
               <label className="text-xs text-stone-500 block">Rooms</label>
               {hotelForm.roomLines.map((line) => (
-                <div key={line.id} className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-9 gap-2 items-end bg-stone-50 border border-stone-200 rounded-xl p-3">
+                <div key={line.id} className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 items-end bg-stone-50 border border-stone-200 rounded-xl p-3">
                   <div>
                     <label className="text-[11px] text-stone-500 block mb-1">Room type</label>
                     <select
-                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                       value={line.roomType}
                       onChange={(e) => {
                         const roomType = e.target.value;
@@ -3920,7 +3928,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <div>
                     <label className="text-[11px] text-stone-500 block mb-1">Meal plan</label>
                     <select
-                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                       value={line.mealPlan}
                       onChange={(e) => updateHotelRoomLine(line.id, { mealPlan: e.target.value })}
                     >
@@ -3933,7 +3941,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <label className="text-[11px] text-stone-500 block mb-1">Check-in</label>
                     <input
                       type="date"
-                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                       value={line.checkIn}
                       onChange={(e) => updateHotelRoomLine(line.id, { checkIn: e.target.value })}
                     />
@@ -3943,7 +3951,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <input
                       type="date"
                       min={line.checkIn || undefined}
-                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                       value={line.checkOut}
                       onChange={(e) => updateHotelRoomLine(line.id, { checkOut: e.target.value })}
                     />
@@ -3951,7 +3959,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <div>
                     <label className="text-[11px] text-stone-500 block mb-1">Currency</label>
                     <select
-                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                       value={line.currency}
                       onChange={(e) => updateHotelRoomLine(line.id, { currency: e.target.value })}
                     >
@@ -3965,7 +3973,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <input
                       type="number"
                       min="1"
-                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                       value={line.count}
                       onChange={(e) => updateHotelRoomLine(line.id, { count: e.target.value })}
                     />
@@ -3974,7 +3982,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <label className="text-[11px] text-stone-500 block mb-1">Net (per room/night)</label>
                     <input
                       type="number"
-                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                       value={line.netPrice}
                       onChange={(e) => updateHotelRoomLine(line.id, { netPrice: e.target.value })}
                       placeholder="0"
@@ -3984,7 +3992,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <label className="text-[11px] text-stone-500 block mb-1">Sold (per room/night)</label>
                     <input
                       type="number"
-                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                       value={line.soldPrice}
                       onChange={(e) => updateHotelRoomLine(line.id, { soldPrice: e.target.value })}
                       placeholder="0"
@@ -4016,7 +4024,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           )}
                         </label>
                         <input
-                          className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                          className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                           value={g.name}
                           onChange={(e) => updateRoomGuest(line.id, i, e.target.value)}
                           placeholder={i === 0 ? "Guest 1 name (required)" : `Guest ${i + 1} name`}
@@ -4184,10 +4192,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{h.supplier}</td>
                   <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{hotelLinesSummary(h)}</td>
                   <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{hotelRoomCount(h)}</td>
-                  <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{h.bookingDate || "-"}</td>
+                  <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
+                    {h.bookingDate ? formatDisplayDate(h.bookingDate) : "-"}
+                  </td>
                   <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
                     {hotelDateRange(h).start && hotelDateRange(h).end
-                      ? `${hotelDateRange(h).start} → ${hotelDateRange(h).end}`
+                      ? `${formatDisplayDate(hotelDateRange(h).start)} → ${formatDisplayDate(hotelDateRange(h).end)}`
                       : "-"}
                   </td>
                   <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(hotelNetTotal(h))}</td>
@@ -4254,7 +4264,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
               <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
                 <div><span className="text-stone-500">Supplier: </span>{viewingHotelBooking.supplier || "-"}</div>
-                <div><span className="text-stone-500">Booking date: </span>{viewingHotelBooking.bookingDate || "-"}</div>
+                <div><span className="text-stone-500">Booking date: </span>{viewingHotelBooking.bookingDate ? formatDisplayDate(viewingHotelBooking.bookingDate) : "-"}</div>
                 <div><span className="text-stone-500">Employee: </span>{viewingHotelBooking.employee || "-"}</div>
                 <div><span className="text-stone-500">Notes: </span>{viewingHotelBooking.notes || "-"}</div>
               </div>
@@ -4271,7 +4281,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           {l.count}× {type} — {meal}
                         </span>
                         <span className="text-xs text-stone-500">
-                          {l.checkIn || "-"} → {l.checkOut || "-"} ({nights}n)
+                          {l.checkIn ? formatDisplayDate(l.checkIn) : "-"} → {l.checkOut ? formatDisplayDate(l.checkOut) : "-"} ({nights}n)
                         </span>
                       </div>
                       <div className="text-xs text-stone-600 mb-2">
@@ -4360,7 +4370,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Company</p>
-                  <p className="text-sm font-medium text-stone-800">{viewingTicket.company || "-"}</p>
+                  <p className="text-sm font-medium text-stone-800">
+                    {viewingTicket.company && viewingTicket.company.trim() ? (
+                      <>{viewingTicket.company} <span className="text-teal-700 font-semibold">(Corporate)</span></>
+                    ) : (
+                      <span className="text-stone-400 italic">Individual</span>
+                    )}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Supplier</p>
