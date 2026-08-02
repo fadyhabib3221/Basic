@@ -1714,7 +1714,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </p>
             </div>
             <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm shrink-0">
-              <img src={LOGO_DATA_URL} alt="Perla Di Mare" className="w-[120px] h-[120px] md:w-[168px] md:h-[168px] object-contain" />
+              <img src={LOGO_DATA_URL} alt="Perla Di Mare" className="w-[220px] h-auto md:w-[300px] md:h-auto object-contain" />
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
