@@ -42,6 +42,12 @@ const formatDateTime = (iso) => {
 
 const emptyCustomerRow = () => ({ name: "", ticketNumber: "" });
 
+// Saved companies were originally plain strings; this reads the name whether an entry
+// is still a legacy string or the newer { name, taxNumber, commercialReg, phones } record.
+const companyName = (c) => (typeof c === "string" ? c : (c && c.name) || "");
+
+const emptyCompanyDraft = { name: "", taxNumber: "", commercialReg: "", phones: "" };
+
 const emptyForm = {
   id: null,
   employee: "",
@@ -97,6 +103,7 @@ const emptyNewEmployee = {
   canViewAll: false,
   canEdit: false,
   isAccounting: false,
+  canManageCompanies: false,
 };
 
 // IATA 3-digit airline accounting/ticketing prefix codes — the first 3 digits of a
@@ -336,7 +343,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [editShowPassword, setEditShowPassword] = useState(false);
 
   const [showManageCompanies, setShowManageCompanies] = useState(false);
-  const [newCompanyName, setNewCompanyName] = useState("");
+  const [newCompanyDraft, setNewCompanyDraft] = useState(emptyCompanyDraft);
+  const [editingCompanyName, setEditingCompanyName] = useState(null);
+  const [companyError, setCompanyError] = useState("");
 
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [currentPasswordInput, setCurrentPasswordInput] = useState("");
@@ -409,6 +418,62 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
     })();
   }, []);
+
+  const LIVE_REFRESH_INTERVAL_MS = 5 * 1000;
+
+  // Keeps tickets, employee accounts, and saved suggestions (companies/customers/
+  // airlines/cities) in sync across everyone who's signed in, by periodically re-reading
+  // the shared storage keys. window.storage has no push/subscribe API, so short polling
+  // is the only way to reflect other users' changes without a manual page refresh.
+  useEffect(() => {
+    if (!currentUser) return;
+    let cancelled = false;
+    const loadCoreData = async () => {
+      try {
+        const [ticketsRes, employeesRes, suggestionsRes] = await Promise.all([
+          window.storage.get("tickets:list", true).catch(() => null),
+          window.storage.get("tickets:employees", true).catch(() => null),
+          window.storage.get("tickets:suggestions", true).catch(() => null),
+        ]);
+        if (cancelled) return;
+        if (ticketsRes && ticketsRes.value) {
+          try {
+            setTickets(JSON.parse(ticketsRes.value));
+          } catch (e) {
+            // ignore malformed data for this cycle, try again next poll
+          }
+        }
+        if (employeesRes && employeesRes.value) {
+          try {
+            setEmployees(JSON.parse(employeesRes.value));
+          } catch (e) {
+            // ignore malformed data for this cycle, try again next poll
+          }
+        }
+        if (suggestionsRes && suggestionsRes.value) {
+          try {
+            const parsed = JSON.parse(suggestionsRes.value);
+            setSuggestions({
+              companies: parsed.companies || [],
+              customers: parsed.customers || [],
+              airlines: parsed.airlines || [],
+              cities: parsed.cities || [],
+            });
+          } catch (e) {
+            // ignore malformed data for this cycle, try again next poll
+          }
+        }
+      } catch (e) {
+        // Live refresh is best-effort; a failed poll just tries again next interval
+      }
+    };
+    const interval = setInterval(loadCoreData, LIVE_REFRESH_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [currentUser]);
+
 
   const ONLINE_THRESHOLD_MS = 90 * 1000; // considered "connected" if seen in the last 90s
   const HEARTBEAT_INTERVAL_MS = 25 * 1000;
@@ -518,13 +583,23 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       if (!v) return list;
       return list.some((existing) => existing.toLowerCase() === v.toLowerCase()) ? list : [...list, v];
     };
+    // Companies keep richer records ({ name, taxNumber, commercialReg, phones }), so a
+    // ticket typed against a brand-new company name adds a bare record for it; an existing
+    // company (with or without saved details) is left untouched.
+    const addUniqueCompany = (list, value) => {
+      const v = (value || "").trim();
+      if (!v) return list;
+      return list.some((c) => companyName(c).toLowerCase() === v.toLowerCase())
+        ? list
+        : [...list, { name: v, taxNumber: "", commercialReg: "", phones: [] }];
+    };
     let next = {
       companies: [...suggestions.companies],
       customers: [...suggestions.customers],
       airlines: [...suggestions.airlines],
       cities: [...suggestions.cities],
     };
-    next.companies = addUnique(next.companies, record.company);
+    next.companies = addUniqueCompany(next.companies, record.company);
     next.airlines = addUnique(next.airlines, record.airline);
     next.cities = addUnique(next.cities, record.from);
     next.cities = addUnique(next.cities, record.to);
@@ -534,26 +609,67 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     persistSuggestions(next);
   };
 
-  // Lets the main account register company names up front (e.g. before any ticket is
-  // entered for them), so they always show up in the Company suggestions/filter list.
+  // Lets an admin (or an employee granted the Manage companies permission) register a
+  // company's full details — name, tax number, commercial registration number, and phone
+  // numbers — so they're always available to pick from the Company field and filter, even
+  // before any ticket has been entered for them. If editingCompanyName is set, this saves
+  // changes to that existing record instead of adding a new one.
   const handleAddCompany = () => {
-    const name = newCompanyName.trim();
+    if (!canManageCompanies) return;
+    const name = newCompanyDraft.name.trim();
     if (!name) return;
-    if (suggestions.companies.some((c) => c.toLowerCase() === name.toLowerCase())) {
-      setNewCompanyName("");
+    const duplicate = suggestions.companies.some(
+      (c) =>
+        companyName(c).toLowerCase() === name.toLowerCase() &&
+        companyName(c).toLowerCase() !== (editingCompanyName || "").toLowerCase()
+    );
+    if (duplicate) {
+      setCompanyError("A company with that name already exists");
       return;
     }
-    persistSuggestions({ ...suggestions, companies: [...suggestions.companies, name] });
-    setNewCompanyName("");
+    const record = {
+      name,
+      taxNumber: newCompanyDraft.taxNumber.trim(),
+      commercialReg: newCompanyDraft.commercialReg.trim(),
+      phones: newCompanyDraft.phones
+        .split(/[,\n]/)
+        .map((p) => p.trim())
+        .filter(Boolean),
+    };
+    const companies = editingCompanyName
+      ? suggestions.companies.map((c) => (companyName(c) === editingCompanyName ? record : c))
+      : [...suggestions.companies, record];
+    persistSuggestions({ ...suggestions, companies });
+    setNewCompanyDraft(emptyCompanyDraft);
+    setEditingCompanyName(null);
+    setCompanyError("");
+  };
+
+  // Loads an existing company's saved details back into the form so they can be edited.
+  const handleEditCompanyClick = (c) => {
+    setEditingCompanyName(companyName(c));
+    setNewCompanyDraft({
+      name: companyName(c),
+      taxNumber: typeof c === "object" ? c.taxNumber || "" : "",
+      commercialReg: typeof c === "object" ? c.commercialReg || "" : "",
+      phones: typeof c === "object" && Array.isArray(c.phones) ? c.phones.join(", ") : "",
+    });
+  };
+
+  const cancelEditCompany = () => {
+    setEditingCompanyName(null);
+    setNewCompanyDraft(emptyCompanyDraft);
   };
 
   // Removes a company from the saved suggestions list. Existing tickets already
   // recorded under that company name are untouched — this only affects the picker.
   const handleDeleteCompany = (name) => {
+    if (!canManageCompanies) return;
     persistSuggestions({
       ...suggestions,
-      companies: suggestions.companies.filter((c) => c !== name),
+      companies: suggestions.companies.filter((c) => companyName(c) !== name),
     });
+    if (editingCompanyName === name) cancelEditCompany();
   };
 
   const profit = (base, total, tax) => {
@@ -660,6 +776,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       if (value === "view") return { ...e, isAccounting: false, canViewAll: true, canEdit: false };
       return { ...e, isAccounting: false, canViewAll: false, canEdit: false };
     });
+    await persistEmployees(next);
+  };
+
+  // Independent permission toggle: whether this employee can open the Manage companies
+  // panel (add/edit/remove saved company records). Separate from ticket access level.
+  const handleToggleManageCompanies = async (username, checked) => {
+    if (!currentUser.isAdmin) {
+      setManageError("Only the main account can change employee permissions");
+      return;
+    }
+    const next = (employees || []).map((e) =>
+      e.username === username ? { ...e, canManageCompanies: checked } : e
+    );
     await persistEmployees(next);
   };
 
@@ -1115,6 +1244,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     !!currentUser &&
     (currentUser.isAdmin ||
       !!(currentEmployeeRecord && currentEmployeeRecord.canEdit && !currentEmployeeRecord.isAccounting));
+  // A separate permission axis from ticket access: whether this account can add/edit/
+  // remove saved company records (name, tax number, commercial register, phone numbers).
+  const canManageCompanies =
+    !!currentUser &&
+    (currentUser.isAdmin || !!(currentEmployeeRecord && currentEmployeeRecord.canManageCompanies));
   const visibleTickets = !currentUser
     ? []
     : canViewAllTickets
@@ -1500,7 +1634,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <Users size={15} /> Manage employees
               </button>
             )}
-            {currentUser.isAdmin && (
+            {canManageCompanies && (
               <button onClick={() => setShowManageCompanies(!showManageCompanies)}
                 className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5">
                 <Building2 size={15} /> Manage companies
@@ -1569,6 +1703,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <th className="text-left px-3 py-2 font-medium">Password</th>
                     <th className="text-left px-3 py-2 font-medium">Role</th>
                     <th className="text-left px-3 py-2 font-medium">Access</th>
+                    <th className="text-left px-3 py-2 font-medium">Companies</th>
                     <th className="text-left px-3 py-2 font-medium"></th>
                   </tr>
                 </thead>
@@ -1641,6 +1776,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             )}
                           </td>
                           <td className="px-3 py-2">
+                            {e.isAdmin ? (
+                              <span className="text-xs text-slate-400">Always</span>
+                            ) : (
+                              <input
+                                type="checkbox"
+                                checked={!!e.canManageCompanies}
+                                onChange={(ev) => handleToggleManageCompanies(e.username, ev.target.checked)}
+                                className="w-4 h-4 accent-teal-700"
+                              />
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
                             <div className="flex gap-1 justify-end">
                               <button onClick={saveEditEmployee} className="text-emerald-600 hover:text-emerald-800 p-1">
                                 <Check size={15} />
@@ -1696,6 +1843,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <option value="all">All tickets (view &amp; edit)</option>
                               <option value="accounting">Accounting (view + notes only)</option>
                             </select>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          {e.isAdmin ? (
+                            <span className="text-xs text-slate-400">Always</span>
+                          ) : (
+                            <input
+                              type="checkbox"
+                              checked={!!e.canManageCompanies}
+                              onChange={(ev) => handleToggleManageCompanies(e.username, ev.target.checked)}
+                              className="w-4 h-4 accent-teal-700"
+                            />
                           )}
                         </td>
                         <td className="px-3 py-2 text-right">
@@ -1755,13 +1914,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               >
                 <span className="font-medium">Permissions</span>
                 <span className="text-xs text-slate-500 truncate">
-                  {newEmployee.isAccounting
+                  {(newEmployee.isAccounting
                     ? "Accounting (view all, notes only)"
                     : newEmployee.canEdit
                     ? "View all tickets + edit"
                     : newEmployee.canViewAll
                     ? "View all tickets, no edit"
-                    : "Own tickets only"}
+                    : "Own tickets only") + (newEmployee.canManageCompanies ? " · Companies" : "")}
                 </span>
               </button>
 
@@ -1808,6 +1967,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     />
                     Accounting (view all, notes only)
                   </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700 border-t border-slate-100 pt-2.5">
+                    <input
+                      type="checkbox"
+                      checked={newEmployee.canManageCompanies}
+                      onChange={(e) => setNewEmployee({ ...newEmployee, canManageCompanies: e.target.checked })}
+                    />
+                    Manage companies (add/edit/remove saved company records)
+                  </label>
                   <p className="text-[11px] text-slate-400 border-t border-slate-100 pt-2">
                     Leave everything unchecked for "own tickets only" (default): the employee
                     will only see and add the tickets they personally enter.
@@ -1823,46 +1990,93 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         )}
 
-        {showManageCompanies && currentUser.isAdmin && (
+        {showManageCompanies && canManageCompanies && (
           <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-5 mb-6">
             <h2 className="font-semibold text-slate-900 mb-1">Companies</h2>
             <p className="text-xs text-slate-400 mb-4">
-              Register company names here so they're always available to pick from the Company field and filter, even before any ticket has been entered for them.
+              Register each company's details here so they're always available to pick from the Company field and filter, even before any ticket has been entered for them.
             </p>
-            <div className="flex gap-2 max-w-sm mb-4">
+            {companyError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{companyError}</div>}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl mb-3">
               <input
-                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
                 placeholder="Company name"
-                value={newCompanyName}
-                onChange={(e) => setNewCompanyName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleAddCompany(); }}
+                value={newCompanyDraft.name}
+                onChange={(e) => setNewCompanyDraft({ ...newCompanyDraft, name: e.target.value })}
               />
+              <input
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                placeholder="Tax number"
+                value={newCompanyDraft.taxNumber}
+                onChange={(e) => setNewCompanyDraft({ ...newCompanyDraft, taxNumber: e.target.value })}
+              />
+              <input
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                placeholder="Commercial registration number"
+                value={newCompanyDraft.commercialReg}
+                onChange={(e) => setNewCompanyDraft({ ...newCompanyDraft, commercialReg: e.target.value })}
+              />
+              <input
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                placeholder="Phone numbers (comma separated)"
+                value={newCompanyDraft.phones}
+                onChange={(e) => setNewCompanyDraft({ ...newCompanyDraft, phones: e.target.value })}
+              />
+            </div>
+            <div className="flex gap-2 mb-5">
               <button
                 onClick={handleAddCompany}
                 className="bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center gap-1.5 whitespace-nowrap"
               >
-                <Building2 size={15} /> Add
+                {editingCompanyName ? <Check size={15} /> : <Building2 size={15} />}
+                {editingCompanyName ? "Save changes" : "Add company"}
               </button>
+              {editingCompanyName && (
+                <button
+                  onClick={cancelEditCompany}
+                  className="border border-slate-300 text-slate-600 text-sm rounded-lg px-4 py-2 flex items-center gap-1.5"
+                >
+                  <X size={15} /> Cancel
+                </button>
+              )}
             </div>
+
             {suggestions.companies.length === 0 ? (
               <p className="text-sm text-slate-400">No companies saved yet</p>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {[...suggestions.companies].sort((a, b) => a.localeCompare(b)).map((name) => (
-                  <span
-                    key={name}
-                    className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-full pl-3 pr-1.5 py-1 text-sm text-slate-700"
-                  >
-                    {name}
-                    <button
-                      onClick={() => handleDeleteCompany(name)}
-                      title="Remove company"
-                      className="text-slate-400 hover:text-red-600 p-0.5"
-                    >
-                      <X size={13} />
-                    </button>
-                  </span>
-                ))}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {[...suggestions.companies]
+                  .sort((a, b) => companyName(a).localeCompare(companyName(b)))
+                  .map((c) => {
+                    const name = companyName(c);
+                    const taxNumber = typeof c === "object" ? c.taxNumber : "";
+                    const commercialReg = typeof c === "object" ? c.commercialReg : "";
+                    const phones = typeof c === "object" && Array.isArray(c.phones) ? c.phones : [];
+                    return (
+                      <div
+                        key={name}
+                        className={`border rounded-lg p-3 ${editingCompanyName === name ? "border-teal-400 bg-teal-50/40" : "border-slate-200"}`}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <p className="font-semibold text-slate-800 text-sm break-words">{name}</p>
+                          <div className="flex gap-1 shrink-0">
+                            <button onClick={() => handleEditCompanyClick(c)} className="text-slate-400 hover:text-teal-700 p-0.5">
+                              <Pencil size={13} />
+                            </button>
+                            <button onClick={() => handleDeleteCompany(name)} className="text-slate-400 hover:text-red-600 p-0.5">
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="text-xs text-slate-500 space-y-0.5">
+                          <p>Tax number: <span className="text-slate-700">{taxNumber || "-"}</span></p>
+                          <p>Commercial reg.: <span className="text-slate-700">{commercialReg || "-"}</span></p>
+                          <p>Phone: <span className="text-slate-700">{phones.length > 0 ? phones.join(", ") : "-"}</span></p>
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             )}
           </div>
@@ -2160,8 +2374,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         </div>
 
         <datalist id="company-suggestions">
-          {suggestions.companies.map((name) => (
-            <option key={name} value={name} />
+          {suggestions.companies.map((c) => (
+            <option key={companyName(c)} value={companyName(c)} />
           ))}
         </datalist>
         <datalist id="customer-suggestions">
