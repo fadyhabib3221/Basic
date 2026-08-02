@@ -7,7 +7,7 @@ import {
   Plane, Search, Trash2, Pencil, X, Check, TrendingUp, Ticket, Wallet,
   Calendar, Download, Upload, Building2, Factory, Lock, LogOut, UserPlus, Users, Eye, EyeOff,
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
-  MapPin, Compass, Luggage, Anchor, Sparkles,
+  MapPin, Compass, Luggage, Anchor, Sparkles, Plus,
 } from "lucide-react";
 
 const MONTHS = [
@@ -80,6 +80,93 @@ const getEmptyForm = () => ({
   date: todayDateStr(),
   netPrice: "",
   soldPrice: "",
+  notes: "",
+  // Reissue tracking: when isReissued is on, oldTicketNumber is looked up against
+  // existing tickets to auto-fill oldTicketIssueDate.
+  isReissued: false,
+  oldTicketNumber: "",
+  oldTicketIssueDate: "",
+});
+
+// Room types offered on a hotel booking's room line.
+const ROOM_TYPES = [
+  { value: "single", label: "Single" },
+  { value: "double", label: "Double" },
+  { value: "triple", label: "Triple" },
+];
+
+// Meal plan offered on a hotel booking's room line.
+const MEAL_PLANS = [
+  { value: "ro", label: "Room Only" },
+  { value: "bb", label: "Bed & Breakfast" },
+  { value: "hb", label: "Half Board" },
+  { value: "fb", label: "Full Board" },
+  { value: "ai", label: "All Inclusive" },
+];
+
+// Max number of adult guests a room type can hold — drives how many guest-name fields
+// are shown for a room line (Single -> 1, Double -> 2, Triple -> 3).
+const ROOM_CAPACITY = { single: 1, double: 2, triple: 3 };
+
+// A single adult guest staying in a room.
+const emptyGuest = () => ({
+  id: `G-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  name: "",
+});
+
+// A child staying in a room, with an age (in years, 0–11.99) alongside the name.
+const emptyChild = () => ({
+  id: `C-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  name: "",
+  age: "",
+});
+
+// Resizes a room line's guest list to match its room type's capacity, keeping any
+// names already entered and padding/truncating as needed.
+const guestsForCapacity = (guests, capacity) => {
+  const list = (Array.isArray(guests) ? guests : []).slice(0, capacity).map((g) => ({ ...g }));
+  while (list.length < capacity) list.push(emptyGuest());
+  return list;
+};
+
+const HOTEL_CURRENCIES = [
+  { value: "EGP", label: "EGP" },
+  { value: "USD", label: "USD" },
+];
+
+// A single room line within a hotel booking: a room type + meal plan combination, its own
+// currency, count, and net/sold price per room per night — e.g. "1x Single, Half Board,
+// EGP" and "2x Double, All Inclusive, USD" can both live inside the same booking.
+const emptyRoomLine = () => ({
+  id: `RL-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  roomType: "single",
+  mealPlan: "bb",
+  currency: "EGP",
+  count: 1,
+  netPrice: "",
+  soldPrice: "",
+  // Each room now carries its own stay dates, since different rooms on the same
+  // booking can check in/out on different days.
+  checkIn: todayDateStr(),
+  checkOut: todayDateStr(),
+  // Adult guest names — sized to the default room type's capacity (single -> 1).
+  guests: guestsForCapacity([], ROOM_CAPACITY.single),
+  // Children staying in this room, each with a name and age (0–11.99 years).
+  children: [],
+});
+
+// A function (not a static object) so every new/reset hotel booking picks up TODAY'S
+// date at the moment it's created, same rationale as getEmptyForm() above.
+const getEmptyHotelForm = () => ({
+  id: null,
+  employee: "",
+  customer: "",
+  hotel: "",
+  supplier: "",
+  roomLines: [emptyRoomLine()],
+  // The date the reservation itself was made — separate from each room's own
+  // check-in/check-out dates below.
+  bookingDate: todayDateStr(),
   notes: "",
 });
 
@@ -582,6 +669,29 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [form, setForm] = useState(getEmptyForm);
   // Whether the Supplier field is in "type your own name" mode (chosen via the Other option).
   const [supplierOther, setSupplierOther] = useState(false);
+
+  // ---------- Hotels ----------
+  const [hotelBookings, setHotelBookings] = useState([]);
+  const [hotelForm, setHotelForm] = useState(getEmptyHotelForm);
+  const [hotelError, setHotelError] = useState("");
+  const [hotelEditingId, setHotelEditingId] = useState(null);
+  // The hotel booking currently shown in the read-only details modal (null = closed).
+  const [viewingHotelBooking, setViewingHotelBooking] = useState(null);
+  // Whether the "Add supplier" / "Add hotel name" panels at the top of the Hotels
+  // page are currently open, plus the text typed into each panel's input.
+  const [showAddSupplierPanel, setShowAddSupplierPanel] = useState(false);
+  const [showAddHotelNamePanel, setShowAddHotelNamePanel] = useState(false);
+  const [newSupplierDraft, setNewSupplierDraft] = useState("");
+  const [newHotelNameDraft, setNewHotelNameDraft] = useState("");
+  // Whether the Hotel name / Supplier fields on the booking form are in "type your
+  // own name" mode, same pattern as supplierOther for flight tickets above.
+  const [hotelSupplierOther, setHotelSupplierOther] = useState(false);
+  const [hotelNameOther, setHotelNameOther] = useState(false);
+  // USD -> EGP exchange rate, used to also show a USD booking's value in EGP.
+  // Entered by hand (no CBE API is publicly reachable from the browser), and saved so
+  // everyone signed in sees today's rate without re-typing it.
+  const [usdToEgpRate, setUsdToEgpRate] = useState(null);
+  const [usdToEgpRateDate, setUsdToEgpRateDate] = useState("");
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   // Clicking a ticket row opens a full detail view of that ticket (id stored here).
@@ -596,7 +706,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Every value ever entered (companies, customers, airlines, cities) is kept here so it
   // can be offered as an autocomplete suggestion later, even if the original ticket is deleted.
-  const [suggestions, setSuggestions] = useState({ companies: [], customers: [], airlines: [], cities: [] });
+  const [suggestions, setSuggestions] = useState({ companies: [], customers: [], airlines: [], cities: [], suppliers: [], hotelNames: [] });
 
   // Tracks whether the one-time "create the main account" step has ever been completed.
   // Once true, the first-run setup screen must never be shown again — even if the employee
@@ -611,16 +721,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   useEffect(() => {
     (async () => {
       try {
-        const [ticketsRes, employeesRes, sessionRes, suggestionsRes, setupRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, employeesRes, sessionRes, suggestionsRes, setupRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
+          window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:employees", true).catch(() => null),
           window.storage.get("session:user", false).catch(() => null),
           window.storage.get("tickets:suggestions", true).catch(() => null),
           window.storage.get("tickets:setupComplete", true).catch(() => null),
         ]);
         const ticketsData = ticketsRes && ticketsRes.value ? JSON.parse(ticketsRes.value) : [];
+        const hotelsData = hotelsRes && hotelsRes.value ? JSON.parse(hotelsRes.value) : [];
         const employeesData = employeesRes && employeesRes.value ? JSON.parse(employeesRes.value) : [];
         setTickets(ticketsData);
+        setHotelBookings(hotelsData);
         setEmployees(employeesData);
         // If accounts already exist, the setup step has clearly already happened even if the
         // flag itself is missing (e.g. app used before this flag existed).
@@ -633,6 +746,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               customers: [], // never restore saved customer names — this field must have no autocomplete history
               airlines: parsed.airlines || [],
               cities: parsed.cities || [],
+              suppliers: parsed.suppliers || [],
+              hotelNames: parsed.hotelNames || [],
             });
           } catch (e) {
             // ignore malformed suggestions data
@@ -664,8 +779,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     let cancelled = false;
     const loadCoreData = async () => {
       try {
-        const [ticketsRes, employeesRes, suggestionsRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, employeesRes, suggestionsRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
+          window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:employees", true).catch(() => null),
           window.storage.get("tickets:suggestions", true).catch(() => null),
         ]);
@@ -673,6 +789,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         if (ticketsRes && ticketsRes.value) {
           try {
             setTickets(JSON.parse(ticketsRes.value));
+          } catch (e) {
+            // ignore malformed data for this cycle, try again next poll
+          }
+        }
+        if (hotelsRes && hotelsRes.value) {
+          try {
+            setHotelBookings(JSON.parse(hotelsRes.value));
           } catch (e) {
             // ignore malformed data for this cycle, try again next poll
           }
@@ -692,6 +815,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               customers: [], // never restore saved customer names — this field must have no autocomplete history
               airlines: parsed.airlines || [],
               cities: parsed.cities || [],
+              suppliers: parsed.suppliers || [],
+              hotelNames: parsed.hotelNames || [],
             });
           } catch (e) {
             // ignore malformed data for this cycle, try again next poll
@@ -791,6 +916,44 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
   };
 
+  // The USD -> EGP rate is entered by hand (e.g. from the CBE's published rate each
+  // morning) and saved to shared storage, so every signed-in employee sees the same
+  // rate without each of them having to type it in separately.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await window.storage.get("tickets:usdRate", true).catch(() => null);
+        if (res && res.value) {
+          const parsed = JSON.parse(res.value);
+          setUsdToEgpRate(parsed.rate ?? null);
+          setUsdToEgpRateDate(parsed.date || "");
+        }
+      } catch (e) {
+        // no saved rate yet
+      }
+    })();
+  }, []);
+
+  const persistUsdRate = async (rate) => {
+    const date = todayDateStr();
+    setUsdToEgpRate(rate);
+    setUsdToEgpRateDate(date);
+    try {
+      await window.storage.set("tickets:usdRate", JSON.stringify({ rate, date }), true);
+    } catch (e) {
+      // Saving the rate is best-effort; the typed value still applies locally either way
+    }
+  };
+
+  const persistHotelBookings = async (next) => {
+    setHotelBookings(next);
+    try {
+      await window.storage.set("tickets:hotels", JSON.stringify(next), true);
+    } catch (e) {
+      setHotelError("Could not save data, please try again");
+    }
+  };
+
   const persistEmployees = async (next) => {
     setEmployees(next);
     try {
@@ -826,6 +989,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       customers: [],
       airlines: [...suggestions.airlines],
       cities: [...suggestions.cities],
+      suppliers: [...(suggestions.suppliers || [])],
+      hotelNames: [...(suggestions.hotelNames || [])],
     };
     next.airlines = addUnique(next.airlines, record.airline);
     next.cities = addUnique(next.cities, record.from);
@@ -901,6 +1066,190 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const n = parseFloat(net) || 0;
     const s = parseFloat(sold) || 0;
     return s - n;
+  };
+
+  // ---------- Hotels ----------
+  const resetHotelForm = () => {
+    setHotelForm(getEmptyHotelForm());
+    setHotelEditingId(null);
+    setHotelError("");
+    setHotelSupplierOther(false);
+    setHotelNameOther(false);
+  };
+
+  const addHotelRoomLine = () => {
+    setHotelForm({ ...hotelForm, roomLines: [...hotelForm.roomLines, emptyRoomLine()] });
+  };
+
+  const removeHotelRoomLine = (lineId) => {
+    if (hotelForm.roomLines.length <= 1) return; // always keep at least one line
+    setHotelForm({ ...hotelForm, roomLines: hotelForm.roomLines.filter((l) => l.id !== lineId) });
+  };
+
+  const updateHotelRoomLine = (lineId, patch) => {
+    setHotelForm({
+      ...hotelForm,
+      roomLines: hotelForm.roomLines.map((l) => (l.id === lineId ? { ...l, ...patch } : l)),
+    });
+  };
+
+  // Updates one adult guest's name within a room line, by that guest's position.
+  const updateRoomGuest = (lineId, guestIndex, name) => {
+    const line = hotelForm.roomLines.find((l) => l.id === lineId);
+    if (!line) return;
+    const guests = (line.guests || []).map((g, i) => (i === guestIndex ? { ...g, name } : g));
+    updateHotelRoomLine(lineId, { guests });
+  };
+
+  const addRoomChild = (lineId) => {
+    const line = hotelForm.roomLines.find((l) => l.id === lineId);
+    if (!line) return;
+    updateHotelRoomLine(lineId, { children: [...(line.children || []), emptyChild()] });
+  };
+
+  const updateRoomChild = (lineId, childId, patch) => {
+    const line = hotelForm.roomLines.find((l) => l.id === lineId);
+    if (!line) return;
+    updateHotelRoomLine(lineId, {
+      children: (line.children || []).map((c) => (c.id === childId ? { ...c, ...patch } : c)),
+    });
+  };
+
+  const removeRoomChild = (lineId, childId) => {
+    const line = hotelForm.roomLines.find((l) => l.id === lineId);
+    if (!line) return;
+    updateHotelRoomLine(lineId, { children: (line.children || []).filter((c) => c.id !== childId) });
+  };
+
+  const handleSaveHotel = async () => {
+    setHotelError("");
+    // Company name is optional — a blank company means an Individual booking, so it's
+    // no longer part of the required-fields check below.
+    if (!hotelForm.hotel.trim() || !hotelForm.supplier.trim()) {
+      setHotelError("Please fill in the hotel and supplier fields");
+      return;
+    }
+    const lines = hotelForm.roomLines || [];
+    if (lines.length === 0) {
+      setHotelError("Please add at least one room line");
+      return;
+    }
+    for (const l of lines) {
+      if ((parseInt(l.count, 10) || 0) < 1) {
+        setHotelError("Each room line needs at least 1 room");
+        return;
+      }
+      if (l.netPrice === "" || l.soldPrice === "") {
+        setHotelError("Please fill in the net and sold price for every room line");
+        return;
+      }
+      if (!l.checkIn || !l.checkOut) {
+        setHotelError("Please fill in the check-in and check-out dates for every room");
+        return;
+      }
+      if (new Date(l.checkOut) < new Date(l.checkIn)) {
+        setHotelError("Check-out date can't be before check-in date for a room");
+        return;
+      }
+      // Only the first guest in each room is required — the rest are optional.
+      if (!l.guests || !l.guests[0] || !l.guests[0].name.trim()) {
+        setHotelError("Please enter at least the first guest's name for every room");
+        return;
+      }
+    }
+
+    if (hotelEditingId) {
+      const next = hotelBookings.map((h) =>
+        h.id === hotelEditingId ? { ...h, ...hotelForm, id: hotelEditingId } : h
+      );
+      await persistHotelBookings(next);
+    } else {
+      const record = {
+        ...hotelForm,
+        id: `H-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        employee: currentUser.name,
+        employeeUsername: currentUser.username,
+      };
+      await persistHotelBookings([record, ...hotelBookings]);
+    }
+    resetHotelForm();
+  };
+
+  const handleEditHotelClick = (h) => {
+    setHotelEditingId(h.id);
+    setHotelForm({
+      id: h.id,
+      employee: h.employee || "",
+      customer: h.customer || "",
+      hotel: h.hotel || "",
+      supplier: h.supplier || "",
+      roomLines:
+        Array.isArray(h.roomLines) && h.roomLines.length > 0
+          ? h.roomLines.map((l) => ({
+              ...l,
+              id: l.id || emptyRoomLine().id,
+              currency: l.currency || h.currency || "EGP",
+              // Legacy bookings kept dates on the booking itself rather than per room —
+              // fall back to those so older records still show something sensible.
+              checkIn: l.checkIn || h.checkIn || todayDateStr(),
+              checkOut: l.checkOut || h.checkOut || todayDateStr(),
+              // Legacy bookings had no guest names — pad an empty list to match capacity.
+              guests: guestsForCapacity(l.guests, ROOM_CAPACITY[l.roomType] || 1),
+              children: Array.isArray(l.children) ? l.children : [],
+            }))
+          : [emptyRoomLine()],
+      bookingDate: h.bookingDate || todayDateStr(),
+      notes: h.notes || "",
+    });
+    setHotelSupplierOther(!!h.supplier && !suggestions.suppliers.includes(h.supplier));
+    setHotelNameOther(!!h.hotel && !suggestions.hotelNames.includes(h.hotel));
+    setHotelError("");
+  };
+
+  const handleDeleteHotel = (id) => {
+    requestConfirm("Delete this hotel booking? This cannot be undone.", async () => {
+      await persistHotelBookings(hotelBookings.filter((h) => h.id !== id));
+      if (hotelEditingId === id) resetHotelForm();
+      setConfirmDialog(null);
+    });
+  };
+
+  // Registers a new supplier name so it's always available to pick from the Hotels
+  // page's Supplier field, via the "+ Add supplier" button at the top of the page.
+  const handleAddSupplierName = () => {
+    const name = newSupplierDraft.trim();
+    if (!name) return;
+    const duplicate = (suggestions.suppliers || []).some((s) => s.toLowerCase() === name.toLowerCase());
+    if (duplicate) {
+      setHotelError("This supplier already exists");
+      return;
+    }
+    persistSuggestions({ ...suggestions, suppliers: [...(suggestions.suppliers || []), name] });
+    setNewSupplierDraft("");
+    setHotelError("");
+  };
+
+  const handleDeleteSupplierName = (name) => {
+    persistSuggestions({ ...suggestions, suppliers: (suggestions.suppliers || []).filter((s) => s !== name) });
+  };
+
+  // Registers a new hotel name so it's always available to pick from the Hotels
+  // page's Hotel name field, via the "+ Add hotel name" button at the top of the page.
+  const handleAddHotelName = () => {
+    const name = newHotelNameDraft.trim();
+    if (!name) return;
+    const duplicate = (suggestions.hotelNames || []).some((h) => h.toLowerCase() === name.toLowerCase());
+    if (duplicate) {
+      setHotelError("This hotel already exists");
+      return;
+    }
+    persistSuggestions({ ...suggestions, hotelNames: [...(suggestions.hotelNames || []), name] });
+    setNewHotelNameDraft("");
+    setHotelError("");
+  };
+
+  const handleDeleteHotelName = (name) => {
+    persistSuggestions({ ...suggestions, hotelNames: (suggestions.hotelNames || []).filter((h) => h !== name) });
   };
 
   // ---------- Auth ----------
@@ -1437,6 +1786,38 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setForm({ ...form, customers });
   };
 
+  // Finds the issue date of an existing ticket by ticket number, searching every
+  // customer row across all saved tickets (old or current schema). Used to auto-fill
+  // the old ticket's issue date when a reissued ticket references it.
+  const findTicketIssueDateByNumber = (ticketNumber) => {
+    const target = (ticketNumber || "").trim().toUpperCase();
+    if (!target) return "";
+    for (const t of tickets) {
+      const custs =
+        Array.isArray(t.customers) && t.customers.length > 0
+          ? t.customers
+          : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
+      if (custs.some((c) => (c.ticketNumber || "").trim().toUpperCase() === target)) {
+        return t.date || "";
+      }
+    }
+    return "";
+  };
+
+  // Cleans up the old ticket number the same way regular ticket numbers are formatted.
+  const handleOldTicketNumberChange = (value) => {
+    const clean = (value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 13);
+    const nextValue = clean.length > 3 ? `${clean.slice(0, 3)}-${clean.slice(3)}` : clean;
+    setForm({ ...form, oldTicketNumber: nextValue, oldTicketIssueDate: "" });
+  };
+
+  // Once the person finishes typing the old ticket number, look it up against saved
+  // tickets and auto-fill its original issue date.
+  const handleOldTicketNumberBlur = () => {
+    const found = findTicketIssueDateByNumber(form.oldTicketNumber);
+    setForm({ ...form, oldTicketIssueDate: found });
+  };
+
   // The main account always sees everything; employees see only what they entered,
   // unless the main account has granted them permission to view all tickets — or granted
   // them permission to edit tickets, since editing every ticket requires seeing every ticket.
@@ -1491,6 +1872,85 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     : tickets.filter((t) =>
         t.employeeUsername ? t.employeeUsername === currentUser.username : t.employee === currentUser.name
       );
+
+  // Hotels reuse the same view/add/edit/delete permission axis as flight tickets.
+  const visibleHotelBookings = !currentUser
+    ? []
+    : canViewAllTickets
+    ? hotelBookings
+    : hotelBookings.filter((h) =>
+        h.employeeUsername ? h.employeeUsername === currentUser.username : h.employee === currentUser.name
+      );
+
+  // Number of nights a single date range covers, from check-in to check-out (at least 1).
+  const nightsBetween = (checkIn, checkOut) => {
+    if (!checkIn || !checkOut) return 1;
+    const inD = new Date(checkIn);
+    const outD = new Date(checkOut);
+    const diffDays = Math.round((outD - inD) / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 1;
+  };
+  // Nights for one room line. Falls back to the booking's own (legacy) check-in/check-out
+  // if the line itself doesn't have dates — older bookings saved before dates lived on
+  // each room line.
+  const roomLineNights = (l, h) => nightsBetween(l.checkIn || (h && h.checkIn), l.checkOut || (h && h.checkOut));
+  // The overall date range shown for a booking: earliest check-in to latest check-out
+  // across all its room lines.
+  const hotelDateRange = (h) => {
+    const lines = h.roomLines || [];
+    const checkIns = lines.map((l) => l.checkIn || h.checkIn).filter(Boolean);
+    const checkOuts = lines.map((l) => l.checkOut || h.checkOut).filter(Boolean);
+    if (checkIns.length === 0 || checkOuts.length === 0) return { start: "", end: "" };
+    return {
+      start: checkIns.reduce((a, b) => (a < b ? a : b)),
+      end: checkOuts.reduce((a, b) => (a > b ? a : b)),
+    };
+  };
+
+  // Converts an amount from a room line's own currency into EGP, using the entered
+  // USD->EGP rate. Returns the amount unchanged for EGP-priced lines.
+  const hotelInEgp = (amount, currency) => (currency === "USD" ? amount * (usdToEgpRate || 0) : amount);
+
+  // Per-booking totals: each room line's net/sold price is multiplied by its own room
+  // count and its own number of nights, then summed across every line (e.g. 1 single
+  // + 2 doubles, each possibly with different dates and currencies, all converted into
+  // EGP to total).
+  const hotelRoomCount = (h) => (h.roomLines || []).reduce((sum, l) => sum + (parseInt(l.count, 10) || 0), 0);
+  // Raw (un-converted, in the line's own currency) total for one line — used when showing
+  // a line's own subtotal next to its own currency in the form.
+  const hotelLineNetTotal = (l, nights) => (parseFloat(l.netPrice) || 0) * (parseInt(l.count, 10) || 0) * nights;
+  const hotelLineSoldTotal = (l, nights) => (parseFloat(l.soldPrice) || 0) * (parseInt(l.count, 10) || 0) * nights;
+  const hotelNetTotal = (h) =>
+    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineNetTotal(l, roomLineNights(l, h)), l.currency), 0);
+  const hotelSoldTotal = (h) =>
+    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineSoldTotal(l, roomLineNights(l, h)), l.currency), 0);
+  const hotelProfitTotal = (h) => hotelSoldTotal(h) - hotelNetTotal(h);
+  // A booking is Corporate when a company name was entered; otherwise it's an
+  // Individual booking automatically — no separate toggle needed.
+  const hotelBookingType = (h) => (h.customer && h.customer.trim() ? "Corporate" : "Individual");
+  // A short readable summary of a booking's room lines, e.g. "1x Single (BB, EGP, 01-08-2026→05-08-2026), 2x Double (AI, USD, 01-08-2026→03-08-2026)".
+  const hotelLinesSummary = (h) =>
+    (h.roomLines || [])
+      .map((l) => {
+        const type = ROOM_TYPES.find((r) => r.value === l.roomType)?.label || l.roomType;
+        const meal = MEAL_PLANS.find((m) => m.value === l.mealPlan)?.value.toUpperCase() || "";
+        const checkIn = l.checkIn || h.checkIn;
+        const checkOut = l.checkOut || h.checkOut;
+        const dates = checkIn && checkOut ? `, ${checkIn}→${checkOut}` : "";
+        return `${l.count}× ${type} (${meal}, ${l.currency}${dates})`;
+      })
+      .join(", ");
+
+  const hotelTotals = visibleHotelBookings.reduce(
+    (acc, h) => {
+      acc.net += hotelNetTotal(h);
+      acc.sold += hotelSoldTotal(h);
+      acc.profit += hotelProfitTotal(h);
+      return acc;
+    },
+    { net: 0, sold: 0, profit: 0 }
+  );
+
 
   const getCustomers = (t) =>
     Array.isArray(t.customers) && t.customers.length > 0
@@ -2751,6 +3211,52 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </div>
 
+          {/* Reissue tracking: mark the ticket being entered as a reissue of an older
+              ticket, then look that old ticket number up to auto-fill its issue date. */}
+          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-3">
+            <label className="flex items-center gap-2 text-sm font-semibold text-amber-800 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-amber-700"
+                checked={form.isReissued}
+                onChange={(e) => {
+                  const isReissued = e.target.checked;
+                  setForm({
+                    ...form,
+                    isReissued,
+                    oldTicketNumber: isReissued ? form.oldTicketNumber : "",
+                    oldTicketIssueDate: isReissued ? form.oldTicketIssueDate : "",
+                  });
+                }}
+              />
+              This ticket is a reissue of an older ticket
+            </label>
+            {form.isReissued && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="text-xs text-stone-500 block mb-1">Old ticket number</label>
+                  <input
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={form.oldTicketNumber}
+                    onChange={(e) => handleOldTicketNumberChange(e.target.value)}
+                    onBlur={handleOldTicketNumberBlur}
+                    placeholder="e.g. 077-1234567890"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-stone-500 block mb-1">Old ticket issue date</label>
+                  <div className="w-full border border-stone-200 bg-stone-50 rounded-xl px-3 py-2 text-sm text-stone-600">
+                    {form.oldTicketIssueDate
+                      ? formatDisplayDate(form.oldTicketIssueDate)
+                      : form.oldTicketNumber
+                      ? "Not found among saved tickets"
+                      : "Enter the old ticket number above"}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
             <div>
               <label className="text-xs text-stone-500 block mb-1">From</label>
@@ -3000,7 +3506,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.company || "-"}</td>
                         <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.supplier || "-"}</td>
                         <td className="px-2.5 py-1 text-stone-600 font-mono whitespace-nowrap">
-                          {c.ticketNumber || "-"}
+                          <span className="inline-flex items-center gap-1.5">
+                            {c.ticketNumber || "-"}
+                            {t.isReissued && (
+                              <span
+                                title={`Reissued from ${t.oldTicketNumber || "an older ticket"}`}
+                                className="inline-flex items-center text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5"
+                              >
+                                Reissued
+                              </span>
+                            )}
+                          </span>
                         </td>
                         <td className="px-2.5 py-1 font-medium text-stone-800 whitespace-nowrap">
                           <span className="inline-flex items-center gap-1.5">
@@ -3135,10 +3651,670 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         )}
 
         {activeSection === "hotels" && (
-          <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
-            <Building2 size={40} className="mx-auto mb-3 text-stone-300" />
-            <p className="text-sm">Hotels section — nothing here yet.</p>
+        <>
+        {/* Buttons to register new supplier names and hotel names, so they're always
+            available to pick from the Supplier / Hotel name fields below. */}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <button
+            onClick={() => { setShowAddSupplierPanel(!showAddSupplierPanel); setShowAddHotelNamePanel(false); }}
+            className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-xl px-3 py-2 hover:bg-teal-50 flex items-center gap-1.5"
+          >
+            <Plus size={14} /> Add supplier
+          </button>
+          <button
+            onClick={() => { setShowAddHotelNamePanel(!showAddHotelNamePanel); setShowAddSupplierPanel(false); }}
+            className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-xl px-3 py-2 hover:bg-teal-50 flex items-center gap-1.5"
+          >
+            <Plus size={14} /> Add hotel name
+          </button>
+        </div>
+
+        {showAddSupplierPanel && (
+          <div className="bg-white border border-stone-200 rounded-2xl p-4 mb-4">
+            <h3 className="text-sm font-bold text-stone-700 mb-3">Suppliers</h3>
+            <div className="flex gap-2 mb-3">
+              <input
+                className="w-full max-w-xs border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                value={newSupplierDraft}
+                onChange={(e) => setNewSupplierDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddSupplierName()}
+                placeholder="Supplier name"
+              />
+              <button
+                onClick={handleAddSupplierName}
+                className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110"
+              >
+                Add
+              </button>
+            </div>
+            {suggestions.suppliers.length === 0 ? (
+              <p className="text-xs text-stone-400">No suppliers saved yet</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {suggestions.suppliers.map((s) => (
+                  <span
+                    key={s}
+                    className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700"
+                  >
+                    {s}
+                    <button onClick={() => handleDeleteSupplierName(s)} className="text-red-500 hover:text-red-700">
+                      <Trash2 size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
+        )}
+
+        {showAddHotelNamePanel && (
+          <div className="bg-white border border-stone-200 rounded-2xl p-4 mb-4">
+            <h3 className="text-sm font-bold text-stone-700 mb-3">Hotel names</h3>
+            <div className="flex gap-2 mb-3">
+              <input
+                className="w-full max-w-xs border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                value={newHotelNameDraft}
+                onChange={(e) => setNewHotelNameDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddHotelName()}
+                placeholder="Hotel name"
+              />
+              <button
+                onClick={handleAddHotelName}
+                className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110"
+              >
+                Add
+              </button>
+            </div>
+            {suggestions.hotelNames.length === 0 ? (
+              <p className="text-xs text-stone-400">No hotel names saved yet</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {suggestions.hotelNames.map((hn) => (
+                  <span
+                    key={hn}
+                    className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700"
+                  >
+                    {hn}
+                    <button onClick={() => handleDeleteHotelName(hn)} className="text-red-500 hover:text-red-700">
+                      <Trash2 size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* USD -> EGP exchange rate bar — entered by hand each day (e.g. from the CBE's
+            published rate), saved to shared storage so every employee sees the same value. */}
+        <div className="bg-white border border-stone-200 rounded-2xl px-4 py-3 mb-4 flex flex-wrap items-center gap-3">
+          <span className="text-xs font-semibold text-stone-500">USD → EGP rate today:</span>
+          <input
+            type="number"
+            step="0.01"
+            className="w-28 border border-stone-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+            value={usdToEgpRate ?? ""}
+            onChange={(e) => setUsdToEgpRate(e.target.value === "" ? null : parseFloat(e.target.value))}
+            onBlur={() => {
+              if (usdToEgpRate !== null && !Number.isNaN(usdToEgpRate)) persistUsdRate(usdToEgpRate);
+            }}
+            placeholder="e.g. 51.20"
+          />
+          <button
+            onClick={() => usdToEgpRate !== null && !Number.isNaN(usdToEgpRate) && persistUsdRate(usdToEgpRate)}
+            className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-lg px-3 py-1.5 hover:bg-teal-50"
+          >
+            Save rate
+          </button>
+          {usdToEgpRateDate && (
+            <span className="text-xs text-stone-400">Last updated: {usdToEgpRateDate}</span>
+          )}
+        </div>
+
+        {hotelError && (
+          <div className="text-sm rounded-xl px-3 py-2 mb-4 bg-red-50 text-red-700">{hotelError}</div>
+        )}
+
+        {canAddTickets && (
+          <div className="bg-white border border-stone-200 rounded-2xl p-5 mb-6">
+            <h3 className="text-sm font-bold text-stone-700 mb-4">
+              {hotelEditingId ? "Edit hotel booking" : "New hotel booking"}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">
+                  Company name <span className="font-normal text-stone-400">(optional — leave blank for Individual)</span>
+                </label>
+                <input
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={hotelForm.customer}
+                  onChange={(e) => setHotelForm({ ...hotelForm, customer: e.target.value })}
+                  placeholder="e.g. Perla Travel Corp — leave blank for Individual"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Hotel name</label>
+                {hotelNameOther ? (
+                  <div className="flex gap-2">
+                    <input
+                      className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={hotelForm.hotel}
+                      onChange={(e) => setHotelForm({ ...hotelForm, hotel: e.target.value })}
+                      placeholder="Enter hotel name"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setHotelNameOther(false); setHotelForm({ ...hotelForm, hotel: "" }); }}
+                      className="shrink-0 text-xs text-stone-500 hover:text-teal-800 border border-stone-300 rounded-xl px-2"
+                    >
+                      List
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                    value={hotelForm.hotel}
+                    onChange={(e) => {
+                      if (e.target.value === "__other__") {
+                        setHotelNameOther(true);
+                        setHotelForm({ ...hotelForm, hotel: "" });
+                      } else {
+                        setHotelForm({ ...hotelForm, hotel: e.target.value });
+                      }
+                    }}
+                  >
+                    <option value="">Select hotel</option>
+                    {suggestions.hotelNames.map((hn) => (
+                      <option key={hn} value={hn}>{hn}</option>
+                    ))}
+                    <option value="__other__">Other</option>
+                  </select>
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Supplier</label>
+                {hotelSupplierOther ? (
+                  <div className="flex gap-2">
+                    <input
+                      className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={hotelForm.supplier}
+                      onChange={(e) => setHotelForm({ ...hotelForm, supplier: e.target.value })}
+                      placeholder="Enter supplier name"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setHotelSupplierOther(false); setHotelForm({ ...hotelForm, supplier: "" }); }}
+                      className="shrink-0 text-xs text-stone-500 hover:text-teal-800 border border-stone-300 rounded-xl px-2"
+                    >
+                      List
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                    value={hotelForm.supplier}
+                    onChange={(e) => {
+                      if (e.target.value === "__other__") {
+                        setHotelSupplierOther(true);
+                        setHotelForm({ ...hotelForm, supplier: "" });
+                      } else {
+                        setHotelForm({ ...hotelForm, supplier: e.target.value });
+                      }
+                    }}
+                  >
+                    <option value="">Select supplier</option>
+                    {suggestions.suppliers.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                    <option value="__other__">Other</option>
+                  </select>
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Booking date</label>
+                <input
+                  type="date"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={hotelForm.bookingDate}
+                  onChange={(e) => setHotelForm({ ...hotelForm, bookingDate: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Notes</label>
+                <input
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={hotelForm.notes}
+                  onChange={(e) => setHotelForm({ ...hotelForm, notes: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-500 mb-3">
+              Each room has its own check-in/check-out dates — price is per room, per night.
+            </p>
+
+            {/* Room lines: one booking can mix different room types, meal plans, currencies,
+                prices, and stay dates — each room keeps its own check-in/check-out. */}
+            <div className="space-y-3">
+              <label className="text-xs text-stone-500 block">Rooms</label>
+              {hotelForm.roomLines.map((line) => (
+                <div key={line.id} className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-9 gap-2 items-end bg-stone-50 border border-stone-200 rounded-xl p-3">
+                  <div>
+                    <label className="text-[11px] text-stone-500 block mb-1">Room type</label>
+                    <select
+                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={line.roomType}
+                      onChange={(e) => {
+                        const roomType = e.target.value;
+                        const capacity = ROOM_CAPACITY[roomType] || 1;
+                        updateHotelRoomLine(line.id, { roomType, guests: guestsForCapacity(line.guests, capacity) });
+                      }}
+                    >
+                      {ROOM_TYPES.map((r) => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-stone-500 block mb-1">Meal plan</label>
+                    <select
+                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={line.mealPlan}
+                      onChange={(e) => updateHotelRoomLine(line.id, { mealPlan: e.target.value })}
+                    >
+                      {MEAL_PLANS.map((m) => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-stone-500 block mb-1">Check-in</label>
+                    <input
+                      type="date"
+                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={line.checkIn}
+                      onChange={(e) => updateHotelRoomLine(line.id, { checkIn: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-stone-500 block mb-1">Check-out</label>
+                    <input
+                      type="date"
+                      min={line.checkIn || undefined}
+                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={line.checkOut}
+                      onChange={(e) => updateHotelRoomLine(line.id, { checkOut: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-stone-500 block mb-1">Currency</label>
+                    <select
+                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={line.currency}
+                      onChange={(e) => updateHotelRoomLine(line.id, { currency: e.target.value })}
+                    >
+                      {HOTEL_CURRENCIES.map((c) => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-stone-500 block mb-1"># rooms</label>
+                    <input
+                      type="number"
+                      min="1"
+                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={line.count}
+                      onChange={(e) => updateHotelRoomLine(line.id, { count: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-stone-500 block mb-1">Net (per room/night)</label>
+                    <input
+                      type="number"
+                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={line.netPrice}
+                      onChange={(e) => updateHotelRoomLine(line.id, { netPrice: e.target.value })}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-stone-500 block mb-1">Sold (per room/night)</label>
+                    <input
+                      type="number"
+                      className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={line.soldPrice}
+                      onChange={(e) => updateHotelRoomLine(line.id, { soldPrice: e.target.value })}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs text-emerald-700 font-semibold">
+                      {roomLineNights(line, hotelForm)}n · {fmt(hotelLineSoldTotal(line, roomLineNights(line, hotelForm)) - hotelLineNetTotal(line, roomLineNights(line, hotelForm)))} {line.currency}
+                    </div>
+                    <button
+                      onClick={() => removeHotelRoomLine(line.id)}
+                      disabled={hotelForm.roomLines.length <= 1}
+                      className="text-red-500 hover:text-red-700 disabled:opacity-30"
+                      title="Remove this room line"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+
+                  {/* Adult guest names — one field per bed the room type holds. Only the
+                      first guest is mandatory; the rest are optional. */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3">
+                    {(line.guests || []).map((g, i) => (
+                      <div key={g.id}>
+                        <label className="text-[11px] text-stone-500 block mb-1">
+                          Guest {i + 1} name
+                          {i === 0 ? <span className="text-red-500"> *</span> : (
+                            <span className="text-stone-400"> (optional)</span>
+                          )}
+                        </label>
+                        <input
+                          className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                          value={g.name}
+                          onChange={(e) => updateRoomGuest(line.id, i, e.target.value)}
+                          placeholder={i === 0 ? "Guest 1 name (required)" : `Guest ${i + 1} name`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Children in this room — name + age in years (0–11.99). */}
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] text-stone-500 block">Children</label>
+                      <button
+                        type="button"
+                        onClick={() => addRoomChild(line.id)}
+                        className="text-[11px] font-semibold text-teal-800 border border-teal-700 border-dashed rounded-lg px-2 py-1 hover:bg-teal-50"
+                      >
+                        + Add child
+                      </button>
+                    </div>
+                    {(line.children || []).length > 0 && (
+                      <div className="space-y-2">
+                        {line.children.map((c, i) => (
+                          <div key={c.id} className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end bg-white border border-stone-200 rounded-lg p-2">
+                            <div className="md:col-span-3">
+                              <label className="text-[11px] text-stone-500 block mb-1">Child {i + 1} name</label>
+                              <input
+                                className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                                value={c.name}
+                                onChange={(e) => updateRoomChild(line.id, c.id, { name: e.target.value })}
+                                placeholder="Child name"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] text-stone-500 block mb-1">Age (0–11.99)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="11.99"
+                                step="0.01"
+                                className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                                value={c.age}
+                                onChange={(e) => {
+                                  let v = e.target.value;
+                                  if (v !== "" && parseFloat(v) > 11.99) v = "11.99";
+                                  updateRoomChild(line.id, c.id, { age: v });
+                                }}
+                                placeholder="e.g. 4"
+                              />
+                            </div>
+                            <div className="flex justify-end">
+                              <button
+                                onClick={() => removeRoomChild(line.id, c.id)}
+                                className="text-red-500 hover:text-red-700"
+                                title="Remove this child"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <button
+                onClick={addHotelRoomLine}
+                className="text-xs font-semibold text-teal-800 border border-teal-700 border-dashed rounded-lg px-3 py-1.5 hover:bg-teal-50"
+              >
+                + Add another room
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 mt-4">
+              <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                <p className="text-[11px] text-stone-500">Net total (EGP)</p>
+                <p className="text-sm font-bold text-stone-800">{fmt(hotelNetTotal(hotelForm))}</p>
+              </div>
+              <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                <p className="text-[11px] text-stone-500">Sold total (EGP)</p>
+                <p className="text-sm font-bold text-stone-800">{fmt(hotelSoldTotal(hotelForm))}</p>
+              </div>
+              <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                <p className="text-[11px] text-stone-500">Profit (auto, EGP)</p>
+                <p className="text-sm font-bold text-emerald-700">{fmt(hotelProfitTotal(hotelForm))}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 mt-4">
+              <button
+                onClick={handleSaveHotel}
+                className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-5 py-2.5 hover:brightness-110"
+              >
+                {hotelEditingId ? "Save changes" : "Add booking"}
+              </button>
+              {hotelEditingId && (
+                <button
+                  onClick={resetHotelForm}
+                  className="text-sm font-semibold text-stone-500 rounded-xl px-4 py-2.5 hover:bg-stone-50"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Totals, converted to EGP for USD-priced bookings */}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-white border border-stone-200 rounded-2xl px-4 py-3 text-center">
+            <p className="text-xs text-stone-500">Total net (EGP)</p>
+            <p className="text-lg font-bold text-stone-800">{fmt(hotelTotals.net)}</p>
+          </div>
+          <div className="bg-white border border-stone-200 rounded-2xl px-4 py-3 text-center">
+            <p className="text-xs text-stone-500">Total sold (EGP)</p>
+            <p className="text-lg font-bold text-stone-800">{fmt(hotelTotals.sold)}</p>
+          </div>
+          <div className="bg-white border border-stone-200 rounded-2xl px-4 py-3 text-center">
+            <p className="text-xs text-stone-500">Total profit (EGP)</p>
+            <p className="text-lg font-bold text-emerald-700">{fmt(hotelTotals.profit)}</p>
+          </div>
+        </div>
+
+        <div className="bg-white border border-stone-200 rounded-2xl overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-stone-50 border-b border-stone-200 text-stone-500">
+                <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Company</th>
+                <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Hotel</th>
+                <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Supplier</th>
+                <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Rooms</th>
+                <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap"># rooms</th>
+                <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Booking date</th>
+                <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Dates</th>
+                <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net total (EGP)</th>
+                <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Sold total (EGP)</th>
+                <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Profit (EGP)</th>
+                {(canEditTickets || canDeleteTickets) && (
+                  <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Actions</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleHotelBookings.length === 0 && (
+                <tr>
+                  <td colSpan={11} className="text-center text-stone-400 px-2.5 py-6">
+                    No hotel bookings yet.
+                  </td>
+                </tr>
+              )}
+              {visibleHotelBookings.map((h) => (
+                <tr
+                  key={h.id}
+                  className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer"
+                  onClick={() => setViewingHotelBooking(h)}
+                >
+                  <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">
+                    {h.customer && h.customer.trim() ? (
+                      h.customer
+                    ) : (
+                      <span className="text-stone-400 italic">Individual</span>
+                    )}
+                  </td>
+                  <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">{h.hotel}</td>
+                  <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{h.supplier}</td>
+                  <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{hotelLinesSummary(h)}</td>
+                  <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{hotelRoomCount(h)}</td>
+                  <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{h.bookingDate || "-"}</td>
+                  <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
+                    {hotelDateRange(h).start && hotelDateRange(h).end
+                      ? `${hotelDateRange(h).start} → ${hotelDateRange(h).end}`
+                      : "-"}
+                  </td>
+                  <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(hotelNetTotal(h))}</td>
+                  <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(hotelSoldTotal(h))}</td>
+                  <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">
+                    {fmt(hotelProfitTotal(h))}
+                  </td>
+                  {(canEditTickets || canDeleteTickets) && (
+                    <td className="px-2.5 py-1 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      {canEditTickets && (
+                        <button
+                          onClick={() => handleEditHotelClick(h)}
+                          className="text-teal-700 hover:text-teal-900 mr-2"
+                          title="Edit"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                      {canDeleteTickets && (
+                        <button
+                          onClick={() => handleDeleteHotel(h.id)}
+                          className="text-red-600 hover:text-red-800"
+                          title="Delete"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {viewingHotelBooking && (
+          <div
+            className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+            onClick={() => setViewingHotelBooking(null)}
+          >
+            <div
+              className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-stone-800">{viewingHotelBooking.hotel}</h3>
+                  <p className="text-sm text-stone-500">
+                    {viewingHotelBooking.customer && viewingHotelBooking.customer.trim() ? (
+                      <>Company: {viewingHotelBooking.customer} <span className="text-teal-700 font-semibold">(Corporate)</span></>
+                    ) : (
+                      <span className="italic">Individual booking</span>
+                    )}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setViewingHotelBooking(null)}
+                  className="text-stone-400 hover:text-stone-700"
+                  title="Close"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+                <div><span className="text-stone-500">Supplier: </span>{viewingHotelBooking.supplier || "-"}</div>
+                <div><span className="text-stone-500">Booking date: </span>{viewingHotelBooking.bookingDate || "-"}</div>
+                <div><span className="text-stone-500">Employee: </span>{viewingHotelBooking.employee || "-"}</div>
+                <div><span className="text-stone-500">Notes: </span>{viewingHotelBooking.notes || "-"}</div>
+              </div>
+
+              <div className="space-y-3">
+                {(viewingHotelBooking.roomLines || []).map((l, idx) => {
+                  const type = ROOM_TYPES.find((r) => r.value === l.roomType)?.label || l.roomType;
+                  const meal = MEAL_PLANS.find((m) => m.value === l.mealPlan)?.label || l.mealPlan;
+                  const nights = roomLineNights(l, viewingHotelBooking);
+                  return (
+                    <div key={l.id || idx} className="border border-stone-200 rounded-xl p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <span className="font-semibold text-stone-700 text-sm">
+                          {l.count}× {type} — {meal}
+                        </span>
+                        <span className="text-xs text-stone-500">
+                          {l.checkIn || "-"} → {l.checkOut || "-"} ({nights}n)
+                        </span>
+                      </div>
+                      <div className="text-xs text-stone-600 mb-2">
+                        Net: {fmt(hotelLineNetTotal(l, nights))} {l.currency} · Sold:{" "}
+                        {fmt(hotelLineSoldTotal(l, nights))} {l.currency}
+                      </div>
+                      {Array.isArray(l.guests) && l.guests.some((g) => g.name) && (
+                        <div className="text-xs text-stone-700 mb-1">
+                          <span className="text-stone-500">Guests: </span>
+                          {l.guests.map((g) => g.name || "-").join(", ")}
+                        </div>
+                      )}
+                      {Array.isArray(l.children) && l.children.length > 0 && (
+                        <div className="text-xs text-stone-700">
+                          <span className="text-stone-500">Children: </span>
+                          {l.children
+                            .map((c) => `${c.name || "-"} (${c.age !== "" && c.age != null ? c.age : "-"}y)`)
+                            .join(", ")}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 mt-4">
+                <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                  <p className="text-[11px] text-stone-500">Net total (EGP)</p>
+                  <p className="text-sm font-bold text-stone-800">{fmt(hotelNetTotal(viewingHotelBooking))}</p>
+                </div>
+                <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                  <p className="text-[11px] text-stone-500">Sold total (EGP)</p>
+                  <p className="text-sm font-bold text-stone-800">{fmt(hotelSoldTotal(viewingHotelBooking))}</p>
+                </div>
+                <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                  <p className="text-[11px] text-stone-500">Profit (EGP)</p>
+                  <p className="text-sm font-bold text-emerald-700">{fmt(hotelProfitTotal(viewingHotelBooking))}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        </>
         )}
 
         {activeSection === "cars" && (
@@ -3206,6 +4382,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     {viewingTicket.date ? formatDisplayDate(viewingTicket.date) : "-"}
                   </p>
                 </div>
+                {viewingTicket.isReissued && (
+                  <div className="sm:col-span-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                    <p className="text-xs font-semibold text-amber-800 mb-1">Reissued ticket</p>
+                    <p className="text-sm text-amber-900">
+                      Old ticket number: {viewingTicket.oldTicketNumber || "-"}
+                      {" · "}
+                      Old issue date:{" "}
+                      {viewingTicket.oldTicketIssueDate
+                        ? formatDisplayDate(viewingTicket.oldTicketIssueDate)
+                        : "not found"}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="p-4 md:p-5">
