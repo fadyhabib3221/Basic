@@ -475,8 +475,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   }, [currentUser]);
 
 
-  const ONLINE_THRESHOLD_MS = 90 * 1000; // considered "connected" if seen in the last 90s
-  const HEARTBEAT_INTERVAL_MS = 25 * 1000;
+  const ONLINE_THRESHOLD_MS = 15 * 1000; // considered "connected" if seen in the last 15s
+  const HEARTBEAT_INTERVAL_MS = 5 * 1000;
 
   // While signed in, periodically mark this account as "connected" so the main account can see it
   useEffect(() => {
@@ -535,7 +535,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
     };
     loadPresence();
-    const interval = setInterval(loadPresence, 20 * 1000);
+    const interval = setInterval(loadPresence, LIVE_REFRESH_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
