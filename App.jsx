@@ -1147,42 +1147,35 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // The ticket currently open in the detail "page", if any.
   const viewingTicket = viewingTicketId ? visibleTickets.find((t) => t.id === viewingTicketId) : null;
 
-  const totals = byCompany.reduce(
-    (acc, t) => {
-      acc.total += parseFloat(t.totalPrice) || 0;
-      acc.profit += profit(t.basePrice, t.totalPrice, t.tax);
-      return acc;
-    },
-    { total: 0, profit: 0 }
-  );
+  // Counts and sums per CUSTOMER rather than per ticket/booking: a booking with several
+  // customers contributes its full (unsplit) total/profit once for each customer, and
+  // each customer counts as one ticket. This keeps the summary cards, monthly totals,
+  // and company breakdown consistent with the per-customer rows shown in the ticket table.
+  const countAndSum = (rows) =>
+    rows.reduce(
+      (acc, t) => {
+        const n = getCustomers(t).length || 1;
+        acc.count += n;
+        acc.total += (parseFloat(t.totalPrice) || 0) * n;
+        acc.profit += profit(t.basePrice, t.totalPrice, t.tax) * n;
+        return acc;
+      },
+      { count: 0, total: 0, profit: 0 }
+    );
+
+  const totals = countAndSum(byCompany);
 
   const monthlyBreakdown = monthsAvailable.map((key) => {
     const rows = visibleTickets.filter((t) => monthKey(t.date) === key);
-    const sum = rows.reduce(
-      (acc, t) => {
-        acc.total += parseFloat(t.totalPrice) || 0;
-        acc.profit += profit(t.basePrice, t.totalPrice, t.tax);
-        return acc;
-      },
-      { total: 0, profit: 0 }
-    );
-    return { key, count: rows.length, ...sum };
+    return { key, ...countAndSum(rows) };
   });
 
   const companyBreakdown = companiesAvailable.map((name) => {
     const rows = visibleTickets.filter((t) => (t.company || "").trim() === name);
-    const sum = rows.reduce(
-      (acc, t) => {
-        acc.total += parseFloat(t.totalPrice) || 0;
-        acc.profit += profit(t.basePrice, t.totalPrice, t.tax);
-        return acc;
-      },
-      { total: 0, profit: 0 }
-    );
     const customers = Array.from(
       new Set(rows.flatMap((t) => getCustomers(t).map((c) => c.name)).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b));
-    return { name, count: rows.length, customers, ...sum };
+    return { name, customers, ...countAndSum(rows) };
   });
 
   const ticketRows = (rows) =>
@@ -1852,7 +1845,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="bg-slate-100 rounded-lg p-2 text-slate-600"><Ticket size={20} /></div>
             <div>
               <p className="text-xs text-slate-500">Tickets</p>
-              <p className="text-lg font-bold">{byCompany.length}</p>
+              <p className="text-lg font-bold">{totals.count}</p>
             </div>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
@@ -2139,45 +2132,48 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedFiltered.map((t) => (
-                    <tr
-                      key={t.id}
-                      onClick={() => openTicketDetail(t)}
-                      className="border-t border-slate-100 hover:bg-slate-50 leading-tight cursor-pointer"
-                    >
-                      <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.employee || "-"}</td>
-                      <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.company || "-"}</td>
-                      <td className="px-2.5 py-1 text-slate-600 font-mono whitespace-nowrap">
-                        {getCustomers(t).map((c) => c.ticketNumber || "-").join(", ")}
-                      </td>
-                      <td className="px-2.5 py-1 font-medium text-slate-800 whitespace-nowrap">
-                        {getCustomers(t).map((c) => c.name || "-").join(", ")}
-                      </td>
-                      <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.from} → {t.to}</td>
-                      <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.airline || "-"}</td>
-                      <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.date ? formatDisplayDate(t.date) : "-"}</td>
-                      <td className="px-2.5 py-1 text-slate-600 text-right whitespace-nowrap">{fmt(t.basePrice)}</td>
-                      <td className="px-2.5 py-1 text-slate-600 text-right whitespace-nowrap">{fmt(t.tax)}</td>
-                      <td className="px-2.5 py-1 text-slate-600 text-right whitespace-nowrap">{fmt(t.totalPrice)}</td>
-                      <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.basePrice, t.totalPrice, t.tax))}</td>
-                      <td className="px-2.5 py-1 text-right whitespace-nowrap">
-                        {(currentUser.isAdmin || canEditTickets) ? (
-                          <div className="flex gap-0.5 justify-end">
-                            <button onClick={(ev) => { ev.stopPropagation(); handleEdit(t); }} className="text-slate-400 hover:text-teal-700 p-0.5">
-                              <Pencil size={13} />
-                            </button>
-                            {currentUser.isAdmin && (
-                              <button onClick={(ev) => { ev.stopPropagation(); handleDelete(t.id); }} className="text-slate-400 hover:text-red-600 p-0.5">
-                                <Trash2 size={13} />
+                  {sortedFiltered.flatMap((t) => {
+                    const customers = getCustomers(t);
+                    return customers.map((c, i) => (
+                      <tr
+                        key={`${t.id}-${i}`}
+                        onClick={() => openTicketDetail(t)}
+                        className={`border-t border-slate-100 hover:bg-slate-50 leading-tight cursor-pointer ${i > 0 ? "border-t-0" : ""}`}
+                      >
+                        <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.employee || "-"}</td>
+                        <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.company || "-"}</td>
+                        <td className="px-2.5 py-1 text-slate-600 font-mono whitespace-nowrap">
+                          {c.ticketNumber || "-"}
+                        </td>
+                        <td className="px-2.5 py-1 font-medium text-slate-800 whitespace-nowrap">
+                          {c.name || "-"}
+                        </td>
+                        <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.from} → {t.to}</td>
+                        <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.airline || "-"}</td>
+                        <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.date ? formatDisplayDate(t.date) : "-"}</td>
+                        <td className="px-2.5 py-1 text-slate-600 text-right whitespace-nowrap">{fmt(t.basePrice)}</td>
+                        <td className="px-2.5 py-1 text-slate-600 text-right whitespace-nowrap">{fmt(t.tax)}</td>
+                        <td className="px-2.5 py-1 text-slate-600 text-right whitespace-nowrap">{fmt(t.totalPrice)}</td>
+                        <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.basePrice, t.totalPrice, t.tax))}</td>
+                        <td className="px-2.5 py-1 text-right whitespace-nowrap">
+                          {(currentUser.isAdmin || canEditTickets) ? (
+                            <div className="flex gap-0.5 justify-end">
+                              <button onClick={(ev) => { ev.stopPropagation(); handleEdit(t); }} className="text-slate-400 hover:text-teal-700 p-0.5">
+                                <Pencil size={13} />
                               </button>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-slate-300 text-[11px] block text-right">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                              {currentUser.isAdmin && (
+                                <button onClick={(ev) => { ev.stopPropagation(); handleDelete(t.id); }} className="text-slate-400 hover:text-red-600 p-0.5">
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 text-[11px] block text-right">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ));
+                  })}
                 </tbody>
               </table>
             </div>
