@@ -374,6 +374,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [passwordSuccess, setPasswordSuccess] = useState("");
 
   const [form, setForm] = useState(getEmptyForm);
+  // Whether the Supplier field is in "type your own name" mode (chosen via the Other option).
+  const [supplierOther, setSupplierOther] = useState(false);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   // Clicking a ticket row opens a full detail view of that ticket (id stored here).
@@ -1110,6 +1112,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     persistTickets(next);
     rememberSuggestionsFromRecord(record);
     setForm(getEmptyForm());
+    setSupplierOther(false);
   };
 
   // The main account can always edit tickets; an employee can too, but only if they've
@@ -1122,16 +1125,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         ? t.customers
         : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
     setForm({ ...t, customers, customersCount: customers.length });
+    setSupplierOther(!!t.supplier && !SUPPLIERS.includes(t.supplier));
   };
   const handleDelete = (id) => {
     if (!currentUser.isAdmin) {
       setError("Only the main account can delete tickets");
       return;
     }
-    if (form.id === id) setForm(getEmptyForm());
+    if (form.id === id) { setForm(getEmptyForm()); setSupplierOther(false); }
     persistTickets(tickets.filter((t) => t.id !== id));
   };
-  const handleCancel = () => setForm(getEmptyForm());
+  const handleCancel = () => { setForm(getEmptyForm()); setSupplierOther(false); };
 
   // Opens the full-detail view ("page") for a ticket, showing every field including notes.
   const openTicketDetail = (t) => {
@@ -2395,16 +2399,43 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
             <div>
               <label className="text-xs text-slate-500 block mb-1">Supplier</label>
-              <select
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white"
-                value={form.supplier}
-                onChange={(e) => setForm({ ...form, supplier: e.target.value })}
-              >
-                <option value="">Select supplier</option>
-                {SUPPLIERS.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+              {supplierOther ? (
+                <div className="flex gap-2">
+                  <input
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                    value={form.supplier}
+                    onChange={(e) => setForm({ ...form, supplier: e.target.value })}
+                    placeholder="Enter supplier name"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setSupplierOther(false); setForm({ ...form, supplier: "" }); }}
+                    className="shrink-0 text-xs text-slate-500 hover:text-teal-700 border border-slate-300 rounded-lg px-2"
+                  >
+                    List
+                  </button>
+                </div>
+              ) : (
+                <select
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white"
+                  value={form.supplier}
+                  onChange={(e) => {
+                    if (e.target.value === "__other__") {
+                      setSupplierOther(true);
+                      setForm({ ...form, supplier: "" });
+                    } else {
+                      setForm({ ...form, supplier: e.target.value });
+                    }
+                  }}
+                >
+                  <option value="">Select supplier</option>
+                  {SUPPLIERS.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                  <option value="__other__">Other</option>
+                </select>
+              )}
             </div>
           </div>
 
