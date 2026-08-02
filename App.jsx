@@ -6,7 +6,7 @@ const LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAEGCAM
 import {
   Plane, Search, Trash2, Pencil, X, Check, TrendingUp, Ticket, Wallet,
   Calendar, Download, Upload, Building2, Factory, Lock, LogOut, UserPlus, Users, Eye, EyeOff,
-  ShieldCheck, Wifi, User, Cloud, Globe2, List,
+  ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText,
 } from "lucide-react";
 
 const MONTHS = [
@@ -395,6 +395,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // list later becomes empty (e.g. accounts deleted, a bad restore) — so no one can
   // create a fresh, unauthenticated admin account after the app has already been set up.
   const [setupComplete, setSetupComplete] = useState(null); // null = not loaded yet
+
+  // Top-level section switcher: "flights" holds all existing ticket functionality;
+  // "hotels" and "cars" are placeholders for future sections.
+  const [activeSection, setActiveSection] = useState("flights");
 
   useEffect(() => {
     (async () => {
@@ -1783,6 +1787,56 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         </header>
 
+        {/* Top-level section switcher */}
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <button
+            onClick={() => setActiveSection("flights")}
+            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
+              activeSection === "flights"
+                ? "bg-teal-700 text-white border-teal-700 shadow-sm"
+                : "bg-white text-slate-500 border-slate-200 hover:border-teal-300 hover:text-teal-700"
+            }`}
+          >
+            <Plane size={22} className="rotate-45" />
+            Flights
+          </button>
+          <button
+            onClick={() => setActiveSection("hotels")}
+            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
+              activeSection === "hotels"
+                ? "bg-teal-700 text-white border-teal-700 shadow-sm"
+                : "bg-white text-slate-500 border-slate-200 hover:border-teal-300 hover:text-teal-700"
+            }`}
+          >
+            <Building2 size={22} />
+            Hotels
+          </button>
+          <button
+            onClick={() => setActiveSection("cars")}
+            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
+              activeSection === "cars"
+                ? "bg-teal-700 text-white border-teal-700 shadow-sm"
+                : "bg-white text-slate-500 border-slate-200 hover:border-teal-300 hover:text-teal-700"
+            }`}
+          >
+            <Car size={22} />
+            Transportation
+          </button>
+          <button
+            onClick={() => setActiveSection("files")}
+            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
+              activeSection === "files"
+                ? "bg-teal-700 text-white border-teal-700 shadow-sm"
+                : "bg-white text-slate-500 border-slate-200 hover:border-teal-300 hover:text-teal-700"
+            }`}
+          >
+            <FileText size={22} />
+            Files
+          </button>
+        </div>
+
+        {activeSection === "flights" && (
+        <>
         {currentUser.isAdmin && (restoreError || restoreSuccess) && (
           <div className={`text-sm rounded-lg px-3 py-2 mb-4 ${restoreError ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
             {restoreError || restoreSuccess}
@@ -2744,9 +2798,32 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <p className="text-xs text-slate-400 mt-3">
           This data is shared between signed-in employees. Login is a basic access gate, not strong security — treat it accordingly.
         </p>
+        </>
+        )}
+
+        {activeSection === "hotels" && (
+          <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-400">
+            <Building2 size={40} className="mx-auto mb-3 text-slate-300" />
+            <p className="text-sm">Hotels section — nothing here yet.</p>
+          </div>
+        )}
+
+        {activeSection === "cars" && (
+          <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-400">
+            <Car size={40} className="mx-auto mb-3 text-slate-300" />
+            <p className="text-sm">Transportation section — nothing here yet.</p>
+          </div>
+        )}
+
+        {activeSection === "files" && (
+          <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-400">
+            <FileText size={40} className="mx-auto mb-3 text-slate-300" />
+            <p className="text-sm">Files section — nothing here yet.</p>
+          </div>
+        )}
       </div>
 
-      {viewingTicket && (
+      {activeSection === "flights" && viewingTicket && (
         <div className="fixed inset-0 bg-white z-40 overflow-y-auto">
           <div className="max-w-3xl mx-auto p-4 md:p-6">
             <div className="flex items-center justify-between mb-6">
