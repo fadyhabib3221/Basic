@@ -161,11 +161,11 @@ const emptyNewEmployee = {
   canManageCompanies: false,
 };
 
-// Per-employee permissions control used in the employee table: a compact summary
-// button that expands into the same six on/off toggles as the new-employee form, so
-// the main account can adjust an existing employee's access at any time, independently
-// of whatever grade they were assigned.
-const PermissionsCell = ({ emp, open, onToggleOpen, onSetPermission }) => {
+// Per-employee permissions button used in the employee table: shows a quick summary
+// of the current access and opens the full-screen EmployeePermissionsModal below on
+// click. Kept as a plain button (not a popover) because the table it sits in has
+// overflow-hidden on its wrapper, which would otherwise clip a dropdown open below it.
+const PermissionsCell = ({ emp, onOpen }) => {
   const summary = [
     emp.canViewAll && "View all",
     emp.canAdd && "Add",
@@ -178,16 +178,58 @@ const PermissionsCell = ({ emp, open, onToggleOpen, onSetPermission }) => {
     .join(" · ") || "Own tickets only";
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={onToggleOpen}
-        className="border border-stone-300 rounded-md px-2 py-1.5 text-xs text-stone-700 hover:bg-stone-50 flex items-center gap-1.5 max-w-[220px]"
+    <button
+      type="button"
+      onClick={onOpen}
+      className="border border-stone-300 rounded-md px-2 py-1.5 text-xs text-stone-700 hover:bg-teal-50 hover:border-teal-300 flex items-center gap-1.5 max-w-[220px]"
+    >
+      <span className="truncate">{summary}</span>
+      <Pencil size={11} className="text-stone-400 shrink-0" />
+    </button>
+  );
+};
+
+// Full-screen modal for editing one employee's grade and detailed permissions. Centered
+// over the whole page (not nested inside the scrollable/clipped table), so it's always
+// fully visible and easy to use — this is the one place permissions for an existing
+// employee are changed. Closes itself if the employee record disappears (e.g. deleted
+// from another tab) or is promoted to a main account (which no longer uses these toggles).
+const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission }) => {
+  if (!emp) return null;
+  return (
+    <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl border border-stone-200 p-5 w-full max-w-sm max-h-[90vh] overflow-y-auto"
+        onClick={(ev) => ev.stopPropagation()}
       >
-        <span className="truncate">{summary}</span>
-      </button>
-      {open && (
-        <div className="absolute z-20 mt-1 w-64 bg-white border border-stone-300 rounded-lg shadow-lg p-3 divide-y divide-stone-100">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-semibold text-stone-900">Permissions</h3>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1">
+            <X size={16} />
+          </button>
+        </div>
+        <p className="text-xs text-stone-400 mb-4">{emp.name} · {emp.username}</p>
+
+        <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
+        <div className="grid grid-cols-4 gap-1.5 mb-4">
+          {EMPLOYEE_ROLES.map((r) => (
+            <button
+              key={r.value}
+              type="button"
+              onClick={() => onSetRole(r.value)}
+              className={`text-xs font-semibold rounded-lg px-2 py-2 border transition-colors ${
+                (emp.role || "employee") === r.value
+                  ? "bg-teal-800 text-white border-teal-800"
+                  : "bg-white text-stone-600 border-stone-300 hover:bg-stone-50"
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+
+        <p className="text-xs text-stone-500 mb-1">Individual permissions</p>
+        <div className="border border-stone-200 rounded-lg px-3 divide-y divide-stone-100">
           <ToggleSwitch
             label="View all tickets"
             description="See every employee's tickets, not just their own"
@@ -229,7 +271,14 @@ const PermissionsCell = ({ emp, open, onToggleOpen, onSetPermission }) => {
             onChange={(v) => onSetPermission("canManageCompanies", v)}
           />
         </div>
-      )}
+
+        <button
+          onClick={onClose}
+          className="mt-4 w-full bg-gradient-to-b from-teal-600 to-teal-800 hover:from-teal-800 hover:to-teal-900 text-white text-sm font-semibold rounded-lg px-4 py-2 shadow-sm shadow-teal-800/30 transition-colors"
+        >
+          Done
+        </button>
+      </div>
     </div>
   );
 };
@@ -2058,12 +2107,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             {e.isAdmin ? (
                               <span className="text-xs text-stone-400">Everything (main account)</span>
                             ) : (
-                              <PermissionsCell
-                                emp={e}
-                                open={openPermissionsFor === e.username}
-                                onToggleOpen={() => setOpenPermissionsFor(openPermissionsFor === e.username ? null : e.username)}
-                                onSetPermission={(field, value) => handleTogglePermission(e.username, field, value)}
-                              />
+                              <PermissionsCell emp={e} onOpen={() => setOpenPermissionsFor(e.username)} />
                             )}
                           </td>
                           <td className="px-3 py-2">
@@ -2120,12 +2164,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           {e.isAdmin ? (
                             <span className="text-xs text-stone-400">Everything (main account)</span>
                           ) : (
-                            <PermissionsCell
-                              emp={e}
-                              open={openPermissionsFor === e.username}
-                              onToggleOpen={() => setOpenPermissionsFor(openPermissionsFor === e.username ? null : e.username)}
-                              onSetPermission={(field, value) => handleTogglePermission(e.username, field, value)}
-                            />
+                            <PermissionsCell emp={e} onOpen={() => setOpenPermissionsFor(e.username)} />
                           )}
                         </td>
                         <td className="px-3 py-2 text-right">
@@ -3229,6 +3268,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </div>
         </div>
+      )}
+
+      {openPermissionsFor && (
+        <EmployeePermissionsModal
+          emp={(employees || []).find((e) => e.username === openPermissionsFor && !e.isAdmin)}
+          onClose={() => setOpenPermissionsFor(null)}
+          onSetRole={(role) => handleRoleChange(openPermissionsFor, role)}
+          onSetPermission={(field, value) => handleTogglePermission(openPermissionsFor, field, value)}
+        />
       )}
     </div>
   );
