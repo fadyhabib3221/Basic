@@ -335,6 +335,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [editDraft, setEditDraft] = useState({ name: "", username: "", password: "" });
   const [editShowPassword, setEditShowPassword] = useState(false);
 
+  const [showManageCompanies, setShowManageCompanies] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState("");
+
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [currentPasswordInput, setCurrentPasswordInput] = useState("");
   const [newPasswordInput, setNewPasswordInput] = useState("");
@@ -531,6 +534,28 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     persistSuggestions(next);
   };
 
+  // Lets the main account register company names up front (e.g. before any ticket is
+  // entered for them), so they always show up in the Company suggestions/filter list.
+  const handleAddCompany = () => {
+    const name = newCompanyName.trim();
+    if (!name) return;
+    if (suggestions.companies.some((c) => c.toLowerCase() === name.toLowerCase())) {
+      setNewCompanyName("");
+      return;
+    }
+    persistSuggestions({ ...suggestions, companies: [...suggestions.companies, name] });
+    setNewCompanyName("");
+  };
+
+  // Removes a company from the saved suggestions list. Existing tickets already
+  // recorded under that company name are untouched — this only affects the picker.
+  const handleDeleteCompany = (name) => {
+    persistSuggestions({
+      ...suggestions,
+      companies: suggestions.companies.filter((c) => c !== name),
+    });
+  };
+
   const profit = (base, total, tax) => {
     const b = parseFloat(base) || 0;
     const t = parseFloat(total) || 0;
@@ -618,7 +643,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Lets the main account set an employee's access level:
   // - "own": can only see and add their own tickets (default)
-  // - "all": can see every ticket, and add/see like a normal employee
+  // - "view": can see every ticket, but cannot add/edit any of them
+  // - "all": can see every ticket, and add/edit like a normal employee
   // - "accounting": can see every ticket but cannot add tickets — the only edit
   //   they're allowed is the Notes field on a ticket's detail page (each note edit
   //   is timestamped and attributed to them, see saveTicketNotes).
@@ -629,9 +655,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     const next = (employees || []).map((e) => {
       if (e.username !== username) return e;
-      if (value === "accounting") return { ...e, isAccounting: true, canViewAll: true };
-      if (value === "all") return { ...e, isAccounting: false, canViewAll: true };
-      return { ...e, isAccounting: false, canViewAll: false };
+      if (value === "accounting") return { ...e, isAccounting: true, canViewAll: true, canEdit: false };
+      if (value === "all") return { ...e, isAccounting: false, canViewAll: true, canEdit: true };
+      if (value === "view") return { ...e, isAccounting: false, canViewAll: true, canEdit: false };
+      return { ...e, isAccounting: false, canViewAll: false, canEdit: false };
     });
     await persistEmployees(next);
   };
@@ -1473,6 +1500,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <Users size={15} /> Manage employees
               </button>
             )}
+            {currentUser.isAdmin && (
+              <button onClick={() => setShowManageCompanies(!showManageCompanies)}
+                className="border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5">
+                <Building2 size={15} /> Manage companies
+              </button>
+            )}
             <button
               onClick={() => {
                 setShowChangePassword(!showChangePassword);
@@ -1596,11 +1629,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <span className="text-xs">Always (Main account)</span>
                             ) : (
                               <select
-                                value={e.isAccounting ? "accounting" : e.canViewAll ? "all" : "own"}
+                                value={e.isAccounting ? "accounting" : e.canEdit ? "all" : e.canViewAll ? "view" : "own"}
                                 onChange={(ev) => handleAccessChange(e.username, ev.target.value)}
                                 className="border border-slate-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white"
                               >
                                 <option value="own">Own tickets only</option>
+                                <option value="view">View all tickets (no edit)</option>
                                 <option value="all">All tickets (view &amp; edit)</option>
                                 <option value="accounting">Accounting (view + notes only)</option>
                               </select>
@@ -1653,11 +1687,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <span className="text-xs">Always (Main account)</span>
                           ) : (
                             <select
-                              value={e.isAccounting ? "accounting" : e.canViewAll ? "all" : "own"}
+                              value={e.isAccounting ? "accounting" : e.canEdit ? "all" : e.canViewAll ? "view" : "own"}
                               onChange={(ev) => handleAccessChange(e.username, ev.target.value)}
                               className="border border-slate-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white"
                             >
                               <option value="own">Own tickets only</option>
+                              <option value="view">View all tickets (no edit)</option>
                               <option value="all">All tickets (view &amp; edit)</option>
                               <option value="accounting">Accounting (view + notes only)</option>
                             </select>
@@ -1785,6 +1820,51 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               className="mt-3 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center gap-1.5">
               <UserPlus size={15} /> Add employee
             </button>
+          </div>
+        )}
+
+        {showManageCompanies && currentUser.isAdmin && (
+          <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-5 mb-6">
+            <h2 className="font-semibold text-slate-900 mb-1">Companies</h2>
+            <p className="text-xs text-slate-400 mb-4">
+              Register company names here so they're always available to pick from the Company field and filter, even before any ticket has been entered for them.
+            </p>
+            <div className="flex gap-2 max-w-sm mb-4">
+              <input
+                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                placeholder="Company name"
+                value={newCompanyName}
+                onChange={(e) => setNewCompanyName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleAddCompany(); }}
+              />
+              <button
+                onClick={handleAddCompany}
+                className="bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <Building2 size={15} /> Add
+              </button>
+            </div>
+            {suggestions.companies.length === 0 ? (
+              <p className="text-sm text-slate-400">No companies saved yet</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {[...suggestions.companies].sort((a, b) => a.localeCompare(b)).map((name) => (
+                  <span
+                    key={name}
+                    className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-full pl-3 pr-1.5 py-1 text-sm text-slate-700"
+                  >
+                    {name}
+                    <button
+                      onClick={() => handleDeleteCompany(name)}
+                      title="Remove company"
+                      className="text-slate-400 hover:text-red-600 p-0.5"
+                    >
+                      <X size={13} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -2012,8 +2092,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
             <div className="md:col-span-3">
               <label className="text-xs text-slate-500 block mb-1">Notes</label>
-              <input
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+              <textarea
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 min-h-[80px]"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value.toUpperCase() })}
                 placeholder="Optional"
@@ -2134,11 +2214,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <tbody>
                   {sortedFiltered.flatMap((t) => {
                     const customers = getCustomers(t);
+                    const isMulti = customers.length > 1;
                     return customers.map((c, i) => (
                       <tr
                         key={`${t.id}-${i}`}
                         onClick={() => openTicketDetail(t)}
-                        className={`border-t border-slate-100 hover:bg-slate-50 leading-tight cursor-pointer ${i > 0 ? "border-t-0" : ""}`}
+                        className={`border-t border-slate-100 leading-tight cursor-pointer ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-slate-50"}`}
                       >
                         <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.employee || "-"}</td>
                         <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.company || "-"}</td>
@@ -2146,7 +2227,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           {c.ticketNumber || "-"}
                         </td>
                         <td className="px-2.5 py-1 font-medium text-slate-800 whitespace-nowrap">
-                          {c.name || "-"}
+                          <span className="inline-flex items-center gap-1.5">
+                            {c.name || "-"}
+                            {isMulti && i === 0 && (
+                              <span
+                                title={`This booking has ${customers.length} customers / tickets`}
+                                className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5"
+                              >
+                                <Users size={10} /> {customers.length}
+                              </span>
+                            )}
+                          </span>
                         </td>
                         <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.from} → {t.to}</td>
                         <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.airline || "-"}</td>
