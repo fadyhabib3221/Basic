@@ -6,7 +6,7 @@ const LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAEGCAM
 import {
   Plane, Search, Trash2, Pencil, X, Check, TrendingUp, Ticket, Wallet,
   Calendar, Download, Upload, Building2, Factory, Lock, LogOut, UserPlus, Users, Eye, EyeOff,
-  ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText,
+  ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
 } from "lucide-react";
 
 const MONTHS = [
@@ -128,54 +128,54 @@ const emptyNewEmployee = {
 // standard e-ticket number identify the issuing airline. Used to link the ticket
 // number prefix with the Airline field automatically in both directions.
 const AIRLINE_CODES = [
-  { code: "001", name: "American Airlines" }, { code: "006", name: "Delta Air Lines" },
-  { code: "014", name: "Air Canada" }, { code: "016", name: "United Airlines" },
-  { code: "020", name: "Aeroflot" }, { code: "022", name: "Condor" },
-  { code: "027", name: "Alaska Airlines" }, { code: "030", name: "Vueling" },
-  { code: "044", name: "Aerolineas Argentinas" }, { code: "045", name: "LATAM Airlines" },
-  { code: "050", name: "Olympic Air" }, { code: "053", name: "Aer Lingus" },
-  { code: "055", name: "ITA Airways" }, { code: "057", name: "Air France" },
-  { code: "065", name: "Saudia" }, { code: "071", name: "Ethiopian Airlines" },
-  { code: "072", name: "Gulf Air" }, { code: "074", name: "KLM Royal Dutch Airlines" },
-  { code: "075", name: "Iberia" }, { code: "076", name: "Middle East Airlines" },
-  { code: "077", name: "EgyptAir" }, { code: "079", name: "Philippine Airlines" },
-  { code: "080", name: "LOT Polish Airlines" }, { code: "081", name: "Qantas" },
-  { code: "082", name: "Brussels Airlines" }, { code: "085", name: "Discover Airlines" },
-  { code: "086", name: "Air New Zealand" }, { code: "087", name: "TAAG Angola Airlines" },
-  { code: "098", name: "Air India" }, { code: "101", name: "Air Dolomiti" },
-  { code: "104", name: "Eurowings" }, { code: "105", name: "Finnair" },
-  { code: "108", name: "Icelandair" }, { code: "114", name: "El Al" },
-  { code: "115", name: "Air Serbia" }, { code: "117", name: "Scandinavian Airlines" },
-  { code: "124", name: "Air Algerie" }, { code: "125", name: "British Airways" },
-  { code: "126", name: "Garuda Indonesia" }, { code: "127", name: "Gol Transportes Aereos" },
-  { code: "131", name: "Japan Airlines" }, { code: "134", name: "Avianca" },
-  { code: "139", name: "Aeromexico" }, { code: "147", name: "Royal Air Maroc" },
-  { code: "157", name: "Qatar Airways" }, { code: "160", name: "Cathay Pacific" },
-  { code: "176", name: "Emirates" }, { code: "180", name: "Korean Air" },
-  { code: "205", name: "All Nippon Airways" }, { code: "217", name: "Thai Airways International" },
-  { code: "220", name: "Lufthansa" }, { code: "230", name: "Copa Airlines" },
-  { code: "232", name: "Malaysia Airlines" }, { code: "235", name: "Turkish Airlines" },
-  { code: "257", name: "Austrian Airlines" }, { code: "279", name: "JetBlue Airways" },
-  { code: "281", name: "TAROM" }, { code: "282", name: "TAP Air Portugal" },
-  { code: "297", name: "China Airlines" }, { code: "312", name: "IndiGo" },
-  { code: "324", name: "Shandong Airlines" }, { code: "328", name: "Norwegian Air Shuttle" },
-  { code: "390", name: "Aegean Airlines" }, { code: "427", name: "Air Caraibes" },
-  { code: "465", name: "Air Astana" }, { code: "479", name: "Shenzhen Airlines" },
-  { code: "512", name: "Royal Jordanian" }, { code: "514", name: "Air Arabia" },
-  { code: "605", name: "Sky Airline" }, { code: "607", name: "Etihad Airways" },
-  { code: "618", name: "Singapore Airlines" }, { code: "623", name: "Bulgaria Air" },
-  { code: "643", name: "Air Malta" }, { code: "649", name: "Air Transat" },
-  { code: "657", name: "Air Baltic" }, { code: "668", name: "Scoot" },
-  { code: "695", name: "EVA Air" }, { code: "706", name: "Kenya Airways" },
-  { code: "724", name: "Swiss International Air Lines" }, { code: "731", name: "Xiamen Airlines" },
-  { code: "738", name: "Vietnam Airlines" }, { code: "755", name: "Air Europa" },
-  { code: "774", name: "Shanghai Airlines" }, { code: "781", name: "China Eastern Airlines" },
-  { code: "784", name: "China Southern Airlines" }, { code: "795", name: "Virgin Australia" },
-  { code: "821", name: "Neos" }, { code: "831", name: "Croatia Airlines" },
-  { code: "838", name: "WestJet" }, { code: "847", name: "Riyadh Air" },
-  { code: "876", name: "Sichuan Airlines" }, { code: "880", name: "Hainan Airlines" },
-  { code: "900", name: "flyadeal" }, { code: "932", name: "Virgin Atlantic" },
-  { code: "978", name: "VietJet Air" }, { code: "999", name: "Air China" },
+  { code: "001", iata: "AA", name: "American Airlines" }, { code: "006", iata: "DL", name: "Delta Air Lines" },
+  { code: "014", iata: "AC", name: "Air Canada" }, { code: "016", iata: "UA", name: "United Airlines" },
+  { code: "020", iata: "SU", name: "Aeroflot" }, { code: "022", iata: "DE", name: "Condor" },
+  { code: "027", iata: "AS", name: "Alaska Airlines" }, { code: "030", iata: "VY", name: "Vueling" },
+  { code: "044", iata: "AR", name: "Aerolineas Argentinas" }, { code: "045", iata: "LA", name: "LATAM Airlines" },
+  { code: "050", iata: "OA", name: "Olympic Air" }, { code: "053", iata: "EI", name: "Aer Lingus" },
+  { code: "055", iata: "AZ", name: "ITA Airways" }, { code: "057", iata: "AF", name: "Air France" },
+  { code: "065", iata: "SV", name: "Saudia" }, { code: "071", iata: "ET", name: "Ethiopian Airlines" },
+  { code: "072", iata: "GF", name: "Gulf Air" }, { code: "074", iata: "KL", name: "KLM Royal Dutch Airlines" },
+  { code: "075", iata: "IB", name: "Iberia" }, { code: "076", iata: "ME", name: "Middle East Airlines" },
+  { code: "077", iata: "MS", name: "EgyptAir" }, { code: "079", iata: "PR", name: "Philippine Airlines" },
+  { code: "080", iata: "LO", name: "LOT Polish Airlines" }, { code: "081", iata: "QF", name: "Qantas" },
+  { code: "082", iata: "SN", name: "Brussels Airlines" }, { code: "085", iata: "4Y", name: "Discover Airlines" },
+  { code: "086", iata: "NZ", name: "Air New Zealand" }, { code: "087", iata: "DT", name: "TAAG Angola Airlines" },
+  { code: "098", iata: "AI", name: "Air India" }, { code: "101", iata: "EN", name: "Air Dolomiti" },
+  { code: "104", iata: "EW", name: "Eurowings" }, { code: "105", iata: "AY", name: "Finnair" },
+  { code: "108", iata: "FI", name: "Icelandair" }, { code: "114", iata: "LY", name: "El Al" },
+  { code: "115", iata: "JU", name: "Air Serbia" }, { code: "117", iata: "SK", name: "Scandinavian Airlines" },
+  { code: "124", iata: "AH", name: "Air Algerie" }, { code: "125", iata: "BA", name: "British Airways" },
+  { code: "126", iata: "GA", name: "Garuda Indonesia" }, { code: "127", iata: "G3", name: "Gol Transportes Aereos" },
+  { code: "131", iata: "JL", name: "Japan Airlines" }, { code: "134", iata: "AV", name: "Avianca" },
+  { code: "139", iata: "AM", name: "Aeromexico" }, { code: "147", iata: "AT", name: "Royal Air Maroc" },
+  { code: "157", iata: "QR", name: "Qatar Airways" }, { code: "160", iata: "CX", name: "Cathay Pacific" },
+  { code: "176", iata: "EK", name: "Emirates" }, { code: "180", iata: "KE", name: "Korean Air" },
+  { code: "205", iata: "NH", name: "All Nippon Airways" }, { code: "217", iata: "TG", name: "Thai Airways International" },
+  { code: "220", iata: "LH", name: "Lufthansa" }, { code: "230", iata: "CM", name: "Copa Airlines" },
+  { code: "232", iata: "MH", name: "Malaysia Airlines" }, { code: "235", iata: "TK", name: "Turkish Airlines" },
+  { code: "257", iata: "OS", name: "Austrian Airlines" }, { code: "279", iata: "B6", name: "JetBlue Airways" },
+  { code: "281", iata: "RO", name: "TAROM" }, { code: "282", iata: "TP", name: "TAP Air Portugal" },
+  { code: "297", iata: "CI", name: "China Airlines" }, { code: "312", iata: "6E", name: "IndiGo" },
+  { code: "324", iata: "SC", name: "Shandong Airlines" }, { code: "328", iata: "DY", name: "Norwegian Air Shuttle" },
+  { code: "390", iata: "A3", name: "Aegean Airlines" }, { code: "427", iata: "TX", name: "Air Caraibes" },
+  { code: "465", iata: "KC", name: "Air Astana" }, { code: "479", iata: "ZH", name: "Shenzhen Airlines" },
+  { code: "512", iata: "RJ", name: "Royal Jordanian" }, { code: "514", iata: "G9", name: "Air Arabia" },
+  { code: "605", iata: "H2", name: "Sky Airline" }, { code: "607", iata: "EY", name: "Etihad Airways" },
+  { code: "618", iata: "SQ", name: "Singapore Airlines" }, { code: "623", iata: "FB", name: "Bulgaria Air" },
+  { code: "643", iata: "KM", name: "Air Malta" }, { code: "649", iata: "TS", name: "Air Transat" },
+  { code: "657", iata: "BT", name: "Air Baltic" }, { code: "668", iata: "TR", name: "Scoot" },
+  { code: "695", iata: "BR", name: "EVA Air" }, { code: "706", iata: "KQ", name: "Kenya Airways" },
+  { code: "724", iata: "LX", name: "Swiss International Air Lines" }, { code: "731", iata: "MF", name: "Xiamen Airlines" },
+  { code: "738", iata: "VN", name: "Vietnam Airlines" }, { code: "755", iata: "UX", name: "Air Europa" },
+  { code: "774", iata: "FM", name: "Shanghai Airlines" }, { code: "781", iata: "MU", name: "China Eastern Airlines" },
+  { code: "784", iata: "CZ", name: "China Southern Airlines" }, { code: "795", iata: "VA", name: "Virgin Australia" },
+  { code: "821", iata: "NO", name: "Neos" }, { code: "831", iata: "OU", name: "Croatia Airlines" },
+  { code: "838", iata: "WS", name: "WestJet" }, { code: "847", iata: "RX", name: "Riyadh Air" },
+  { code: "876", iata: "3U", name: "Sichuan Airlines" }, { code: "880", iata: "HU", name: "Hainan Airlines" },
+  { code: "900", iata: "F3", name: "flyadeal" }, { code: "932", iata: "VS", name: "Virgin Atlantic" },
+  { code: "978", iata: "VJ", name: "VietJet Air" }, { code: "999", iata: "CA", name: "Air China" },
 ];
 const getAirlineCode = (name) => {
   const n = (name || "").trim().toUpperCase();
@@ -185,7 +185,29 @@ const getAirlineCode = (name) => {
 };
 const getAirlineByCode = (code) => {
   const match = AIRLINE_CODES.find((a) => a.code === code);
-  return match ? match.name.toUpperCase() : null;
+  return match ? match.iata : null;
+};
+// 2-letter IATA airline designator (e.g. "MS" for EgyptAir) — this is what gets
+// typed/selected into the Airline field and stored on the ticket.
+const getAirlineIata = (name) => {
+  const n = (name || "").trim().toUpperCase();
+  if (!n) return null;
+  const match = AIRLINE_CODES.find((a) => a.name.toUpperCase() === n);
+  return match ? match.iata : null;
+};
+// Reverse lookups from the 2-letter code: the 3-digit accounting/ticketing prefix
+// (used to auto-fill the ticket number) and the full airline name (shown as a hint).
+const getAirlineCodeByIata = (iata) => {
+  const n = (iata || "").trim().toUpperCase();
+  if (!n) return null;
+  const match = AIRLINE_CODES.find((a) => a.iata === n);
+  return match ? match.code : null;
+};
+const getAirlineNameByIata = (iata) => {
+  const n = (iata || "").trim().toUpperCase();
+  if (!n) return null;
+  const match = AIRLINE_CODES.find((a) => a.iata === n);
+  return match ? match.name : null;
 };
 
 // A reference list of major world airports (IATA code + city/country), offered as
@@ -1190,8 +1212,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleAirlineChange = (value) => {
     const airline = value.toUpperCase();
-    const code = getAirlineCode(airline);
-    // If we recognize the airline, pre-fill its 3-digit prefix into any customer's
+    const code = getAirlineCodeByIata(airline);
+    // If we recognize the airline code, pre-fill its 3-digit prefix into any customer's
     // ticket number that hasn't been typed into yet (never overwrites manual entries).
     const customers = code
       ? form.customers.map((c) => (c.ticketNumber ? c : { ...c, ticketNumber: `${code}-` }))
@@ -1794,63 +1816,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         </header>
         <div className="h-px w-full bg-gradient-to-r from-transparent via-amber-600/50 to-transparent mb-6" />
 
-        {/* Top-level section switcher */}
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <button
-            onClick={() => setActiveSection("flights")}
-            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
-              activeSection === "flights"
-                ? "bg-gradient-to-b from-teal-600 to-teal-800 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
-                : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
-            }`}
-          >
-            <Plane size={22} className="rotate-45" />
-            Flights
-          </button>
-          <button
-            onClick={() => setActiveSection("hotels")}
-            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
-              activeSection === "hotels"
-                ? "bg-gradient-to-b from-teal-600 to-teal-800 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
-                : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
-            }`}
-          >
-            <Building2 size={22} />
-            Hotels
-          </button>
-          <button
-            onClick={() => setActiveSection("cars")}
-            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
-              activeSection === "cars"
-                ? "bg-gradient-to-b from-teal-600 to-teal-800 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
-                : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
-            }`}
-          >
-            <Car size={22} />
-            Transportation
-          </button>
-          <button
-            onClick={() => setActiveSection("files")}
-            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
-              activeSection === "files"
-                ? "bg-gradient-to-b from-teal-600 to-teal-800 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
-                : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
-            }`}
-          >
-            <FileText size={22} />
-            Files
-          </button>
-        </div>
-
-        {activeSection === "flights" && (
-        <>
-        {currentUser.isAdmin && (restoreError || restoreSuccess) && (
-          <div className={`text-sm rounded-lg px-3 py-2 mb-4 ${restoreError ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
-            {restoreError || restoreSuccess}
-          </div>
-        )}
-
+        {(showManage || showManageCompanies) && (
+          <div className="mb-6">
         {showManage && currentUser.isAdmin && (
+          <div className="bg-stone-50">
+            <button onClick={() => setShowManage(false)}
+              className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
+              <ArrowLeft size={15} /> Back
+            </button>
           <div className="bg-white rounded-xl border border-stone-200 p-4 md:p-5 mb-6">
             <h2 className="font-semibold text-stone-900 mb-1">Employee accounts</h2>
             <p className="text-xs text-stone-400 mb-4">
@@ -2156,9 +2129,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <UserPlus size={15} /> Add employee
             </button>
           </div>
+          </div>
         )}
-
         {showManageCompanies && canManageCompanies && (
+          <div className="bg-stone-50">
+            <button onClick={() => setShowManageCompanies(false)}
+              className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
+              <ArrowLeft size={15} /> Back
+            </button>
           <div className="bg-white rounded-xl border border-stone-200 p-4 md:p-5 mb-6">
             <h2 className="font-semibold text-stone-900 mb-1 flex items-center gap-2">
               <Factory size={18} className="text-stone-500" /> Companies
@@ -2277,7 +2255,70 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )
             )}
           </div>
+          </div>
         )}
+          </div>
+        )}
+
+        {!showManage && !showManageCompanies && (
+        <>
+        {/* Top-level section switcher */}
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <button
+            onClick={() => setActiveSection("flights")}
+            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
+              activeSection === "flights"
+                ? "bg-gradient-to-b from-teal-600 to-teal-800 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
+                : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
+            }`}
+          >
+            <Plane size={22} className="rotate-45" />
+            Flights
+          </button>
+          <button
+            onClick={() => setActiveSection("hotels")}
+            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
+              activeSection === "hotels"
+                ? "bg-gradient-to-b from-teal-600 to-teal-800 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
+                : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
+            }`}
+          >
+            <Building2 size={22} />
+            Hotels
+          </button>
+          <button
+            onClick={() => setActiveSection("cars")}
+            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
+              activeSection === "cars"
+                ? "bg-gradient-to-b from-teal-600 to-teal-800 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
+                : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
+            }`}
+          >
+            <Car size={22} />
+            Transportation
+          </button>
+          <button
+            onClick={() => setActiveSection("files")}
+            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
+              activeSection === "files"
+                ? "bg-gradient-to-b from-teal-600 to-teal-800 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
+                : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
+            }`}
+          >
+            <FileText size={22} />
+            Files
+          </button>
+        </div>
+
+        {activeSection === "flights" && (
+        <>
+        {currentUser.isAdmin && (restoreError || restoreSuccess) && (
+          <div className={`text-sm rounded-lg px-3 py-2 mb-4 ${restoreError ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
+            {restoreError || restoreSuccess}
+          </div>
+        )}
+
+
 
         {showChangePassword && (
           <div className="bg-white rounded-xl border border-stone-200 p-4 md:p-5 mb-6 max-w-sm">
@@ -2490,12 +2531,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               />
             </div>
             <div>
-              <label className="text-xs text-stone-500 block mb-1">Airline</label>
+              <label className="text-xs text-stone-500 mb-1 flex items-center gap-1.5">
+                <span>Airline</span>
+                {getAirlineNameByIata(form.airline) && (
+                  <span className="bg-teal-50 text-teal-700 border border-teal-200 rounded px-1.5 py-0.5 text-[10px] font-semibold">
+                    {getAirlineNameByIata(form.airline)}
+                  </span>
+                )}
+              </label>
               <input
                 className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.airline}
                 onChange={(e) => handleAirlineChange(e.target.value)}
-                placeholder="EgyptAir"
+                placeholder="MS"
                 list="airline-suggestions"
               />
             </div>
@@ -2655,11 +2703,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           ))}
         </datalist>
         <datalist id="airline-suggestions">
-          {suggestions.airlines.map((name) => (
-            <option key={`u-${name}`} value={name} />
+          {suggestions.airlines.map((code) => (
+            <option key={`u-${code}`} value={code} />
           ))}
           {AIRLINE_CODES.map((a) => (
-            <option key={`a-${a.code}`} value={a.name.toUpperCase()} />
+            <option key={`a-${a.code}`} value={a.iata} label={`${a.iata} — ${a.name}`} />
           ))}
         </datalist>
         <datalist id="city-suggestions">
@@ -2726,7 +2774,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           </span>
                         </td>
                         <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.from} → {t.to}</td>
-                        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.airline || "-"}</td>
+                        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
+                          {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
+                        </td>
                         <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.date ? formatDisplayDate(t.date) : "-"}</td>
                         <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.netPrice)}</td>
                         <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
@@ -2862,6 +2912,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <p className="text-sm">Files section — nothing here yet.</p>
           </div>
         )}
+        </>
+        )}
       </div>
 
       {activeSection === "flights" && viewingTicket && (
@@ -2902,7 +2954,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Airline</p>
-                  <p className="text-sm font-medium text-stone-800">{viewingTicket.airline || "-"}</p>
+                  <p className="text-sm font-medium text-stone-800" title={getAirlineNameByIata(viewingTicket.airline) || viewingTicket.airline || ""}>
+                    {viewingTicket.airline ? (getAirlineIata(viewingTicket.airline) || viewingTicket.airline) : "-"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Ticket issue date</p>
