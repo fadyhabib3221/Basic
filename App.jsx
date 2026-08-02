@@ -7,6 +7,7 @@ import {
   Plane, Search, Trash2, Pencil, X, Check, TrendingUp, Ticket, Wallet,
   Calendar, Download, Upload, Building2, Factory, Lock, LogOut, UserPlus, Users, Eye, EyeOff,
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
+  MapPin, Compass, Luggage, Anchor, Sparkles,
 } from "lucide-react";
 
 const MONTHS = [
@@ -181,7 +182,7 @@ const PermissionsCell = ({ emp, onOpen }) => {
     <button
       type="button"
       onClick={onOpen}
-      className="border border-stone-300 rounded-md px-2 py-1.5 text-xs text-stone-700 hover:bg-teal-50 hover:border-teal-300 flex items-center gap-1.5 max-w-[220px]"
+      className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs text-stone-700 hover:bg-teal-50 hover:border-teal-300 flex items-center gap-1.5 max-w-[220px]"
     >
       <span className="truncate">{summary}</span>
       <Pencil size={11} className="text-stone-400 shrink-0" />
@@ -199,7 +200,7 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission }) 
   return (
     <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
-        className="bg-white rounded-xl border border-stone-200 p-5 w-full max-w-sm max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-2xl border border-stone-200 p-5 w-full max-w-sm max-h-[90vh] overflow-y-auto"
         onClick={(ev) => ev.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-1">
@@ -217,7 +218,7 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission }) 
               key={r.value}
               type="button"
               onClick={() => onSetRole(r.value)}
-              className={`text-xs font-semibold rounded-lg px-2 py-2 border transition-colors ${
+              className={`text-xs font-semibold rounded-xl px-2 py-2 border transition-colors ${
                 (emp.role || "employee") === r.value
                   ? "bg-teal-800 text-white border-teal-800"
                   : "bg-white text-stone-600 border-stone-300 hover:bg-stone-50"
@@ -229,7 +230,7 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission }) 
         </div>
 
         <p className="text-xs text-stone-500 mb-1">Individual permissions</p>
-        <div className="border border-stone-200 rounded-lg px-3 divide-y divide-stone-100">
+        <div className="border border-stone-200 rounded-xl px-3 divide-y divide-stone-100">
           <ToggleSwitch
             label="View all tickets"
             description="See every employee's tickets, not just their own"
@@ -274,7 +275,7 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission }) 
 
         <button
           onClick={onClose}
-          className="mt-4 w-full bg-gradient-to-b from-teal-600 to-teal-800 hover:from-teal-800 hover:to-teal-900 text-white text-sm font-semibold rounded-lg px-4 py-2 shadow-sm shadow-teal-800/30 transition-colors"
+          className="mt-4 w-full bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 transition-colors"
         >
           Done
         </button>
@@ -1724,8 +1725,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // ---------- Render: loading ----------
   if (loading || setupComplete === null) {
     return (
-      <div className="w-full min-h-screen bg-stone-50 flex items-center justify-center">
-        <p className="text-stone-400 text-sm">Loading...</p>
+      <div className="w-full min-h-screen bg-gradient-to-br from-teal-50 via-stone-50 to-white flex items-center justify-center">
+        <p className="text-teal-800/60 text-sm flex items-center gap-2">
+          <Plane size={16} className="rotate-45 animate-pulse" /> Loading...
+        </p>
       </div>
     );
   }
@@ -1733,35 +1736,37 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // ---------- Render: first-run setup (only ever shown once, before any account exists) ----------
   if (employees && employees.length === 0 && !setupComplete) {
     return (
-      <div className="w-full min-h-screen bg-stone-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl border border-stone-200 p-6 w-full max-w-sm">
+      <div className="w-full min-h-screen bg-gradient-to-br from-teal-50 via-stone-50 to-white flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 w-full max-w-sm shadow-xl shadow-teal-900/5">
           <div className="flex items-center gap-2 mb-1">
-            <Lock size={18} className="text-teal-800" />
+            <div className="bg-teal-800/10 text-teal-800 rounded-xl p-1.5">
+              <Lock size={16} />
+            </div>
             <h1 className="font-bold text-stone-900">Create the admin account</h1>
           </div>
           <p className="text-xs text-stone-500 mb-4">
             No employees exist yet. Create the first account — it will be the main account, and only it will be able to add or remove other employees.
           </p>
-          {loginError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{loginError}</div>}
+          {loginError && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{loginError}</div>}
           <div className="space-y-3">
             <div>
               <label className="text-xs text-stone-500 block mb-1">Full name</label>
-              <input className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              <input className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={setupName} onChange={(e) => setSetupName(e.target.value)} placeholder="e.g. Sara Ahmed" />
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Username</label>
-              <input className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              <input className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={setupUsername} onChange={(e) => setSetupUsername(e.target.value)} placeholder="sara" />
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Password</label>
-              <input type="password" className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              <input type="password" className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={setupPassword} onChange={(e) => setSetupPassword(e.target.value)} placeholder="••••••" />
             </div>
           </div>
           <button onClick={handleCreateFirstAdmin}
-            className="w-full mt-4 bg-gradient-to-b from-teal-600 to-teal-800 hover:from-teal-800 hover:to-teal-900 text-white text-sm font-semibold rounded-lg px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors">
+            className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors">
             Create account and continue
           </button>
           <p className="text-xs text-stone-400 mt-4">
@@ -1779,8 +1784,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // anyone create a brand-new admin account without any credentials.
   if (employees && employees.length === 0 && setupComplete) {
     return (
-      <div className="w-full min-h-screen bg-stone-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl border border-stone-200 p-6 w-full max-w-sm text-center">
+      <div className="w-full min-h-screen bg-gradient-to-br from-teal-50 via-stone-50 to-white flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 w-full max-w-sm text-center shadow-xl shadow-teal-900/5">
           <Lock size={22} className="text-stone-400 mx-auto mb-2" />
           <h1 className="font-bold text-stone-900 mb-1">No accounts available</h1>
           <p className="text-xs text-stone-500">
@@ -1794,18 +1799,23 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // ---------- Render: login screen ----------
   if (!currentUser) {
     return (
-      <div className="w-full min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-teal-800 via-teal-900 to-teal-900">
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&display=swap');`}</style>
-        {/* Decorative sky backdrop */}
+      <div className="w-full min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-teal-900 via-teal-800 to-[#0d3b3e]" style={{ fontFamily: "'Inter', sans-serif" }}>
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');`}</style>
+        {/* Decorative sky + route backdrop */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-24 -left-24 w-72 h-72 bg-teal-400/30 rounded-full blur-3xl" />
-          <div className="absolute -bottom-24 -right-16 w-80 h-80 bg-amber-600/20 rounded-full blur-3xl" />
-          <Globe2 size={260} className="absolute -bottom-16 -right-16 text-white/5" />
+          <div
+            className="absolute inset-0 opacity-[0.15]"
+            style={{ backgroundImage: "radial-gradient(circle, #ffffff 1px, transparent 1px)", backgroundSize: "26px 26px" }}
+          />
+          <div className="absolute -top-24 -left-24 w-72 h-72 bg-teal-400/25 rounded-full blur-3xl" />
+          <div className="absolute -bottom-24 -right-16 w-80 h-80 bg-amber-500/20 rounded-full blur-3xl" />
+          <Compass size={220} className="absolute -bottom-14 -right-14 text-white/[0.04] rotate-12" />
+          <Anchor size={120} className="absolute top-[6%] -left-8 text-white/[0.05] -rotate-12" />
           <Cloud size={70} className="absolute top-[12%] left-[10%] text-white/20" />
           <Cloud size={46} className="absolute top-[22%] right-[14%] text-white/15" />
           <Cloud size={54} className="absolute bottom-[18%] left-[16%] text-white/10" />
           {/* Dashed flight path with a plane at the tip */}
-          <svg className="absolute top-[8%] left-[8%] w-[84%] h-40 opacity-50" viewBox="0 0 600 140" fill="none">
+          <svg className="absolute top-[8%] left-[8%] w-[84%] h-40 opacity-60" viewBox="0 0 600 140" fill="none">
             <path d="M10 120 C 160 20, 380 20, 560 60" stroke="#C9973B" strokeWidth="2" strokeDasharray="6 8" strokeLinecap="round" />
             <circle cx="10" cy="120" r="4" fill="#C9973B" />
           </svg>
@@ -1813,27 +1823,52 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         </div>
 
         <div className="relative w-full max-w-sm">
-          <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
-            {/* Branded header */}
-            <div className="relative bg-gradient-to-r from-teal-800 to-teal-900 px-6 pt-9 pb-12 text-center overflow-hidden">
+          {/* Eyebrow route strip */}
+          <div className="flex items-center justify-center gap-2 mb-4 text-amber-300/90 text-[11px] font-semibold tracking-[0.2em] uppercase">
+            <Sparkles size={12} />
+            Perla Di Mare Travel
+            <Sparkles size={12} />
+          </div>
+
+          {/* Boarding-pass card */}
+          <div className="relative bg-white rounded-3xl shadow-2xl shadow-black/30 overflow-hidden">
+            {/* Branded stub */}
+            <div className="relative bg-gradient-to-r from-teal-800 to-teal-900 px-6 pt-9 pb-8 text-center overflow-hidden">
               <Plane size={90} className="absolute -bottom-4 -left-6 text-white/10 rotate-12" />
+              <MapPin size={54} className="absolute top-3 right-3 text-white/10" />
               <div className="relative w-full mx-auto rounded-2xl bg-white shadow-lg flex items-center justify-center mb-3 p-4">
                 <img src={LOGO_DATA_URL} alt="Perla Di Mare" className="w-full h-auto object-contain" />
               </div>
               <h1 className="relative text-white font-semibold text-lg tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>Flight Ticket Manager</h1>
               <p className="relative text-teal-200/70 text-[11px] mt-0.5">By Fady Habib</p>
               <p className="relative text-teal-50/90 text-xs mt-1">Sign in to manage tickets, sales &amp; bookings</p>
+
+              {/* Route code, like a boarding pass stub */}
+              <div className="relative mt-4 flex items-center justify-center gap-3 text-white/80">
+                <span className="text-sm font-bold tracking-widest">CAI</span>
+                <span className="flex-1 max-w-[70px] h-px bg-white/30 relative">
+                  <Plane size={12} className="absolute -top-1.5 left-1/2 -translate-x-1/2 rotate-90 text-amber-300" />
+                </span>
+                <span className="text-sm font-bold tracking-widest">ANY</span>
+              </div>
             </div>
 
-            {/* Form card, slightly overlapping the header for a layered feel */}
-            <div className="relative -mt-6 bg-white rounded-t-3xl px-6 pt-6 pb-6">
-              {loginError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{loginError}</div>}
+            {/* Perforated tear line between stub and form */}
+            <div className="relative h-0">
+              <div className="absolute -left-2.5 -top-2.5 w-5 h-5 rounded-full bg-teal-900" />
+              <div className="absolute -right-2.5 -top-2.5 w-5 h-5 rounded-full bg-teal-900" />
+              <div className="absolute left-4 right-4 top-0 border-t-2 border-dashed border-stone-200" />
+            </div>
+
+            {/* Form section */}
+            <div className="relative bg-white px-6 pt-7 pb-6">
+              {loginError && <div className="bg-red-50 text-red-700 text-sm rounded-2xl px-3 py-2 mb-3">{loginError}</div>}
               <div className="space-y-3">
                 <div>
                   <label className="text-xs text-stone-500 block mb-1">Username</label>
                   <div className="relative">
                     <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                    <input className="w-full border border-stone-300 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-800 focus:border-teal-800"
+                    <input className="w-full border border-stone-300 rounded-2xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-800 focus:border-teal-800"
                       value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && handleLogin()} placeholder="Username" autoFocus />
                   </div>
@@ -1843,7 +1878,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <div className="relative">
                     <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
                     <input type={showPassword ? "text" : "password"}
-                      className="w-full border border-stone-300 rounded-lg pl-9 pr-9 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-800 focus:border-teal-800"
+                      className="w-full border border-stone-300 rounded-2xl pl-9 pr-9 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-800 focus:border-teal-800"
                       value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && handleLogin()} placeholder="Password" />
                     <button type="button" onClick={() => setShowPassword(!showPassword)}
@@ -1854,13 +1889,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
               </div>
               <button onClick={handleLogin}
-                className="group w-full mt-5 bg-gradient-to-r from-teal-800 to-teal-900 hover:from-teal-700 hover:to-teal-800 text-white text-sm font-semibold rounded-lg px-4 py-2.5 flex items-center justify-center gap-2 shadow-lg shadow-teal-800/30 transition-all">
+                className="group w-full mt-5 bg-gradient-to-r from-teal-800 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-2xl px-4 py-2.5 flex items-center justify-center gap-2 shadow-lg shadow-teal-800/30 transition-all">
                 Sign in
                 <Plane size={15} className="rotate-45 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
               </button>
               <p className="text-xs text-stone-400 mt-4 text-center flex items-center justify-center gap-1">
                 <ShieldCheck size={13} /> Ask your admin if you don't have an account yet.
               </p>
+
+              {/* Barcode flourish, echoing a real boarding pass stub */}
+              <div className="flex items-end gap-[2px] justify-center mt-5 h-5 opacity-25">
+                {[3,1,2,4,1,3,2,1,4,2,3,1,2,4,1,3,2,4,1,2,3,1,4,2,1,3,2,4,1,2].map((h, i) => (
+                  <span key={i} className="bg-stone-900 w-[2px]" style={{ height: `${h * 4}px` }} />
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -1870,167 +1912,182 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // ---------- Render: main app ----------
   return (
-    <div dir="ltr" className="w-full min-h-screen bg-stone-50 text-stone-800">
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&display=swap');`}</style>
+    <div
+      dir="ltr"
+      className="w-full min-h-screen bg-gradient-to-b from-stone-50 via-white to-teal-50/50 text-stone-800"
+      style={{ fontFamily: "'Inter', sans-serif" }}
+    >
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');`}</style>
       <div className="max-w-5xl mx-auto p-4 md:p-6">
-        <header className="flex items-center justify-between mb-6 flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div>
-              <h1 className="text-xl md:text-2xl font-semibold text-stone-900" style={{ fontFamily: "'Fraunces', serif" }}>
-                Flight Ticket Manager <span className="text-stone-400 font-medium text-sm md:text-base font-sans">By Fady Habib</span>
-              </h1>
-              <p className="text-stone-500 text-sm flex items-center gap-1.5 flex-wrap">
-                Signed in as {currentUser.name}
-                {currentUser.isAdmin && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">
-                    <ShieldCheck size={11} /> Main account
-                  </span>
-                )}
-                {!currentUser.isAdmin && currentEmployeeRecord && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-stone-600 bg-stone-100 border border-stone-200 rounded-full px-2 py-0.5">
-                    {roleLabel(currentEmployeeRecord.role)}
-                  </span>
-                )}
-                {!currentUser.isAdmin && !canViewAllTickets && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-stone-500 bg-stone-100 border border-stone-200 rounded-full px-2 py-0.5">
-                    Your own tickets only
-                  </span>
-                )}
-                {isAccountingUser && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-                    Accounting — view only
-                  </span>
-                )}
-                {currentUser.isAdmin && (
-                  <span className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowOnlineList(!showOnlineList)}
-                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 hover:bg-emerald-100"
-                    >
-                      <Wifi size={11} />
-                      {onlineUsernames.length} online now
-                    </button>
-                    {showOnlineList && (
-                      <div className="absolute z-20 top-full mt-1 left-0 w-52 bg-white border border-stone-300 rounded-lg shadow-lg p-2">
-                        {onlineUsernames.length === 0 ? (
-                          <p className="text-xs text-stone-400 px-1 py-1">No one online right now</p>
-                        ) : (
-                          <ul className="space-y-1 max-h-48 overflow-y-auto">
-                            {onlineUsernames.map((u) => {
-                              const emp = (employees || []).find((e) => e.username === u);
-                              return (
-                                <li key={u} className="flex items-center gap-1.5 text-xs text-stone-700 px-1 py-0.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                                  {emp ? emp.name : u}
-                                  {emp && emp.isAdmin && (
-                                    <span className="text-[9px] text-teal-700 font-semibold">(main)</span>
-                                  )}
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        )}
-                      </div>
-                    )}
-                  </span>
-                )}
-              </p>
+        {/* Boarding-pass style banner */}
+        <div className="relative rounded-2xl bg-gradient-to-r from-teal-800 via-teal-800 to-teal-900 shadow-lg shadow-teal-900/20 overflow-hidden mb-0">
+          <Plane size={140} className="pointer-events-none absolute -bottom-8 -right-6 text-white/[0.06] rotate-45" />
+          <Compass size={90} className="pointer-events-none absolute -top-6 left-[38%] text-white/[0.05]" />
+          <Luggage size={70} className="pointer-events-none absolute -bottom-4 left-[18%] text-white/[0.05] hidden md:block" />
+          <header className="relative flex items-center justify-between flex-wrap gap-3 px-4 py-4 md:px-6">
+            <div className="flex items-center gap-3">
+              <div className="bg-white rounded-2xl p-2.5 shadow-sm shrink-0 hidden sm:block">
+                <img src={LOGO_DATA_URL} alt="Perla Di Mare" className="w-[120px] h-auto md:w-[150px] object-contain" />
+              </div>
+              <div>
+                <h1 className="text-lg md:text-2xl font-semibold text-white" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Flight Ticket Manager <span className="text-teal-200/60 font-medium text-xs md:text-base" style={{ fontFamily: "'Inter', sans-serif" }}>By Fady Habib</span>
+                </h1>
+                <p className="text-teal-100/80 text-sm flex items-center gap-1.5 flex-wrap mt-0.5">
+                  Signed in as {currentUser.name}
+                  {currentUser.isAdmin && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-900 bg-amber-300 border border-amber-400/50 rounded-full px-2 py-0.5">
+                      <ShieldCheck size={11} /> Main account
+                    </span>
+                  )}
+                  {!currentUser.isAdmin && currentEmployeeRecord && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-white bg-white/10 border border-white/20 rounded-full px-2 py-0.5">
+                      {roleLabel(currentEmployeeRecord.role)}
+                    </span>
+                  )}
+                  {!currentUser.isAdmin && !canViewAllTickets && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-100 bg-white/10 border border-white/20 rounded-full px-2 py-0.5">
+                      Your own tickets only
+                    </span>
+                  )}
+                  {isAccountingUser && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-100 bg-amber-500/20 border border-amber-300/30 rounded-full px-2 py-0.5">
+                      Accounting — view only
+                    </span>
+                  )}
+                  {currentUser.isAdmin && (
+                    <span className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowOnlineList(!showOnlineList)}
+                        className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-50 bg-emerald-500/20 border border-emerald-300/30 rounded-full px-2 py-0.5 hover:bg-emerald-500/30"
+                      >
+                        <Wifi size={11} />
+                        {onlineUsernames.length} online now
+                      </button>
+                      {showOnlineList && (
+                        <div className="absolute z-20 top-full mt-1 left-0 w-52 bg-white border border-stone-300 rounded-2xl shadow-lg p-2">
+                          {onlineUsernames.length === 0 ? (
+                            <p className="text-xs text-stone-400 px-1 py-1">No one online right now</p>
+                          ) : (
+                            <ul className="space-y-1 max-h-48 overflow-y-auto">
+                              {onlineUsernames.map((u) => {
+                                const emp = (employees || []).find((e) => e.username === u);
+                                return (
+                                  <li key={u} className="flex items-center gap-1.5 text-xs text-stone-700 px-1 py-0.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                    {emp ? emp.name : u}
+                                    {emp && emp.isAdmin && (
+                                      <span className="text-[9px] text-teal-700 font-semibold">(main)</span>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </span>
+                  )}
+                </p>
+              </div>
             </div>
-            <div className="bg-white border border-stone-200 rounded-xl p-3 shadow-sm shrink-0">
-              <img src={LOGO_DATA_URL} alt="Perla Di Mare" className="w-[220px] h-auto md:w-[300px] md:h-auto object-contain" />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {currentUser.isAdmin && (
-              <button onClick={handleBackup}
-                className="border border-stone-300 text-stone-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5">
-                <Download size={15} /> Backup
-              </button>
-            )}
-            {currentUser.isAdmin && (
-              <button onClick={triggerRestore}
-                className="border border-stone-300 text-stone-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5">
-                <Upload size={15} /> Restore
-              </button>
-            )}
-            {currentUser.isAdmin && (
-              <input
-                type="file"
-                accept="application/json"
-                ref={fileInputRef}
-                onChange={handleRestoreFile}
-                className="hidden"
-              />
-            )}
-            {currentUser.isAdmin && (
-              <button onClick={() => setShowManage(!showManage)}
-                className="border border-stone-300 text-stone-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5">
-                <Users size={15} /> Manage employees
-              </button>
-            )}
-            {canManageCompanies && (
-              <button onClick={() => setShowManageCompanies(!showManageCompanies)}
-                className="border border-stone-300 text-stone-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5">
-                <Factory size={15} /> Manage companies
-              </button>
-            )}
-            <button
-              onClick={() => {
-                setShowChangePassword(!showChangePassword);
-                setPasswordError("");
-                setPasswordSuccess("");
-                setCurrentPasswordInput("");
-                setNewPasswordInput("");
-                setConfirmPasswordInput("");
-              }}
-              className="border border-stone-300 text-stone-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5">
-              <Lock size={15} /> Change password
-            </button>
-            <button onClick={handleLogout}
-              className="border border-stone-300 text-stone-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5">
-              <LogOut size={15} /> Sign out
-            </button>
-            {onChangeServer && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {currentUser.isAdmin && (
+                <button onClick={handleBackup}
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
+                  <Download size={15} /> Backup
+                </button>
+              )}
+              {currentUser.isAdmin && (
+                <button onClick={triggerRestore}
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
+                  <Upload size={15} /> Restore
+                </button>
+              )}
+              {currentUser.isAdmin && (
+                <input
+                  type="file"
+                  accept="application/json"
+                  ref={fileInputRef}
+                  onChange={handleRestoreFile}
+                  className="hidden"
+                />
+              )}
+              {currentUser.isAdmin && (
+                <button onClick={() => setShowManage(!showManage)}
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
+                  <Users size={15} /> Manage employees
+                </button>
+              )}
+              {canManageCompanies && (
+                <button onClick={() => setShowManageCompanies(!showManageCompanies)}
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
+                  <Factory size={15} /> Manage companies
+                </button>
+              )}
               <button
                 onClick={() => {
-                  requestConfirm(
-                    `Disconnect from the current server${currentServerUrl ? ` (${currentServerUrl})` : ""} and connect to a different one?`,
-                    () => {
-                      setConfirmDialog(null);
-                      onChangeServer();
-                    }
-                  );
+                  setShowChangePassword(!showChangePassword);
+                  setPasswordError("");
+                  setPasswordSuccess("");
+                  setCurrentPasswordInput("");
+                  setNewPasswordInput("");
+                  setConfirmPasswordInput("");
                 }}
-                title="Change data server"
-                className="border border-stone-300 text-stone-500 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5"
-              >
-                <Wifi size={15} /> Server
+                className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
+                <Lock size={15} /> Change password
               </button>
-            )}
-          </div>
-        </header>
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-amber-600/50 to-transparent mb-6" />
+              <button onClick={handleLogout}
+                className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
+                <LogOut size={15} /> Sign out
+              </button>
+              {onChangeServer && (
+                <button
+                  onClick={() => {
+                    requestConfirm(
+                      `Disconnect from the current server${currentServerUrl ? ` (${currentServerUrl})` : ""} and connect to a different one?`,
+                      () => {
+                        setConfirmDialog(null);
+                        onChangeServer();
+                      }
+                    );
+                  }}
+                  title="Change data server"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-teal-100 text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors"
+                >
+                  <Wifi size={15} /> Server
+                </button>
+              )}
+            </div>
+          </header>
+        </div>
+        {/* Perforated tear line, like separating a boarding-pass stub from the rest */}
+        <div className="relative h-6 mb-4">
+          <div className="absolute -left-2.5 top-0 w-5 h-5 rounded-full bg-stone-50" />
+          <div className="absolute -right-2.5 top-0 w-5 h-5 rounded-full bg-stone-50" />
+          <div className="absolute left-4 right-4 top-2.5 border-t-2 border-dashed border-teal-800/20" />
+        </div>
 
         {(showManage || showManageCompanies) && (
           <div className="mb-6">
         {showManage && currentUser.isAdmin && (
           <div className="bg-stone-50">
             <button onClick={() => setShowManage(false)}
-              className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
+              className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
               <ArrowLeft size={15} /> Back
             </button>
-          <div className="bg-white rounded-xl border border-stone-200 p-4 md:p-5 mb-6">
+          <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
             <h2 className="font-semibold text-stone-900 mb-1">Employee accounts</h2>
             <p className="text-xs text-stone-400 mb-4">
               As the main account, you can view and change every employee's password, edit their name or username, add or remove accounts, assign a grade (Manager, Supervisor, Employee, Accountant), and grant or remove main-account access. A grade fills in a starting set of permissions, but every permission — view all tickets, add tickets, edit tickets, delete tickets, accounting/notes-only mode, and manage companies — is an individual on/off switch you can set by hand for each employee, click the Permissions button on their row to open it. This is a basic access gate, not a secure authentication system — anyone with technical access to the app's stored data can read these passwords. Avoid reusing important passwords here.
             </p>
-            {manageError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{manageError}</div>}
+            {manageError && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{manageError}</div>}
             <p className="text-xs text-stone-500 mb-3 flex items-center gap-1.5">
               <Wifi size={13} className="text-emerald-600" />
               {onlineUsernames.length} of {(employees || []).length} employees connected right now
             </p>
-            <div className="border border-stone-200 rounded-lg overflow-hidden mb-4">
+            <div className="border border-stone-200 rounded-xl overflow-hidden mb-4">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-stone-50 text-stone-500 text-xs">
@@ -2057,14 +2114,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           </td>
                           <td className="px-3 py-2">
                             <input
-                              className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                              className="w-full border border-stone-300 rounded-xl px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                               value={editDraft.name}
                               onChange={(ev) => setEditDraft({ ...editDraft, name: ev.target.value })}
                             />
                           </td>
                           <td className="px-3 py-2">
                             <input
-                              className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                              className="w-full border border-stone-300 rounded-xl px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                               value={editDraft.username}
                               onChange={(ev) => setEditDraft({ ...editDraft, username: ev.target.value })}
                             />
@@ -2073,7 +2130,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <div className="relative">
                               <input
                                 type={editShowPassword ? "text" : "password"}
-                                className="w-full border border-stone-300 rounded-lg pl-2 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                                className="w-full border border-stone-300 rounded-xl pl-2 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                                 value={editDraft.password}
                                 onChange={(ev) => setEditDraft({ ...editDraft, password: ev.target.value })}
                               />
@@ -2095,7 +2152,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <select
                                 value={e.role || "employee"}
                                 onChange={(ev) => handleRoleChange(e.username, ev.target.value)}
-                                className="border border-stone-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                                className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
                               >
                                 {EMPLOYEE_ROLES.map((r) => (
                                   <option key={r.value} value={r.value}>{r.label}</option>
@@ -2152,7 +2209,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <select
                               value={e.role || "employee"}
                               onChange={(ev) => handleRoleChange(e.username, ev.target.value)}
-                              className="border border-stone-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                              className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
                             >
                               {EMPLOYEE_ROLES.map((r) => (
                                 <option key={r.value} value={r.value}>{r.label}</option>
@@ -2173,7 +2230,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <button
                                 onClick={() => handleDemoteAdmin(e.username)}
                                 title="Remove main-account access"
-                                className="text-stone-400 hover:text-amber-600 text-[11px] font-semibold border border-stone-200 rounded-md px-1.5 py-1"
+                                className="text-stone-400 hover:text-amber-600 text-[11px] font-semibold border border-stone-200 rounded-lg px-1.5 py-1"
                               >
                                 Remove main
                               </button>
@@ -2181,7 +2238,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <button
                                 onClick={() => handlePromoteToAdmin(e.username)}
                                 title="Make this a main account"
-                                className="text-stone-400 hover:text-teal-800 text-[11px] font-semibold border border-stone-200 rounded-md px-1.5 py-1 flex items-center gap-1"
+                                className="text-stone-400 hover:text-teal-800 text-[11px] font-semibold border border-stone-200 rounded-lg px-1.5 py-1 flex items-center gap-1"
                               >
                                 <ShieldCheck size={12} /> Make main
                               </button>
@@ -2203,13 +2260,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </table>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <input className="border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              <input className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 placeholder="Full name" value={newEmployee.name}
                 onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
-              <input className="border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              <input className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 placeholder="Username" value={newEmployee.username}
                 onChange={(e) => setNewEmployee({ ...newEmployee, username: e.target.value })} />
-              <input type="password" className="border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              <input type="password" className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 placeholder="Password" value={newEmployee.password}
                 onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
             </div>
@@ -2226,7 +2283,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     onClick={() =>
                       setNewEmployee({ ...newEmployee, role: r.value, ...ROLE_PRESETS[r.value] })
                     }
-                    className={`text-xs font-semibold rounded-lg px-2 py-2 border transition-colors ${
+                    className={`text-xs font-semibold rounded-xl px-2 py-2 border transition-colors ${
                       newEmployee.role === r.value
                         ? "bg-teal-800 text-white border-teal-800"
                         : "bg-white text-stone-600 border-stone-300 hover:bg-stone-50"
@@ -2244,7 +2301,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <button
                 type="button"
                 onClick={() => setShowNewEmployeePerms(!showNewEmployeePerms)}
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center justify-between gap-2"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center justify-between gap-2"
               >
                 <span className="font-medium">Permissions</span>
                 <span className="text-xs text-stone-500 truncate">
@@ -2262,7 +2319,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </button>
 
               {showNewEmployeePerms && (
-                <div className="absolute z-10 mt-1 w-full bg-white border border-stone-300 rounded-lg shadow-lg p-3 divide-y divide-stone-100">
+                <div className="absolute z-10 mt-1 w-full bg-white border border-stone-300 rounded-xl shadow-lg p-3 divide-y divide-stone-100">
                   <ToggleSwitch
                     label="View all tickets"
                     description="See every employee's tickets, not just their own"
@@ -2308,7 +2365,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
 
             <button onClick={handleAddEmployee}
-              className="mt-3 bg-gradient-to-b from-teal-600 to-teal-800 hover:from-teal-800 hover:to-teal-900 text-white text-sm font-semibold rounded-lg px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors flex items-center gap-1.5">
+              className="mt-3 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors flex items-center gap-1.5">
               <UserPlus size={15} /> Add employee
             </button>
           </div>
@@ -2317,39 +2374,39 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         {showManageCompanies && canManageCompanies && (
           <div className="bg-stone-50">
             <button onClick={() => setShowManageCompanies(false)}
-              className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
+              className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
               <ArrowLeft size={15} /> Back
             </button>
-          <div className="bg-white rounded-xl border border-stone-200 p-4 md:p-5 mb-6">
+          <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
             <h2 className="font-semibold text-stone-900 mb-1 flex items-center gap-2">
               <Factory size={18} className="text-stone-500" /> Companies
             </h2>
             <p className="text-xs text-stone-400 mb-4">
               Register each company's details here so they're always available to pick from the Company field and filter, even before any ticket has been entered for them.
             </p>
-            {companyError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{companyError}</div>}
+            {companyError && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{companyError}</div>}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl mb-3">
               <input
-                className="border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 placeholder="Company name"
                 value={newCompanyDraft.name}
                 onChange={(e) => setNewCompanyDraft({ ...newCompanyDraft, name: e.target.value })}
               />
               <input
-                className="border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 placeholder="Tax number"
                 value={newCompanyDraft.taxNumber}
                 onChange={(e) => setNewCompanyDraft({ ...newCompanyDraft, taxNumber: e.target.value })}
               />
               <input
-                className="border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 placeholder="Commercial registration number"
                 value={newCompanyDraft.commercialReg}
                 onChange={(e) => setNewCompanyDraft({ ...newCompanyDraft, commercialReg: e.target.value })}
               />
               <input
-                className="border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 placeholder="Phone numbers (comma separated)"
                 value={newCompanyDraft.phones}
                 onChange={(e) => setNewCompanyDraft({ ...newCompanyDraft, phones: e.target.value })}
@@ -2358,7 +2415,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="flex gap-2 mb-5">
               <button
                 onClick={handleAddCompany}
-                className="bg-gradient-to-b from-teal-600 to-teal-800 hover:from-teal-800 hover:to-teal-900 text-white text-sm font-semibold rounded-lg px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                className="bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors flex items-center gap-1.5 whitespace-nowrap"
               >
                 {editingCompanyName ? <Check size={15} /> : <Factory size={15} />}
                 {editingCompanyName ? "Save changes" : "Add company"}
@@ -2366,7 +2423,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               {editingCompanyName && (
                 <button
                   onClick={cancelEditCompany}
-                  className="border border-stone-300 text-stone-600 text-sm rounded-lg px-4 py-2 flex items-center gap-1.5"
+                  className="border border-stone-300 text-stone-600 text-sm rounded-xl px-4 py-2 flex items-center gap-1.5"
                 >
                   <X size={15} /> Cancel
                 </button>
@@ -2379,7 +2436,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </p>
               <button
                 onClick={() => setShowCompaniesList(!showCompaniesList)}
-                className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-lg px-3 py-1.5 flex items-center gap-1.5"
+                className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
               >
                 <List size={14} /> {showCompaniesList ? "Hide companies list" : "View all companies"}
               </button>
@@ -2389,7 +2446,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               suggestions.companies.length === 0 ? (
                 <p className="text-sm text-stone-400">No companies saved yet</p>
               ) : (
-                <div className="border border-stone-200 rounded-lg overflow-hidden">
+                <div className="border border-stone-200 rounded-xl overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
@@ -2449,9 +2506,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <div className="flex items-center justify-center gap-3 mb-6">
           <button
             onClick={() => setActiveSection("flights")}
-            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
+            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "flights"
-                ? "bg-gradient-to-b from-teal-600 to-teal-800 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
+                ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
             }`}
           >
@@ -2460,9 +2517,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </button>
           <button
             onClick={() => setActiveSection("hotels")}
-            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
+            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "hotels"
-                ? "bg-gradient-to-b from-teal-600 to-teal-800 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
+                ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
             }`}
           >
@@ -2471,9 +2528,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </button>
           <button
             onClick={() => setActiveSection("cars")}
-            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
+            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "cars"
-                ? "bg-gradient-to-b from-teal-600 to-teal-800 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
+                ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
             }`}
           >
@@ -2482,9 +2539,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </button>
           <button
             onClick={() => setActiveSection("files")}
-            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-xl border text-xs font-semibold transition-colors ${
+            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "files"
-                ? "bg-gradient-to-b from-teal-600 to-teal-800 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
+                ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
             }`}
           >
@@ -2496,7 +2553,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         {activeSection === "flights" && (
         <>
         {currentUser.isAdmin && (restoreError || restoreSuccess) && (
-          <div className={`text-sm rounded-lg px-3 py-2 mb-4 ${restoreError ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
+          <div className={`text-sm rounded-xl px-3 py-2 mb-4 ${restoreError ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
             {restoreError || restoreSuccess}
           </div>
         )}
@@ -2504,37 +2561,37 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
 
         {showChangePassword && (
-          <div className="bg-white rounded-xl border border-stone-200 p-4 md:p-5 mb-6 max-w-sm">
+          <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6 max-w-sm">
             <h2 className="font-semibold text-stone-900 mb-1 flex items-center gap-2">
               <Lock size={16} className="text-teal-800" /> Change your password
             </h2>
             <p className="text-xs text-stone-400 mb-4">
               Signed in as {currentUser.name} ({currentUser.username})
             </p>
-            {passwordError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{passwordError}</div>}
-            {passwordSuccess && <div className="bg-emerald-50 text-emerald-700 text-sm rounded-lg px-3 py-2 mb-3">{passwordSuccess}</div>}
+            {passwordError && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{passwordError}</div>}
+            {passwordSuccess && <div className="bg-emerald-50 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">{passwordSuccess}</div>}
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Current password</label>
                 <input type="password"
-                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                   value={currentPasswordInput} onChange={(e) => setCurrentPasswordInput(e.target.value)} />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">New password</label>
                 <input type="password"
-                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                   value={newPasswordInput} onChange={(e) => setNewPasswordInput(e.target.value)} />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Confirm new password</label>
                 <input type="password"
-                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                   value={confirmPasswordInput} onChange={(e) => setConfirmPasswordInput(e.target.value)} />
               </div>
             </div>
             <button onClick={handleChangePassword}
-              className="w-full mt-4 bg-gradient-to-b from-teal-600 to-teal-800 hover:from-teal-800 hover:to-teal-900 text-white text-sm font-semibold rounded-lg px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors">
+              className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors">
               Update password
             </button>
           </div>
@@ -2554,28 +2611,28 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </p>
           <button
             onClick={() => (hasActiveFilter ? exportFiltered() : exportAllMonths())}
-            className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-lg px-3 py-1.5 flex items-center gap-1.5"
+            className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
           >
             <Download size={14} /> {hasActiveFilter ? "Export filtered results to Excel" : "Export all months to Excel"}
           </button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-          <div className="bg-white rounded-xl border border-stone-200 p-4 flex items-center gap-3">
-            <div className="bg-stone-100 rounded-lg p-2 text-stone-600"><Ticket size={20} /></div>
+          <div className="bg-white rounded-2xl border border-stone-200 p-4 flex items-center gap-3">
+            <div className="bg-stone-100 rounded-xl p-2 text-stone-600"><Ticket size={20} /></div>
             <div>
               <p className="text-xs text-stone-500">Tickets</p>
               <p className="text-lg font-bold">{totals.count}</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-stone-200 p-4 flex items-center gap-3">
-            <div className="bg-teal-50 rounded-lg p-2 text-teal-900"><Wallet size={20} /></div>
+          <div className="bg-white rounded-2xl border border-stone-200 p-4 flex items-center gap-3">
+            <div className="bg-teal-50 rounded-xl p-2 text-teal-900"><Wallet size={20} /></div>
             <div>
               <p className="text-xs text-stone-500">Total sales</p>
               <p className="text-lg font-bold">{fmt(totals.total)}</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-stone-200 p-4 flex items-center gap-3">
-            <div className="bg-emerald-50 rounded-lg p-2 text-emerald-700"><TrendingUp size={20} /></div>
+          <div className="bg-white rounded-2xl border border-stone-200 p-4 flex items-center gap-3">
+            <div className="bg-emerald-50 rounded-xl p-2 text-emerald-700"><TrendingUp size={20} /></div>
             <div>
               <p className="text-xs text-stone-500">Total profit</p>
               <p className="text-lg font-bold text-emerald-700">{fmt(totals.profit)}</p>
@@ -2587,22 +2644,22 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             anyone with neither add nor edit permission. Shown while editing an existing
             ticket as long as the person has edit access, even if add access is off. */}
         {!isAccountingUser && (canAddTickets || (form.id && canEditTickets)) && (
-        <div className="bg-white rounded-xl border border-stone-200 p-4 md:p-5 mb-6">
+        <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
           <h2 className="font-semibold text-stone-900 mb-4">{form.id ? "Edit ticket" : "Add a new ticket"}</h2>
           {error && (
-            <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{error}</div>
+            <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="text-xs text-stone-500 block mb-1">Entered by</label>
-              <div className="w-full border border-stone-200 bg-stone-50 rounded-lg px-3 py-2 text-sm text-stone-600">
+              <div className="w-full border border-stone-200 bg-stone-50 rounded-xl px-3 py-2 text-sm text-stone-600">
                 {currentUser.name}
               </div>
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Company (optional)</label>
               <input
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.company}
                 onChange={(e) => setForm({ ...form, company: e.target.value.toUpperCase() })}
                 placeholder="e.g. Acme Corp"
@@ -2615,7 +2672,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 type="number"
                 min={1}
                 max={50}
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.customersCount}
                 onChange={(e) => handleCustomersCountChange(e.target.value)}
                 onBlur={(e) => {
@@ -2631,7 +2688,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               {supplierOther ? (
                 <div className="flex gap-2">
                   <input
-                    className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                     value={form.supplier}
                     onChange={(e) => setForm({ ...form, supplier: e.target.value })}
                     placeholder="Enter supplier name"
@@ -2640,14 +2697,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <button
                     type="button"
                     onClick={() => { setSupplierOther(false); setForm({ ...form, supplier: "" }); }}
-                    className="shrink-0 text-xs text-stone-500 hover:text-teal-800 border border-stone-300 rounded-lg px-2"
+                    className="shrink-0 text-xs text-stone-500 hover:text-teal-800 border border-stone-300 rounded-xl px-2"
                   >
                     List
                   </button>
                 </div>
               ) : (
                 <select
-                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
                   value={form.supplier}
                   onChange={(e) => {
                     if (e.target.value === "__other__") {
@@ -2677,13 +2734,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               {form.customers.map((c, i) => (
                 <div key={i} className="grid grid-cols-2 gap-2 md:gap-3">
                   <input
-                    className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                     value={c.name}
                     onChange={(e) => handleCustomerFieldChange(i, "name", e.target.value)}
                     placeholder={`Customer ${i + 1} name`}
                   />
                   <input
-                    className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                     value={c.ticketNumber}
                     onChange={(e) => handleCustomerFieldChange(i, "ticketNumber", e.target.value)}
                     onBlur={() => handleTicketNumberBlur(i)}
@@ -2698,7 +2755,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div>
               <label className="text-xs text-stone-500 block mb-1">From</label>
               <input
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.from}
                 onChange={(e) => handleCityChange("from", e.target.value)}
                 placeholder="Cairo"
@@ -2708,7 +2765,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div>
               <label className="text-xs text-stone-500 block mb-1">To</label>
               <input
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.to}
                 onChange={(e) => handleCityChange("to", e.target.value)}
                 placeholder="Dubai"
@@ -2725,7 +2782,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 )}
               </label>
               <input
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.airline}
                 onChange={(e) => handleAirlineChange(e.target.value)}
                 placeholder="MS"
@@ -2738,7 +2795,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 type="date"
                 lang="en-GB"
                 max={todayDateStr()}
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.date}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -2752,7 +2809,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <label className="text-xs text-stone-500 block mb-1">Net price</label>
               <input
                 type="number"
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.netPrice}
                 onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
                 placeholder="0"
@@ -2762,7 +2819,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <label className="text-xs text-stone-500 block mb-1">Sold price</label>
               <input
                 type="number"
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.soldPrice}
                 onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
                 placeholder="0"
@@ -2770,14 +2827,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Profit (auto)</label>
-              <div className="w-full border border-stone-200 bg-stone-50 rounded-lg px-3 py-2 text-sm text-emerald-700 font-semibold">
+              <div className="w-full border border-stone-200 bg-stone-50 rounded-xl px-3 py-2 text-sm text-emerald-700 font-semibold">
                 {fmt(profit(form.netPrice, form.soldPrice))}
               </div>
             </div>
             <div className="md:col-span-3">
               <label className="text-xs text-stone-500 block mb-1">Notes</label>
               <textarea
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 min-h-[80px]"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 min-h-[80px]"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value.toUpperCase() })}
                 placeholder="Optional"
@@ -2788,14 +2845,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="flex gap-2 mt-4">
             <button
               onClick={handleSubmit}
-              className="bg-gradient-to-b from-teal-600 to-teal-800 hover:from-teal-800 hover:to-teal-900 text-white text-sm font-semibold rounded-lg px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors flex items-center gap-1.5"
+              className="bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors flex items-center gap-1.5"
             >
               <Check size={16} /> {form.id ? "Save changes" : "Add ticket"}
             </button>
             {form.id && (
               <button
                 onClick={handleCancel}
-                className="border border-stone-300 text-stone-600 text-sm rounded-lg px-4 py-2 flex items-center gap-1.5"
+                className="border border-stone-300 text-stone-600 text-sm rounded-xl px-4 py-2 flex items-center gap-1.5"
               >
                 <X size={16} /> Cancel
               </button>
@@ -2809,7 +2866,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
             <input
-              className="w-full border border-stone-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
               placeholder="Search by employee, company, ticket number, customer, destination, or airline"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -2818,7 +2875,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="relative sm:w-40">
             <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
             <select
-              className="w-full border border-stone-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+              className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
               value={selectedYear}
               onChange={(e) => setSelectedYear(e.target.value)}
             >
@@ -2831,7 +2888,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="relative sm:w-56">
             <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
             <select
-              className="w-full border border-stone-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+              className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
             >
@@ -2844,7 +2901,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="relative sm:w-56">
             <Building2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
             <select
-              className="w-full border border-stone-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+              className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
               value={selectedCompany}
               onChange={(e) => setSelectedCompany(e.target.value)}
             >
@@ -2857,7 +2914,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="relative sm:w-56">
             <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
             <select
-              className="w-full border border-stone-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+              className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
               value={selectedEmployee}
               onChange={(e) => setSelectedEmployee(e.target.value)}
             >
@@ -2870,7 +2927,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="relative sm:w-56">
             <Plane size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
             <select
-              className="w-full border border-stone-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+              className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
               value={selectedSupplier}
               onChange={(e) => setSelectedSupplier(e.target.value)}
             >
@@ -2905,13 +2962,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         </datalist>
 
         {/* Ticket list */}
-        <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
           {filtered.length === 0 ? (
             <p className="text-center text-stone-400 text-sm py-10">
               {visibleTickets.length === 0 ? "No tickets recorded yet" : "No results match your search"}
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-stone-200">
+            <div className="overflow-x-auto rounded-xl border border-stone-200">
               <table className="w-full text-xs border-collapse">
                 <thead>
                   <tr className="bg-teal-50/60 text-teal-800 text-[11px] uppercase tracking-wide border-b-2 border-teal-200">
@@ -2992,7 +3049,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         </div>
 
         {!selectedMonth && monthlyBreakdown.length > 0 && (
-          <div className="bg-white rounded-xl border border-stone-200 overflow-hidden mt-6">
+          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden mt-6">
             <div className="px-4 py-3 border-b border-stone-100">
               <h2 className="font-semibold text-stone-900 text-sm">Totals by month</h2>
             </div>
@@ -3039,7 +3096,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         )}
 
         {!selectedCompany && companyBreakdown.length > 0 && (
-          <div className="bg-white rounded-xl border border-stone-200 overflow-hidden mt-6">
+          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden mt-6">
             <div className="px-4 py-3 border-b border-stone-100">
               <h2 className="font-semibold text-stone-900 text-sm">Companies and their customers</h2>
             </div>
@@ -3078,21 +3135,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         )}
 
         {activeSection === "hotels" && (
-          <div className="bg-white border border-stone-200 rounded-xl p-12 text-center text-stone-400">
+          <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
             <Building2 size={40} className="mx-auto mb-3 text-stone-300" />
             <p className="text-sm">Hotels section — nothing here yet.</p>
           </div>
         )}
 
         {activeSection === "cars" && (
-          <div className="bg-white border border-stone-200 rounded-xl p-12 text-center text-stone-400">
+          <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
             <Car size={40} className="mx-auto mb-3 text-stone-300" />
             <p className="text-sm">Transportation section — nothing here yet.</p>
           </div>
         )}
 
         {activeSection === "files" && (
-          <div className="bg-white border border-stone-200 rounded-xl p-12 text-center text-stone-400">
+          <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
             <FileText size={40} className="mx-auto mb-3 text-stone-300" />
             <p className="text-sm">Files section — nothing here yet.</p>
           </div>
@@ -3106,20 +3163,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="max-w-3xl mx-auto p-4 md:p-6">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
-                <div className="bg-gradient-to-b from-teal-600 to-teal-800 text-white rounded-lg p-2 shadow-sm shadow-teal-800/30">
+                <div className="bg-gradient-to-b from-teal-700 to-teal-900 text-white rounded-xl p-2 shadow-sm shadow-teal-800/30">
                   <Ticket size={18} />
                 </div>
                 <h1 className="text-lg md:text-xl font-bold text-stone-900" style={{ fontFamily: "'Fraunces', serif" }}>Ticket details</h1>
               </div>
               <button
                 onClick={closeTicketDetail}
-                className="border border-stone-300 text-stone-600 text-sm rounded-lg px-3 py-2 flex items-center gap-1.5"
+                className="border border-stone-300 text-stone-600 text-sm rounded-xl px-3 py-2 flex items-center gap-1.5"
               >
                 <X size={15} /> Close
               </button>
             </div>
 
-            <div className="bg-white border border-stone-200 rounded-xl divide-y divide-stone-100">
+            <div className="bg-white border border-stone-200 rounded-2xl divide-y divide-stone-100">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 md:p-5">
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Entered by</p>
@@ -3155,7 +3212,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <p className="text-xs text-stone-400 mb-2">
                   Customers ({getCustomers(viewingTicket).length})
                 </p>
-                <div className="border border-stone-200 rounded-lg overflow-hidden">
+                <div className="border border-stone-200 rounded-xl overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-stone-50 text-stone-500 text-xs">
@@ -3195,7 +3252,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <div className="p-4 md:p-5">
                 <p className="text-xs text-stone-400 mb-2">Notes</p>
                 <textarea
-                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 min-h-[100px]"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 min-h-[100px]"
                   value={notesDraft}
                   onChange={(e) => { setNotesDraft(e.target.value.toUpperCase()); setNotesSaved(false); }}
                   placeholder="No notes yet — add some here"
@@ -3204,10 +3261,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <button
                     onClick={() => saveTicketNotes(viewingTicket.id)}
                     disabled={notesDraft === (viewingTicket.notes || "")}
-                    className={`text-sm font-semibold rounded-lg px-4 py-2 flex items-center gap-1.5 transition-colors ${
+                    className={`text-sm font-semibold rounded-xl px-4 py-2 flex items-center gap-1.5 transition-colors ${
                       notesDraft === (viewingTicket.notes || "")
                         ? "bg-stone-200 text-stone-400 cursor-not-allowed"
-                        : "bg-gradient-to-b from-teal-600 to-teal-800 hover:from-teal-800 hover:to-teal-900 text-white shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10"
+                        : "bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10"
                     }`}
                   >
                     <Check size={15} /> Save notes
@@ -3224,7 +3281,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       {[...viewingTicket.notesHistory].reverse().map((h, idx) => (
                         <div
                           key={idx}
-                          className="text-xs bg-stone-50 border border-stone-100 rounded-lg px-2.5 py-1.5 flex items-start justify-between gap-3"
+                          className="text-xs bg-stone-50 border border-stone-100 rounded-xl px-2.5 py-1.5 flex items-start justify-between gap-3"
                         >
                           {h.type === "edit" ? (
                             <span className="text-stone-600 break-words">
@@ -3250,18 +3307,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
       {confirmDialog && (
         <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl border border-stone-200 p-5 w-full max-w-sm">
+          <div className="bg-white rounded-2xl border border-stone-200 p-5 w-full max-w-sm">
             <p className="text-sm text-stone-700 mb-4">{confirmDialog.message}</p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setConfirmDialog(null)}
-                className="border border-stone-300 text-stone-600 text-sm rounded-lg px-3 py-2"
+                className="border border-stone-300 text-stone-600 text-sm rounded-xl px-3 py-2"
               >
                 Cancel
               </button>
               <button
                 onClick={() => confirmDialog.onConfirm()}
-                className="bg-gradient-to-b from-teal-600 to-teal-800 hover:from-teal-800 hover:to-teal-900 text-white text-sm font-semibold rounded-lg px-3 py-2 shadow-sm shadow-teal-800/30 transition-colors"
+                className="bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-3 py-2 shadow-sm shadow-teal-800/30 transition-colors"
               >
                 Confirm
               </button>
