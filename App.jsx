@@ -86,21 +86,21 @@ const getEmptyForm = () => ({
 // Given a ticket number like "077-1234567890", returns the same prefix with the numeric
 // part increased by one, keeping the same digit width (e.g. "077-1234567891").
 // Returns "" if the ticket number doesn't match the expected PREFIX-DIGITS shape.
-// Auto-sequencing only ever advances the LAST TWO digits of the serial number (wrapping
-// 99 back to 00); everything before them — including the rest of the serial — stays fixed,
+// Auto-sequencing only ever advances the LAST THREE digits of the serial number (wrapping
+// 999 back to 000); everything before them — including the rest of the serial — stays fixed,
 // since that part identifies the batch/booking rather than the individual ticket.
 const nextTicketNumber = (ticketNumber) => {
   if (!ticketNumber) return "";
   const match = ticketNumber.match(/^([A-Z0-9]{3})-(\d+)$/);
   if (!match) return "";
   const [, prefix, digits] = match;
-  if (digits.length <= 2) {
+  if (digits.length <= 3) {
     const wrapped = ((parseInt(digits, 10) + 1) % (10 ** digits.length)).toString().padStart(digits.length, "0");
     return `${prefix}-${wrapped}`;
   }
-  const head = digits.slice(0, -2);
-  const tail = digits.slice(-2);
-  const nextTail = ((parseInt(tail, 10) + 1) % 100).toString().padStart(2, "0");
+  const head = digits.slice(0, -3);
+  const tail = digits.slice(-3);
+  const nextTail = ((parseInt(tail, 10) + 1) % 1000).toString().padStart(3, "0");
   return `${prefix}-${head}${nextTail}`;
 };
 
