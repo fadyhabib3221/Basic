@@ -123,6 +123,21 @@ const emptyChild = () => ({
   age: "",
 });
 
+// Converts Arabic-Indic (٠-٩) and Extended Arabic-Indic (۰-۹) digits to standard 0-9,
+// then strips anything that isn't a digit or a single decimal point. Using type="text"
+// with this instead of type="number" avoids the age field silently rejecting keystrokes
+// on Arabic keyboards, which type="number" does with non-Latin digits.
+const sanitizeAgeInput = (raw) => {
+  let v = raw
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06F0));
+  v = v.replace(/[^0-9.]/g, "");
+  const parts = v.split(".");
+  if (parts.length > 2) v = parts[0] + "." + parts.slice(1).join("");
+  if (v !== "" && v !== "." && parseFloat(v) > 11.99) v = "11.99";
+  return v;
+};
+
 // Resizes a room line's guest list to match its room type's capacity, keeping any
 // names already entered and padding/truncating as needed.
 const guestsForCapacity = (guests, capacity) => {
@@ -3908,133 +3923,139 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="space-y-3">
               <label className="text-xs text-stone-500 block">Rooms</label>
               {hotelForm.roomLines.map((line) => (
-                <div key={line.id} className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 items-end bg-stone-50 border border-stone-200 rounded-xl p-3">
-                  <div>
-                    <label className="text-[11px] text-stone-500 block mb-1">Room type</label>
-                    <select
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                      value={line.roomType}
-                      onChange={(e) => {
-                        const roomType = e.target.value;
-                        const capacity = ROOM_CAPACITY[roomType] || 1;
-                        updateHotelRoomLine(line.id, { roomType, guests: guestsForCapacity(line.guests, capacity) });
-                      }}
-                    >
-                      {ROOM_TYPES.map((r) => (
-                        <option key={r.value} value={r.value}>{r.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-stone-500 block mb-1">Meal plan</label>
-                    <select
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                      value={line.mealPlan}
-                      onChange={(e) => updateHotelRoomLine(line.id, { mealPlan: e.target.value })}
-                    >
-                      {MEAL_PLANS.map((m) => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-stone-500 block mb-1">Check-in</label>
-                    <input
-                      type="date"
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                      value={line.checkIn}
-                      onChange={(e) => updateHotelRoomLine(line.id, { checkIn: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-stone-500 block mb-1">Check-out</label>
-                    <input
-                      type="date"
-                      min={line.checkIn || undefined}
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                      value={line.checkOut}
-                      onChange={(e) => updateHotelRoomLine(line.id, { checkOut: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-stone-500 block mb-1">Currency</label>
-                    <select
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                      value={line.currency}
-                      onChange={(e) => updateHotelRoomLine(line.id, { currency: e.target.value })}
-                    >
-                      {HOTEL_CURRENCIES.map((c) => (
-                        <option key={c.value} value={c.value}>{c.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-stone-500 block mb-1"># rooms</label>
-                    <input
-                      type="number"
-                      min="1"
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                      value={line.count}
-                      onChange={(e) => updateHotelRoomLine(line.id, { count: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-stone-500 block mb-1">Net (per room/night)</label>
-                    <input
-                      type="number"
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                      value={line.netPrice}
-                      onChange={(e) => updateHotelRoomLine(line.id, { netPrice: e.target.value })}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-stone-500 block mb-1">Sold (per room/night)</label>
-                    <input
-                      type="number"
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                      value={line.soldPrice}
-                      onChange={(e) => updateHotelRoomLine(line.id, { soldPrice: e.target.value })}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs text-emerald-700 font-semibold">
-                      {roomLineNights(line, hotelForm)}n · {fmt(hotelLineSoldTotal(line, roomLineNights(line, hotelForm)) - hotelLineNetTotal(line, roomLineNights(line, hotelForm)))} {line.currency}
+                <div key={line.id} className="bg-stone-50 border border-stone-200 rounded-xl p-3 space-y-3">
+                  {/* Row 1: room type, meal plan, dates, currency. */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 items-end">
+                    <div>
+                      <label className="text-[11px] text-stone-500 block mb-1">Room type</label>
+                      <select
+                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={line.roomType}
+                        onChange={(e) => {
+                          const roomType = e.target.value;
+                          const capacity = ROOM_CAPACITY[roomType] || 1;
+                          updateHotelRoomLine(line.id, { roomType, guests: guestsForCapacity(line.guests, capacity) });
+                        }}
+                      >
+                        {ROOM_TYPES.map((r) => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
                     </div>
-                    <button
-                      onClick={() => removeHotelRoomLine(line.id)}
-                      disabled={hotelForm.roomLines.length <= 1}
-                      className="text-red-500 hover:text-red-700 disabled:opacity-30"
-                      title="Remove this room line"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div>
+                      <label className="text-[11px] text-stone-500 block mb-1">Meal plan</label>
+                      <select
+                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={line.mealPlan}
+                        onChange={(e) => updateHotelRoomLine(line.id, { mealPlan: e.target.value })}
+                      >
+                        {MEAL_PLANS.map((m) => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-stone-500 block mb-1">Check-in</label>
+                      <input
+                        type="date"
+                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={line.checkIn}
+                        onChange={(e) => updateHotelRoomLine(line.id, { checkIn: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-stone-500 block mb-1">Check-out</label>
+                      <input
+                        type="date"
+                        min={line.checkIn || undefined}
+                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={line.checkOut}
+                        onChange={(e) => updateHotelRoomLine(line.id, { checkOut: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-stone-500 block mb-1">Currency</label>
+                      <select
+                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={line.currency}
+                        onChange={(e) => updateHotelRoomLine(line.id, { currency: e.target.value })}
+                      >
+                        {HOTEL_CURRENCIES.map((c) => (
+                          <option key={c.value} value={c.value}>{c.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
-                  {/* Adult guest names — one field per bed the room type holds. Only the
-                      first guest is mandatory; the rest are optional. */}
-                  <div className="space-y-2 mt-3">
-                    {(line.guests || []).map((g, i) => (
-                      <div key={g.id} className="bg-white border border-stone-200 rounded-lg p-2">
-                        <label className="text-[11px] text-stone-500 block mb-1">
-                          Guest {i + 1} name
-                          {i === 0 ? <span className="text-red-500"> *</span> : (
-                            <span className="text-stone-400"> (optional)</span>
-                          )}
-                        </label>
-                        <input
-                          className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                          value={g.name}
-                          onChange={(e) => updateRoomGuest(line.id, i, e.target.value)}
-                          placeholder={i === 0 ? "Guest 1 name (required)" : `Guest ${i + 1} name`}
-                        />
+                  {/* Row 2: # rooms, with guest names directly underneath it, alongside net/sold. */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
+                    <div>
+                      <label className="text-[11px] text-stone-500 block mb-1"># rooms</label>
+                      <input
+                        type="number"
+                        min="1"
+                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={line.count}
+                        onChange={(e) => updateHotelRoomLine(line.id, { count: e.target.value })}
+                      />
+                      {/* Adult guest names — one field per bed the room type holds. Only the
+                          first guest is mandatory; the rest are optional. */}
+                      <div className="space-y-2 mt-3">
+                        {(line.guests || []).map((g, i) => (
+                          <div key={g.id} className="bg-white border border-stone-200 rounded-lg p-2">
+                            <label className="text-[11px] text-stone-500 block mb-1">
+                              Guest {i + 1} name
+                              {i === 0 ? <span className="text-red-500"> *</span> : (
+                                <span className="text-stone-400"> (optional)</span>
+                              )}
+                            </label>
+                            <input
+                              className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                              value={g.name}
+                              onChange={(e) => updateRoomGuest(line.id, i, e.target.value)}
+                              placeholder={i === 0 ? "Guest 1 name (required)" : `Guest ${i + 1} name`}
+                            />
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-stone-500 block mb-1">Net (per room/night)</label>
+                      <input
+                        type="number"
+                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={line.netPrice}
+                        onChange={(e) => updateHotelRoomLine(line.id, { netPrice: e.target.value })}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-stone-500 block mb-1">Sold (per room/night)</label>
+                      <input
+                        type="number"
+                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={line.soldPrice}
+                        onChange={(e) => updateHotelRoomLine(line.id, { soldPrice: e.target.value })}
+                        placeholder="0"
+                      />
+                      <div className="flex items-center justify-between gap-2 mt-3">
+                        <div className="text-xs text-emerald-700 font-semibold">
+                          {roomLineNights(line, hotelForm)}n · {fmt(hotelLineSoldTotal(line, roomLineNights(line, hotelForm)) - hotelLineNetTotal(line, roomLineNights(line, hotelForm)))} {line.currency}
+                        </div>
+                        <button
+                          onClick={() => removeHotelRoomLine(line.id)}
+                          disabled={hotelForm.roomLines.length <= 1}
+                          className="text-red-500 hover:text-red-700 disabled:opacity-30"
+                          title="Remove this room line"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Children in this room — name + age in years (0–11.99). */}
-                  <div className="mt-3">
+                  <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[11px] text-stone-500 block">Children</label>
                       <button
@@ -4048,8 +4069,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     {(line.children || []).length > 0 && (
                       <div className="space-y-2">
                         {line.children.map((c, i) => (
-                          <div key={c.id} className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end bg-white border border-stone-200 rounded-lg p-3">
-                            <div className="md:col-span-3">
+                          <div key={c.id} className="grid grid-cols-1 sm:grid-cols-6 gap-3 items-end bg-white border border-stone-200 rounded-lg p-3">
+                            <div className="sm:col-span-4">
                               <label className="text-[11px] text-stone-500 block mb-1">Child {i + 1} name</label>
                               <input
                                 className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
@@ -4061,17 +4082,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <div>
                               <label className="text-[11px] text-stone-500 block mb-1">Age (0–11.99)</label>
                               <input
-                                type="number"
-                                min="0"
-                                max="11.99"
-                                step="0.01"
+                                type="text"
+                                inputMode="decimal"
                                 className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                                 value={c.age}
-                                onChange={(e) => {
-                                  let v = e.target.value;
-                                  if (v !== "" && parseFloat(v) > 11.99) v = "11.99";
-                                  updateRoomChild(line.id, c.id, { age: v });
-                                }}
+                                onChange={(e) => updateRoomChild(line.id, c.id, { age: sanitizeAgeInput(e.target.value) })}
                                 placeholder="e.g. 4"
                               />
                             </div>
