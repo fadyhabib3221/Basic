@@ -4014,9 +4014,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
                   {/* Adult guest names — one field per bed the room type holds. Only the
                       first guest is mandatory; the rest are optional. */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                  <div className="space-y-2 mt-3">
                     {(line.guests || []).map((g, i) => (
-                      <div key={g.id}>
+                      <div key={g.id} className="bg-white border border-stone-200 rounded-lg p-2">
                         <label className="text-[11px] text-stone-500 block mb-1">
                           Guest {i + 1} name
                           {i === 0 ? <span className="text-red-500"> *</span> : (
@@ -4048,11 +4048,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     {(line.children || []).length > 0 && (
                       <div className="space-y-2">
                         {line.children.map((c, i) => (
-                          <div key={c.id} className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end bg-white border border-stone-200 rounded-lg p-2">
+                          <div key={c.id} className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end bg-white border border-stone-200 rounded-lg p-3">
                             <div className="md:col-span-3">
                               <label className="text-[11px] text-stone-500 block mb-1">Child {i + 1} name</label>
                               <input
-                                className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                                 value={c.name}
                                 onChange={(e) => updateRoomChild(line.id, c.id, { name: e.target.value })}
                                 placeholder="Child name"
@@ -4065,7 +4065,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 min="0"
                                 max="11.99"
                                 step="0.01"
-                                className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                                 value={c.age}
                                 onChange={(e) => {
                                   let v = e.target.value;
