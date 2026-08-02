@@ -51,7 +51,19 @@ const companyName = (c) => (typeof c === "string" ? c : (c && c.name) || "");
 
 const emptyCompanyDraft = { name: "", taxNumber: "", commercialReg: "", phones: "" };
 
-const emptyForm = {
+// Local YYYY-MM-DD for today, matching the native <input type="date"> format.
+const todayDateStr = () => {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+// A function (not a static object) so every new/reset ticket picks up TODAY'S date
+// at the moment it's created, rather than whatever date happened to be "today" when
+// the app first loaded. The user can still change it manually afterward.
+const getEmptyForm = () => ({
   id: null,
   employee: "",
   company: "",
@@ -61,11 +73,11 @@ const emptyForm = {
   from: "",
   to: "",
   airline: "",
-  date: "",
+  date: todayDateStr(),
   netPrice: "",
   soldPrice: "",
   notes: "",
-};
+});
 
 // Given a ticket number like "077-1234567890", returns the same prefix with the numeric
 // part increased by one, keeping the same digit width (e.g. "077-1234567891").
@@ -357,7 +369,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
 
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(getEmptyForm);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   // Clicking a ticket row opens a full detail view of that ticket (id stored here).
@@ -368,7 +380,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [selectedYear, setSelectedYear] = useState("");
   const [selectedCompany, setSelectedCompany] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState("");
-  const [selectedCustomer, setSelectedCustomer] = useState("");
+  const [selectedSupplier, setSelectedSupplier] = useState("");
 
   // Every value ever entered (companies, customers, airlines, cities) is kept here so it
   // can be offered as an autocomplete suggestion later, even if the original ticket is deleted.
@@ -1097,7 +1109,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     persistTickets(next);
     rememberSuggestionsFromRecord(record);
-    setForm(emptyForm);
+    setForm(getEmptyForm());
   };
 
   // The main account can always edit tickets; an employee can too, but only if they've
@@ -1116,10 +1128,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       setError("Only the main account can delete tickets");
       return;
     }
-    if (form.id === id) setForm(emptyForm);
+    if (form.id === id) setForm(getEmptyForm());
     persistTickets(tickets.filter((t) => t.id !== id));
   };
-  const handleCancel = () => setForm(emptyForm);
+  const handleCancel = () => setForm(getEmptyForm());
 
   // Opens the full-detail view ("page") for a ticket, showing every field including notes.
   const openTicketDetail = (t) => {
@@ -1287,10 +1299,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     new Set(visibleTickets.map((t) => (t.employee || "").trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
-  const customersAvailable = Array.from(
-    new Set(
-      visibleTickets.flatMap((t) => getCustomers(t).map((c) => (c.name || "").trim())).filter(Boolean)
-    )
+  const suppliersAvailable = Array.from(
+    new Set(visibleTickets.map((t) => (t.supplier || "").trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
   const byMonth = selectedMonth
@@ -1309,11 +1319,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     ? byCompany.filter((t) => (t.employee || "").trim() === selectedEmployee)
     : byCompany;
 
-  const byCustomer = selectedCustomer
-    ? byEmployee.filter((t) => getCustomers(t).some((c) => (c.name || "").trim() === selectedCustomer))
+  const bySupplier = selectedSupplier
+    ? byEmployee.filter((t) => (t.supplier || "").trim() === selectedSupplier)
     : byEmployee;
 
-  const filtered = byCustomer.filter((t) => {
+  const filtered = bySupplier.filter((t) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
     const customers = getCustomers(t);
@@ -1359,7 +1369,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       { count: 0, total: 0, profit: 0 }
     );
 
-  const totals = countAndSum(byCustomer);
+  const totals = countAndSum(bySupplier);
 
   const monthlyBreakdown = monthsAvailable.map((key) => {
     const rows = visibleTickets.filter((t) => monthKey(t.date) === key);
@@ -1467,9 +1477,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Exports exactly the tickets matching the currently selected month / year / company /
   // employee / customer filters (any combination), sorted by issue date, as a single sheet
   // ending with a Net price / Sold price / Profit totals row.
-  const hasActiveFilter = !!(selectedMonth || selectedYear || selectedCompany || selectedEmployee || selectedCustomer);
+  const hasActiveFilter = !!(selectedMonth || selectedYear || selectedCompany || selectedEmployee || selectedSupplier);
   const exportFiltered = () => {
-    const ws = XLSX.utils.json_to_sheet(rowsWithTotals(byCustomer));
+    const ws = XLSX.utils.json_to_sheet(rowsWithTotals(bySupplier));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Details");
     const parts = [
@@ -1477,7 +1487,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       selectedMonth,
       selectedCompany,
       selectedEmployee,
-      selectedCustomer,
+      selectedSupplier,
     ]
       .filter(Boolean)
       .map((p) => p.replace(/[^a-zA-Z0-9-]+/g, "_"));
@@ -2220,7 +2230,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               {selectedMonth ? ` · ${monthLabel(selectedMonth)}` : ""}
               {selectedCompany ? ` · ${selectedCompany}` : ""}
               {selectedEmployee ? ` · ${selectedEmployee}` : ""}
-              {selectedCustomer ? ` · ${selectedCustomer}` : ""}
+              {selectedSupplier ? ` · ${selectedSupplier}` : ""}
               {!hasActiveFilter && "all months"}
             </span>
           </p>
@@ -2497,14 +2507,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </select>
           </div>
           <div className="relative sm:w-56">
-            <Users size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <Plane size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <select
               className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white appearance-none"
-              value={selectedCustomer}
-              onChange={(e) => setSelectedCustomer(e.target.value)}
+              value={selectedSupplier}
+              onChange={(e) => setSelectedSupplier(e.target.value)}
             >
-              <option value="">All customers</option>
-              {customersAvailable.map((name) => (
+              <option value="">All suppliers</option>
+              {suppliersAvailable.map((name) => (
                 <option key={name} value={name}>{name}</option>
               ))}
             </select>
