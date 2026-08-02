@@ -4014,7 +4014,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
                   {/* Adult guest names — one field per bed the room type holds. Only the
                       first guest is mandatory; the rest are optional. */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                     {(line.guests || []).map((g, i) => (
                       <div key={g.id}>
                         <label className="text-[11px] text-stone-500 block mb-1">
