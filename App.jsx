@@ -112,17 +112,150 @@ const resizeCustomers = (customers, count) => {
   return next;
 };
 
+// Job grades shown to the main account when creating/editing an employee. Picking a
+// grade fills in a sensible starting set of permission toggles below (see
+// ROLE_PRESETS), but every toggle can still be switched on or off by hand afterwards —
+// the grade is a starting point/label, not a lock. Grade is purely descriptive; access
+// is always driven by the individual toggles stored on the employee record.
+const EMPLOYEE_ROLES = [
+  { value: "manager", label: "Manager" },
+  { value: "supervisor", label: "Supervisor" },
+  { value: "employee", label: "Employee" },
+  { value: "accountant", label: "Accountant" },
+];
+
+// Starting toggle values applied when a grade is picked. All six are then freely
+// editable by hand, independent of which grade is selected.
+const ROLE_PRESETS = {
+  manager: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true },
+  supervisor: { canViewAll: true, canAdd: true, canEdit: true, canDelete: false, isAccounting: false, canManageCompanies: false },
+  employee: { canViewAll: false, canAdd: true, canEdit: false, canDelete: false, isAccounting: false, canManageCompanies: false },
+  accountant: { canViewAll: true, canAdd: false, canEdit: false, canDelete: false, isAccounting: true, canManageCompanies: false },
+};
+
+const roleLabel = (value) => (EMPLOYEE_ROLES.find((r) => r.value === value) || {}).label || "Employee";
+
+// Applies the coherence rules that keep the six permission toggles consistent with
+// each other, no matter which one was just changed by hand:
+// - Editing, deleting, or accounting access all require view access first.
+// - Accounting mode is a fixed bundle (view-only + notes) that overrides add/edit/delete.
+const reconcilePermissions = (perm) => {
+  if (perm.isAccounting) {
+    return { ...perm, canViewAll: true, canAdd: false, canEdit: false, canDelete: false };
+  }
+  return { ...perm, canViewAll: perm.canViewAll || perm.canEdit || perm.canDelete };
+};
+
 const emptyNewEmployee = {
   name: "",
   username: "",
   password: "",
+  role: "employee",
   // Default permissions for a newly created employee: can only see and add
-  // their own tickets, cannot edit anything, and is not an accounting account.
+  // their own tickets, cannot edit or delete anything, and is not an accounting account.
   canViewAll: false,
+  canAdd: true,
   canEdit: false,
+  canDelete: false,
   isAccounting: false,
   canManageCompanies: false,
 };
+
+// Per-employee permissions control used in the employee table: a compact summary
+// button that expands into the same six on/off toggles as the new-employee form, so
+// the main account can adjust an existing employee's access at any time, independently
+// of whatever grade they were assigned.
+const PermissionsCell = ({ emp, open, onToggleOpen, onSetPermission }) => {
+  const summary = [
+    emp.canViewAll && "View all",
+    emp.canAdd && "Add",
+    emp.canEdit && "Edit",
+    emp.canDelete && "Delete",
+    emp.isAccounting && "Notes only",
+    emp.canManageCompanies && "Companies",
+  ]
+    .filter(Boolean)
+    .join(" · ") || "Own tickets only";
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onToggleOpen}
+        className="border border-stone-300 rounded-md px-2 py-1.5 text-xs text-stone-700 hover:bg-stone-50 flex items-center gap-1.5 max-w-[220px]"
+      >
+        <span className="truncate">{summary}</span>
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-64 bg-white border border-stone-300 rounded-lg shadow-lg p-3 divide-y divide-stone-100">
+          <ToggleSwitch
+            label="View all tickets"
+            description="See every employee's tickets, not just their own"
+            checked={emp.canViewAll || emp.canEdit || emp.canDelete}
+            disabled={emp.isAccounting || emp.canEdit || emp.canDelete}
+            onChange={(v) => onSetPermission("canViewAll", v)}
+          />
+          <ToggleSwitch
+            label="Add tickets"
+            description="Create new tickets"
+            checked={emp.canAdd}
+            disabled={emp.isAccounting}
+            onChange={(v) => onSetPermission("canAdd", v)}
+          />
+          <ToggleSwitch
+            label="Edit tickets"
+            description="Edit any ticket they can see"
+            checked={emp.canEdit}
+            disabled={emp.isAccounting}
+            onChange={(v) => onSetPermission("canEdit", v)}
+          />
+          <ToggleSwitch
+            label="Delete tickets"
+            description="Permanently remove any ticket they can see"
+            checked={emp.canDelete}
+            disabled={emp.isAccounting}
+            onChange={(v) => onSetPermission("canDelete", v)}
+          />
+          <ToggleSwitch
+            label="Accounting mode"
+            description="View all tickets, but the only edit allowed is the Notes field"
+            checked={emp.isAccounting}
+            onChange={(v) => onSetPermission("isAccounting", v)}
+          />
+          <ToggleSwitch
+            label="Manage companies"
+            description="Add, edit, or remove saved company records"
+            checked={emp.canManageCompanies}
+            onChange={(v) => onSetPermission("canManageCompanies", v)}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
+// A small reusable on/off switch used throughout the permissions UI.
+const ToggleSwitch = ({ checked, onChange, disabled, label, description }) => (
+  <label className={`flex items-start justify-between gap-3 py-1.5 ${disabled ? "opacity-50" : ""}`}>
+    <span>
+      <span className="text-sm text-stone-700 font-medium block">{label}</span>
+      {description && <span className="text-[11px] text-stone-400 block">{description}</span>}
+    </span>
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => !disabled && onChange(!checked)}
+      className={`shrink-0 mt-0.5 relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+        checked ? "bg-teal-700" : "bg-stone-300"
+      } ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+    >
+      <span
+        className="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
+        style={{ transform: checked ? "translateX(18px)" : "translateX(2px)" }}
+      />
+    </button>
+  </label>
+);
 
 // IATA 3-digit airline accounting/ticketing prefix codes — the first 3 digits of a
 // standard e-ticket number identify the issuing airline. Used to link the ticket
@@ -376,6 +509,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [showManage, setShowManage] = useState(false);
   const [newEmployee, setNewEmployee] = useState(emptyNewEmployee);
   const [showNewEmployeePerms, setShowNewEmployeePerms] = useState(false);
+  const [openPermissionsFor, setOpenPermissionsFor] = useState(null); // username, or null if closed
   const [manageError, setManageError] = useState("");
   const [visiblePasswords, setVisiblePasswords] = useState({});
   const [editingUsername, setEditingUsername] = useState(null);
@@ -784,12 +918,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         ...newEmployee,
         username: newEmployee.username.trim(),
         isAdmin: false,
-        // Accounting is a fixed bundle: full view access, notes-only editing —
-        // it overrides whatever was picked for canViewAll / canEdit. Edit access on its
-        // own also implies full view access, since editing every ticket requires seeing them.
-        canViewAll: newEmployee.isAccounting || newEmployee.canEdit ? true : newEmployee.canViewAll,
-        canEdit: newEmployee.isAccounting ? false : newEmployee.canEdit,
-        isAccounting: newEmployee.isAccounting,
+        ...reconcilePermissions(newEmployee),
       },
     ];
     await persistEmployees(next);
@@ -797,37 +926,33 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setShowNewEmployeePerms(false);
   };
 
-  // Lets the main account set an employee's access level:
-  // - "own": can only see and add their own tickets (default)
-  // - "view": can see every ticket, but cannot add/edit any of them
-  // - "all": can see every ticket, and add/edit like a normal employee
-  // - "accounting": can see every ticket but cannot add tickets — the only edit
-  //   they're allowed is the Notes field on a ticket's detail page (each note edit
-  //   is timestamped and attributed to them, see saveTicketNotes).
-  const handleAccessChange = async (username, value) => {
+  // Applies a grade's preset permissions to an employee. The grade itself is stored
+  // (for the badge/label), and every toggle it sets can still be flipped individually
+  // afterwards via handleTogglePermission — the preset is just a fast starting point.
+  const handleRoleChange = async (username, role) => {
     if (!currentUser.isAdmin) {
       setManageError("Only the main account can change employee permissions");
       return;
     }
-    const next = (employees || []).map((e) => {
-      if (e.username !== username) return e;
-      if (value === "accounting") return { ...e, isAccounting: true, canViewAll: true, canEdit: false };
-      if (value === "all") return { ...e, isAccounting: false, canViewAll: true, canEdit: true };
-      if (value === "view") return { ...e, isAccounting: false, canViewAll: true, canEdit: false };
-      return { ...e, isAccounting: false, canViewAll: false, canEdit: false };
-    });
+    const preset = ROLE_PRESETS[role] || ROLE_PRESETS.employee;
+    const next = (employees || []).map((e) =>
+      e.username === username ? { ...e, role, ...preset } : e
+    );
     await persistEmployees(next);
   };
 
-  // Independent permission toggle: whether this employee can open the Manage companies
-  // panel (add/edit/remove saved company records). Separate from ticket access level.
-  const handleToggleManageCompanies = async (username, checked) => {
+  // Single generic handler for every individual permission toggle (view all tickets,
+  // add tickets, edit tickets, delete tickets, accounting/notes-only mode, manage
+  // companies). Each toggle is independently switchable by the main account; coherence
+  // between them (edit/delete requiring view, accounting overriding add/edit/delete) is
+  // enforced afterwards by reconcilePermissions so the stored record never contradicts itself.
+  const handleTogglePermission = async (username, field, checked) => {
     if (!currentUser.isAdmin) {
       setManageError("Only the main account can change employee permissions");
       return;
     }
     const next = (employees || []).map((e) =>
-      e.username === username ? { ...e, canManageCompanies: checked } : e
+      e.username === username ? { ...e, ...reconcilePermissions({ ...e, [field]: checked }) } : e
     );
     await persistEmployees(next);
   };
@@ -1150,8 +1275,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setSupplierOther(!!t.supplier && !SUPPLIERS.includes(t.supplier));
   };
   const handleDelete = (id) => {
-    if (!currentUser.isAdmin) {
-      setError("Only the main account can delete tickets");
+    if (!currentUser.isAdmin && !canDeleteTickets) {
+      setError("You don't have permission to delete tickets");
       return;
     }
     if (form.id === id) { setForm(getEmptyForm()); setSupplierOther(false); }
@@ -1274,12 +1399,22 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     (currentUser.isAdmin ||
       !!(
         currentEmployeeRecord &&
-        (currentEmployeeRecord.canViewAll || currentEmployeeRecord.isAccounting || currentEmployeeRecord.canEdit)
+        (currentEmployeeRecord.canViewAll ||
+          currentEmployeeRecord.isAccounting ||
+          currentEmployeeRecord.canEdit ||
+          currentEmployeeRecord.canDelete)
       ));
   // Accounting accounts can see everything but cannot add tickets — their only allowed
   // edit anywhere in the app is the Notes field on a ticket's detail page.
   const isAccountingUser =
     !!currentUser && !currentUser.isAdmin && !!(currentEmployeeRecord && currentEmployeeRecord.isAccounting);
+  // A non-admin employee can be granted permission to add new tickets. Defaults to true
+  // for freshly created accounts, but the main account can switch it off (e.g. for a
+  // view-only or edit-only employee). Accounting accounts never get this either way.
+  const canAddTickets =
+    !!currentUser &&
+    (currentUser.isAdmin ||
+      !!(currentEmployeeRecord && currentEmployeeRecord.canAdd && !currentEmployeeRecord.isAccounting));
   // A non-admin employee can be granted permission to edit tickets (within whatever
   // set of tickets they can already see). Accounting accounts are excluded even if the
   // flag is set — their only allowed edit is the Notes field, never the ticket itself.
@@ -1287,6 +1422,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     !!currentUser &&
     (currentUser.isAdmin ||
       !!(currentEmployeeRecord && currentEmployeeRecord.canEdit && !currentEmployeeRecord.isAccounting));
+  // A separate, independently grantable permission: whether this employee can delete
+  // tickets. Previously this was main-account only; now the main account can hand it
+  // to specific employees (e.g. a Manager) without giving them full main-account access.
+  const canDeleteTickets =
+    !!currentUser &&
+    (currentUser.isAdmin ||
+      !!(currentEmployeeRecord && currentEmployeeRecord.canDelete && !currentEmployeeRecord.isAccounting));
   // A separate permission axis from ticket access: whether this account can add/edit/
   // remove saved company records (name, tax number, commercial register, phone numbers).
   const canManageCompanies =
@@ -1695,6 +1837,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <ShieldCheck size={11} /> Main account
                   </span>
                 )}
+                {!currentUser.isAdmin && currentEmployeeRecord && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-stone-600 bg-stone-100 border border-stone-200 rounded-full px-2 py-0.5">
+                    {roleLabel(currentEmployeeRecord.role)}
+                  </span>
+                )}
                 {!currentUser.isAdmin && !canViewAllTickets && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-stone-500 bg-stone-100 border border-stone-200 rounded-full px-2 py-0.5">
                     Your own tickets only
@@ -1827,7 +1974,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="bg-white rounded-xl border border-stone-200 p-4 md:p-5 mb-6">
             <h2 className="font-semibold text-stone-900 mb-1">Employee accounts</h2>
             <p className="text-xs text-stone-400 mb-4">
-              As the main account, you can view and change every employee's password, edit their name or username, add or remove accounts, control who can see all tickets, and grant or remove main-account access. This is a basic access gate, not a secure authentication system — anyone with technical access to the app's stored data can read these passwords. Avoid reusing important passwords here.
+              As the main account, you can view and change every employee's password, edit their name or username, add or remove accounts, assign a grade (Manager, Supervisor, Employee, Accountant), and grant or remove main-account access. A grade fills in a starting set of permissions, but every permission — view all tickets, add tickets, edit tickets, delete tickets, accounting/notes-only mode, and manage companies — is an individual on/off switch you can set by hand for each employee, click the Permissions button on their row to open it. This is a basic access gate, not a secure authentication system — anyone with technical access to the app's stored data can read these passwords. Avoid reusing important passwords here.
             </p>
             {manageError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-3">{manageError}</div>}
             <p className="text-xs text-stone-500 mb-3 flex items-center gap-1.5">
@@ -1842,9 +1989,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <th className="text-left px-3 py-2 font-medium">Name</th>
                     <th className="text-left px-3 py-2 font-medium">Username</th>
                     <th className="text-left px-3 py-2 font-medium">Password</th>
-                    <th className="text-left px-3 py-2 font-medium">Role</th>
-                    <th className="text-left px-3 py-2 font-medium">Access</th>
-                    <th className="text-left px-3 py-2 font-medium">Companies</th>
+                    <th className="text-left px-3 py-2 font-medium">Grade</th>
+                    <th className="text-left px-3 py-2 font-medium">Permissions</th>
                     <th className="text-left px-3 py-2 font-medium"></th>
                   </tr>
                 </thead>
@@ -1897,34 +2043,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 <ShieldCheck size={11} /> Main
                               </span>
                             ) : (
-                              "Employee"
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-stone-500">
-                            {e.isAdmin ? (
-                              <span className="text-xs">Always (Main account)</span>
-                            ) : (
                               <select
-                                value={e.isAccounting ? "accounting" : e.canEdit ? "all" : e.canViewAll ? "view" : "own"}
-                                onChange={(ev) => handleAccessChange(e.username, ev.target.value)}
+                                value={e.role || "employee"}
+                                onChange={(ev) => handleRoleChange(e.username, ev.target.value)}
                                 className="border border-stone-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
                               >
-                                <option value="own">Own tickets only</option>
-                                <option value="view">View all tickets (no edit)</option>
-                                <option value="all">All tickets (view &amp; edit)</option>
-                                <option value="accounting">Accounting (view + notes only)</option>
+                                {EMPLOYEE_ROLES.map((r) => (
+                                  <option key={r.value} value={r.value}>{r.label}</option>
+                                ))}
                               </select>
                             )}
                           </td>
                           <td className="px-3 py-2">
                             {e.isAdmin ? (
-                              <span className="text-xs text-stone-400">Always</span>
+                              <span className="text-xs text-stone-400">Everything (main account)</span>
                             ) : (
-                              <input
-                                type="checkbox"
-                                checked={!!e.canManageCompanies}
-                                onChange={(ev) => handleToggleManageCompanies(e.username, ev.target.checked)}
-                                className="w-4 h-4 accent-teal-800"
+                              <PermissionsCell
+                                emp={e}
+                                open={openPermissionsFor === e.username}
+                                onToggleOpen={() => setOpenPermissionsFor(openPermissionsFor === e.username ? null : e.username)}
+                                onSetPermission={(field, value) => handleTogglePermission(e.username, field, value)}
                               />
                             )}
                           </td>
@@ -1967,34 +2105,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <ShieldCheck size={11} /> Main
                             </span>
                           ) : (
-                            "Employee"
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-stone-500">
-                          {e.isAdmin ? (
-                            <span className="text-xs">Always (Main account)</span>
-                          ) : (
                             <select
-                              value={e.isAccounting ? "accounting" : e.canEdit ? "all" : e.canViewAll ? "view" : "own"}
-                              onChange={(ev) => handleAccessChange(e.username, ev.target.value)}
+                              value={e.role || "employee"}
+                              onChange={(ev) => handleRoleChange(e.username, ev.target.value)}
                               className="border border-stone-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
                             >
-                              <option value="own">Own tickets only</option>
-                              <option value="view">View all tickets (no edit)</option>
-                              <option value="all">All tickets (view &amp; edit)</option>
-                              <option value="accounting">Accounting (view + notes only)</option>
+                              {EMPLOYEE_ROLES.map((r) => (
+                                <option key={r.value} value={r.value}>{r.label}</option>
+                              ))}
                             </select>
                           )}
                         </td>
                         <td className="px-3 py-2">
                           {e.isAdmin ? (
-                            <span className="text-xs text-stone-400">Always</span>
+                            <span className="text-xs text-stone-400">Everything (main account)</span>
                           ) : (
-                            <input
-                              type="checkbox"
-                              checked={!!e.canManageCompanies}
-                              onChange={(ev) => handleToggleManageCompanies(e.username, ev.target.checked)}
-                              className="w-4 h-4 accent-teal-800"
+                            <PermissionsCell
+                              emp={e}
+                              open={openPermissionsFor === e.username}
+                              onToggleOpen={() => setOpenPermissionsFor(openPermissionsFor === e.username ? null : e.username)}
+                              onSetPermission={(field, value) => handleTogglePermission(e.username, field, value)}
                             />
                           )}
                         </td>
@@ -2045,8 +2175,32 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
             </div>
 
-            {/* Multi-select permissions picker: choose any combination of view/edit
-                access to grant this employee before creating the account. */}
+            {/* Grade: picking one fills the toggles below with a sensible starting
+                point. Every toggle can still be switched by hand afterwards. */}
+            <div className="mt-3 max-w-sm">
+              <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {EMPLOYEE_ROLES.map((r) => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    onClick={() =>
+                      setNewEmployee({ ...newEmployee, role: r.value, ...ROLE_PRESETS[r.value] })
+                    }
+                    className={`text-xs font-semibold rounded-lg px-2 py-2 border transition-colors ${
+                      newEmployee.role === r.value
+                        ? "bg-teal-800 text-white border-teal-800"
+                        : "bg-white text-stone-600 border-stone-300 hover:bg-stone-50"
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Detailed, individually switchable permissions — the grade above is only a
+                starting point; every toggle here can be set by hand regardless of grade. */}
             <div className="relative mt-3 max-w-sm">
               <button
                 type="button"
@@ -2055,71 +2209,61 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               >
                 <span className="font-medium">Permissions</span>
                 <span className="text-xs text-stone-500 truncate">
-                  {(newEmployee.isAccounting
-                    ? "Accounting (view all, notes only)"
-                    : newEmployee.canEdit
-                    ? "View all tickets + edit"
-                    : newEmployee.canViewAll
-                    ? "View all tickets, no edit"
-                    : "Own tickets only") + (newEmployee.canManageCompanies ? " · Companies" : "")}
+                  {[
+                    newEmployee.canViewAll && "View all",
+                    newEmployee.canAdd && "Add",
+                    newEmployee.canEdit && "Edit",
+                    newEmployee.canDelete && "Delete",
+                    newEmployee.isAccounting && "Notes only",
+                    newEmployee.canManageCompanies && "Companies",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "Own tickets only"}
                 </span>
               </button>
 
               {showNewEmployeePerms && (
-                <div className="absolute z-10 mt-1 w-full bg-white border border-stone-300 rounded-lg shadow-lg p-3 space-y-2.5">
-                  <label className="flex items-center gap-2 text-sm text-stone-700">
-                    <input
-                      type="checkbox"
-                      checked={newEmployee.canViewAll || newEmployee.canEdit}
-                      disabled={newEmployee.isAccounting || newEmployee.canEdit}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, canViewAll: e.target.checked })}
-                    />
-                    View all tickets
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-stone-700">
-                    <input
-                      type="checkbox"
-                      checked={newEmployee.canEdit}
-                      disabled={newEmployee.isAccounting}
-                      onChange={(e) =>
-                        setNewEmployee({
-                          ...newEmployee,
-                          canEdit: e.target.checked,
-                          // Editing every ticket requires seeing every ticket first.
-                          canViewAll: e.target.checked ? true : newEmployee.canViewAll,
-                        })
-                      }
-                    />
-                    Edit tickets (all tickets, view access included automatically)
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-stone-700 border-t border-stone-100 pt-2.5">
-                    <input
-                      type="checkbox"
-                      checked={newEmployee.isAccounting}
-                      onChange={(e) =>
-                        setNewEmployee({
-                          ...newEmployee,
-                          isAccounting: e.target.checked,
-                          // Accounting always implies full view access and no ticket editing.
-                          canViewAll: e.target.checked ? true : newEmployee.canViewAll,
-                          canEdit: e.target.checked ? false : newEmployee.canEdit,
-                        })
-                      }
-                    />
-                    Accounting (view all, notes only)
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-stone-700 border-t border-stone-100 pt-2.5">
-                    <input
-                      type="checkbox"
-                      checked={newEmployee.canManageCompanies}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, canManageCompanies: e.target.checked })}
-                    />
-                    Manage companies (add/edit/remove saved company records)
-                  </label>
-                  <p className="text-[11px] text-stone-400 border-t border-stone-100 pt-2">
-                    Leave everything unchecked for "own tickets only" (default): the employee
-                    will only see and add the tickets they personally enter.
-                  </p>
+                <div className="absolute z-10 mt-1 w-full bg-white border border-stone-300 rounded-lg shadow-lg p-3 divide-y divide-stone-100">
+                  <ToggleSwitch
+                    label="View all tickets"
+                    description="See every employee's tickets, not just their own"
+                    checked={newEmployee.canViewAll || newEmployee.canEdit || newEmployee.canDelete}
+                    disabled={newEmployee.isAccounting || newEmployee.canEdit || newEmployee.canDelete}
+                    onChange={(v) => setNewEmployee(reconcilePermissions({ ...newEmployee, canViewAll: v }))}
+                  />
+                  <ToggleSwitch
+                    label="Add tickets"
+                    description="Create new tickets"
+                    checked={newEmployee.canAdd}
+                    disabled={newEmployee.isAccounting}
+                    onChange={(v) => setNewEmployee(reconcilePermissions({ ...newEmployee, canAdd: v }))}
+                  />
+                  <ToggleSwitch
+                    label="Edit tickets"
+                    description="Edit any ticket they can see (view access included automatically)"
+                    checked={newEmployee.canEdit}
+                    disabled={newEmployee.isAccounting}
+                    onChange={(v) => setNewEmployee(reconcilePermissions({ ...newEmployee, canEdit: v }))}
+                  />
+                  <ToggleSwitch
+                    label="Delete tickets"
+                    description="Permanently remove any ticket they can see"
+                    checked={newEmployee.canDelete}
+                    disabled={newEmployee.isAccounting}
+                    onChange={(v) => setNewEmployee(reconcilePermissions({ ...newEmployee, canDelete: v }))}
+                  />
+                  <ToggleSwitch
+                    label="Accounting mode"
+                    description="View all tickets, but the only edit allowed is the Notes field"
+                    checked={newEmployee.isAccounting}
+                    onChange={(v) => setNewEmployee(reconcilePermissions({ ...newEmployee, isAccounting: v }))}
+                  />
+                  <ToggleSwitch
+                    label="Manage companies"
+                    description="Add, edit, or remove saved company records"
+                    checked={newEmployee.canManageCompanies}
+                    onChange={(v) => setNewEmployee({ ...newEmployee, canManageCompanies: v })}
+                  />
                 </div>
               )}
             </div>
@@ -2400,8 +2544,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         </div>
 
-        {/* Entry form (accounting accounts are view-only + notes-only, so this is hidden for them) */}
-        {!isAccountingUser && (
+        {/* Entry form: hidden for accounting accounts (view-only + notes-only), and for
+            anyone with neither add nor edit permission. Shown while editing an existing
+            ticket as long as the person has edit access, even if add access is off. */}
+        {!isAccountingUser && (canAddTickets || (form.id && canEditTickets)) && (
         <div className="bg-white rounded-xl border border-stone-200 p-4 md:p-5 mb-6">
           <h2 className="font-semibold text-stone-900 mb-4">{form.id ? "Edit ticket" : "Add a new ticket"}</h2>
           {error && (
@@ -2787,7 +2933,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <button onClick={(ev) => { ev.stopPropagation(); handleEdit(t); }} className="text-stone-400 hover:text-teal-800 p-0.5">
                                 <Pencil size={13} />
                               </button>
-                              {currentUser.isAdmin && (
+                              {(currentUser.isAdmin || canDeleteTickets) && (
                                 <button onClick={(ev) => { ev.stopPropagation(); handleDelete(t.id); }} className="text-stone-400 hover:text-red-600 p-0.5">
                                   <Trash2 size={13} />
                                 </button>
