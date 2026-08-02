@@ -2504,9 +2504,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <input
                 type="date"
                 lang="en-GB"
+                max={todayDateStr()}
                 className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  // Belt-and-braces: some browsers still let a future date be typed
+                  // manually even with `max` set, so clamp it back to today here too.
+                  setForm({ ...form, date: v > todayDateStr() ? todayDateStr() : v });
+                }}
               />
             </div>
             <div>
