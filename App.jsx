@@ -42,6 +42,9 @@ const formatDateTime = (iso) => {
 
 const emptyCustomerRow = () => ({ name: "", ticketNumber: "" });
 
+// Ticket supplier / booking source options.
+const SUPPLIERS = ["Amadeus", "Sabre", "NDC", "Lowcost"];
+
 // Saved companies were originally plain strings; this reads the name whether an entry
 // is still a legacy string or the newer { name, taxNumber, commercialReg, phones } record.
 const companyName = (c) => (typeof c === "string" ? c : (c && c.name) || "");
@@ -52,15 +55,15 @@ const emptyForm = {
   id: null,
   employee: "",
   company: "",
+  supplier: "",
   customersCount: 1,
   customers: [emptyCustomerRow()],
   from: "",
   to: "",
   airline: "",
   date: "",
-  basePrice: "",
-  tax: "",
-  totalPrice: "",
+  netPrice: "",
+  soldPrice: "",
   notes: "",
 };
 
@@ -362,7 +365,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [notesDraft, setNotesDraft] = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
   const [selectedCompany, setSelectedCompany] = useState("");
+  const [selectedEmployee, setSelectedEmployee] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState("");
 
   // Every value ever entered (companies, customers, airlines, cities) is kept here so it
   // can be offered as an autocomplete suggestion later, even if the original ticket is deleted.
@@ -396,7 +402,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             const parsed = JSON.parse(suggestionsRes.value);
             setSuggestions({
               companies: parsed.companies || [],
-              customers: parsed.customers || [],
+              customers: [], // never restore saved customer names — this field must have no autocomplete history
               airlines: parsed.airlines || [],
               cities: parsed.cities || [],
             });
@@ -455,7 +461,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             const parsed = JSON.parse(suggestionsRes.value);
             setSuggestions({
               companies: parsed.companies || [],
-              customers: parsed.customers || [],
+              customers: [], // never restore saved customer names — this field must have no autocomplete history
               airlines: parsed.airlines || [],
               cities: parsed.cities || [],
             });
@@ -595,7 +601,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     };
     let next = {
       companies: [...suggestions.companies],
-      customers: [...suggestions.customers],
+      // Customer names are intentionally never remembered here — the customer field
+      // must never offer autocomplete/history of previously typed names.
+      customers: [],
       airlines: [...suggestions.airlines],
       cities: [...suggestions.cities],
     };
@@ -603,9 +611,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     next.airlines = addUnique(next.airlines, record.airline);
     next.cities = addUnique(next.cities, record.from);
     next.cities = addUnique(next.cities, record.to);
-    (record.customers || []).forEach((c) => {
-      next.customers = addUnique(next.customers, c.name);
-    });
     persistSuggestions(next);
   };
 
@@ -672,11 +677,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (editingCompanyName === name) cancelEditCompany();
   };
 
-  const profit = (base, total, tax) => {
-    const b = parseFloat(base) || 0;
-    const t = parseFloat(total) || 0;
-    const x = parseFloat(tax) || 0;
-    return t - b - x;
+  const profit = (net, sold) => {
+    const n = parseFloat(net) || 0;
+    const s = parseFloat(sold) || 0;
+    return s - n;
   };
 
   // ---------- Auth ----------
@@ -977,7 +981,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const s = parsed.suggestions || {};
       const normalizedSuggestions = {
         companies: Array.isArray(s.companies) ? s.companies : [],
-        customers: Array.isArray(s.customers) ? s.customers : [],
+        // Never restore saved customer names — this field must have no autocomplete history.
+        customers: [],
         airlines: Array.isArray(s.airlines) ? s.airlines : [],
         cities: Array.isArray(s.cities) ? s.cities : [],
       };
@@ -1013,13 +1018,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const changes = [];
     const fieldLabels = {
       company: "Company",
+      supplier: "Supplier",
       from: "From",
       to: "To",
       airline: "Airline",
       date: "Date",
-      basePrice: "Base price",
-      tax: "Tax",
-      totalPrice: "Total price",
+      netPrice: "Net price",
+      soldPrice: "Sold price",
     };
     Object.keys(fieldLabels).forEach((key) => {
       const beforeVal = before[key] ?? "";
@@ -1053,7 +1058,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const customers = form.customers || [];
     const customersValid =
       customers.length > 0 && customers.every((c) => c.name.trim() && c.ticketNumber.trim());
-    if (!customersValid || !form.from.trim() || !form.to.trim() || form.basePrice === "" || form.totalPrice === "") {
+    if (!customersValid || !form.from.trim() || !form.to.trim() || form.netPrice === "" || form.soldPrice === "") {
       setError("Please enter at least the customer name(s), ticket number(s), destinations, and prices");
       return;
     }
@@ -1257,28 +1262,58 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         t.employeeUsername ? t.employeeUsername === currentUser.username : t.employee === currentUser.name
       );
 
+  const getCustomers = (t) =>
+    Array.isArray(t.customers) && t.customers.length > 0
+      ? t.customers
+      : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
+
   const monthsAvailable = Array.from(new Set(visibleTickets.map((t) => monthKey(t.date)))).sort((a, b) =>
     b.localeCompare(a)
   );
 
+  const yearsAvailable = Array.from(
+    new Set(
+      visibleTickets
+        .map((t) => (t.date ? t.date.slice(0, 4) : ""))
+        .filter(Boolean)
+    )
+  ).sort((a, b) => b.localeCompare(a));
+
   const companiesAvailable = Array.from(
     new Set(visibleTickets.map((t) => (t.company || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const employeesAvailable = Array.from(
+    new Set(visibleTickets.map((t) => (t.employee || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const customersAvailable = Array.from(
+    new Set(
+      visibleTickets.flatMap((t) => getCustomers(t).map((c) => (c.name || "").trim())).filter(Boolean)
+    )
   ).sort((a, b) => a.localeCompare(b));
 
   const byMonth = selectedMonth
     ? visibleTickets.filter((t) => monthKey(t.date) === selectedMonth)
     : visibleTickets;
 
-  const byCompany = selectedCompany
-    ? byMonth.filter((t) => (t.company || "").trim() === selectedCompany)
+  const byYear = selectedYear
+    ? byMonth.filter((t) => (t.date || "").slice(0, 4) === selectedYear)
     : byMonth;
 
-  const getCustomers = (t) =>
-    Array.isArray(t.customers) && t.customers.length > 0
-      ? t.customers
-      : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
+  const byCompany = selectedCompany
+    ? byYear.filter((t) => (t.company || "").trim() === selectedCompany)
+    : byYear;
 
-  const filtered = byCompany.filter((t) => {
+  const byEmployee = selectedEmployee
+    ? byCompany.filter((t) => (t.employee || "").trim() === selectedEmployee)
+    : byCompany;
+
+  const byCustomer = selectedCustomer
+    ? byEmployee.filter((t) => getCustomers(t).some((c) => (c.name || "").trim() === selectedCustomer))
+    : byEmployee;
+
+  const filtered = byCustomer.filter((t) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
     const customers = getCustomers(t);
@@ -1317,14 +1352,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       (acc, t) => {
         const n = getCustomers(t).length || 1;
         acc.count += n;
-        acc.total += (parseFloat(t.totalPrice) || 0) * n;
-        acc.profit += profit(t.basePrice, t.totalPrice, t.tax) * n;
+        acc.total += (parseFloat(t.soldPrice) || 0) * n;
+        acc.profit += profit(t.netPrice, t.soldPrice) * n;
         return acc;
       },
       { count: 0, total: 0, profit: 0 }
     );
 
-  const totals = countAndSum(byCompany);
+  const totals = countAndSum(byCustomer);
 
   const monthlyBreakdown = monthsAvailable.map((key) => {
     const rows = visibleTickets.filter((t) => monthKey(t.date) === key);
@@ -1339,12 +1374,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return { name, customers, ...countAndSum(rows) };
   });
 
-  const ticketRows = (rows) =>
-    rows.flatMap((t) => {
+  // Builds the per-customer row list for one ticket set, sorted by issue date
+  // (earliest first; undated tickets pushed to the end).
+  const ticketRows = (rows) => {
+    const sorted = [...rows].sort((a, b) => {
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return 1;
+      if (!b.date) return -1;
+      return a.date.localeCompare(b.date);
+    });
+    return sorted.flatMap((t) => {
       const customers = getCustomers(t);
       return customers.map((c, i) => ({
         "Employee": t.employee || "",
         "Company": t.company || "",
+        "Supplier": t.supplier || "",
         "Customer #": i + 1,
         "Customer": c.name || "",
         "Ticket number": c.ticketNumber || "",
@@ -1352,18 +1396,47 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         "To": t.to,
         "Airline": t.airline || "",
         "Issue date": t.date ? formatDisplayDate(t.date) : "",
-        // Base/total/tax price and profit reflect the whole booking and are shown once, on the first customer's row
-        "Base price": i === 0 ? parseFloat(t.basePrice) || 0 : "",
-        "Taxes": i === 0 ? parseFloat(t.tax) || 0 : "",
-        "Total price": i === 0 ? parseFloat(t.totalPrice) || 0 : "",
-        "Profit": i === 0 ? profit(t.basePrice, t.totalPrice, t.tax) : "",
+        // Net/sold price and profit reflect the whole booking and are shown once, on the first customer's row
+        "Net price": i === 0 ? parseFloat(t.netPrice) || 0 : "",
+        "Sold price": i === 0 ? parseFloat(t.soldPrice) || 0 : "",
+        "Profit": i === 0 ? profit(t.netPrice, t.soldPrice) : "",
         "Notes": t.notes || "",
       }));
     });
+  };
+
+  // Sums net price / sold price / profit across a raw ticket list (once per booking,
+  // matching how those columns are only populated on each booking's first row above).
+  const sumTicketPrices = (rows) =>
+    rows.reduce(
+      (acc, t) => {
+        acc.net += parseFloat(t.netPrice) || 0;
+        acc.sold += parseFloat(t.soldPrice) || 0;
+        acc.profit += profit(t.netPrice, t.soldPrice);
+        return acc;
+      },
+      { net: 0, sold: 0, profit: 0 }
+    );
+
+  // Appends a totals row (net price / sold price / profit) to the end of a sheet's rows.
+  const rowsWithTotals = (rows) => {
+    const sums = sumTicketPrices(rows);
+    return [
+      ...ticketRows(rows),
+      {
+        "Employee": "", "Company": "", "Supplier": "", "Customer #": "", "Customer": "",
+        "Ticket number": "", "From": "", "To": "", "Airline": "", "Issue date": "TOTAL",
+        "Net price": Math.round(sums.net * 100) / 100,
+        "Sold price": Math.round(sums.sold * 100) / 100,
+        "Profit": Math.round(sums.profit * 100) / 100,
+        "Notes": "",
+      },
+    ];
+  };
 
   const exportMonth = (key) => {
     const rows = visibleTickets.filter((t) => monthKey(t.date) === key);
-    const ws = XLSX.utils.json_to_sheet(ticketRows(rows));
+    const ws = XLSX.utils.json_to_sheet(rowsWithTotals(rows));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Details");
     XLSX.writeFile(wb, `tickets_${key}.xlsx`);
@@ -1383,12 +1456,32 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
     monthlyBreakdown.forEach((m) => {
       const rows = visibleTickets.filter((t) => monthKey(t.date) === m.key);
-      const ws = XLSX.utils.json_to_sheet(ticketRows(rows));
+      const ws = XLSX.utils.json_to_sheet(rowsWithTotals(rows));
       const safeName = m.key.replace(/[:\\\/\?\*\[\]]/g, "-").slice(0, 31);
       XLSX.utils.book_append_sheet(wb, ws, safeName);
     });
 
     XLSX.writeFile(wb, "monthly_ticket_totals.xlsx");
+  };
+
+  // Exports exactly the tickets matching the currently selected month / year / company /
+  // employee / customer filters (any combination), sorted by issue date, as a single sheet
+  // ending with a Net price / Sold price / Profit totals row.
+  const hasActiveFilter = !!(selectedMonth || selectedYear || selectedCompany || selectedEmployee || selectedCustomer);
+  const exportFiltered = () => {
+    const ws = XLSX.utils.json_to_sheet(rowsWithTotals(byCustomer));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Details");
+    const parts = [
+      selectedYear,
+      selectedMonth,
+      selectedCompany,
+      selectedEmployee,
+      selectedCustomer,
+    ]
+      .filter(Boolean)
+      .map((p) => p.replace(/[^a-zA-Z0-9-]+/g, "_"));
+    XLSX.writeFile(wb, `tickets_${parts.length ? parts.join("_") : "filtered"}.xlsx`);
   };
 
   const fmt = (n) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n);
@@ -2123,15 +2216,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm text-slate-500">
             Totals for: <span className="font-semibold text-slate-700">
-              {selectedMonth ? monthLabel(selectedMonth) : "all months"}
+              {selectedYear ? selectedYear : ""}
+              {selectedMonth ? ` · ${monthLabel(selectedMonth)}` : ""}
               {selectedCompany ? ` · ${selectedCompany}` : ""}
+              {selectedEmployee ? ` · ${selectedEmployee}` : ""}
+              {selectedCustomer ? ` · ${selectedCustomer}` : ""}
+              {!hasActiveFilter && "all months"}
             </span>
           </p>
           <button
-            onClick={() => (selectedMonth ? exportMonth(selectedMonth) : exportAllMonths())}
+            onClick={() => (hasActiveFilter ? exportFiltered() : exportAllMonths())}
             className="text-teal-700 border border-teal-700 hover:bg-teal-50 text-xs font-semibold rounded-lg px-3 py-1.5 flex items-center gap-1.5"
           >
-            <Download size={14} /> {selectedMonth ? "Export this month to Excel" : "Export all months to Excel"}
+            <Download size={14} /> {hasActiveFilter ? "Export filtered results to Excel" : "Export all months to Excel"}
           </button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
@@ -2199,6 +2296,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 placeholder="1"
               />
             </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Supplier</label>
+              <select
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white"
+                value={form.supplier}
+                onChange={(e) => setForm({ ...form, supplier: e.target.value })}
+              >
+                <option value="">Select supplier</option>
+                {SUPPLIERS.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Dynamic customer name + ticket number cells, one row per customer */}
@@ -2214,7 +2324,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     value={c.name}
                     onChange={(e) => handleCustomerFieldChange(i, "name", e.target.value)}
                     placeholder={`Customer ${i + 1} name`}
-                    list="customer-suggestions"
                   />
                   <input
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
@@ -2269,39 +2378,29 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               />
             </div>
             <div>
-              <label className="text-xs text-slate-500 block mb-1">Base price</label>
+              <label className="text-xs text-slate-500 block mb-1">Net price</label>
               <input
                 type="number"
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
-                value={form.basePrice}
-                onChange={(e) => setForm({ ...form, basePrice: e.target.value })}
+                value={form.netPrice}
+                onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
                 placeholder="0"
               />
             </div>
             <div>
-              <label className="text-xs text-slate-500 block mb-1">Taxes</label>
+              <label className="text-xs text-slate-500 block mb-1">Sold price</label>
               <input
                 type="number"
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
-                value={form.tax}
-                onChange={(e) => setForm({ ...form, tax: e.target.value })}
-                placeholder="0"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 block mb-1">Total price</label>
-              <input
-                type="number"
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
-                value={form.totalPrice}
-                onChange={(e) => setForm({ ...form, totalPrice: e.target.value })}
+                value={form.soldPrice}
+                onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
                 placeholder="0"
               />
             </div>
             <div>
               <label className="text-xs text-slate-500 block mb-1">Profit (auto)</label>
               <div className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-sm text-emerald-700 font-semibold">
-                {fmt(profit(form.basePrice, form.totalPrice, form.tax))}
+                {fmt(profit(form.netPrice, form.soldPrice))}
               </div>
             </div>
             <div className="md:col-span-3">
@@ -2345,6 +2444,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
+          <div className="relative sm:w-40">
+            <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <select
+              className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white appearance-none"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+            >
+              <option value="">All years</option>
+              {yearsAvailable.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
           <div className="relative sm:w-56">
             <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <select
@@ -2371,16 +2483,37 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               ))}
             </select>
           </div>
+          <div className="relative sm:w-56">
+            <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <select
+              className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white appearance-none"
+              value={selectedEmployee}
+              onChange={(e) => setSelectedEmployee(e.target.value)}
+            >
+              <option value="">All employees</option>
+              {employeesAvailable.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="relative sm:w-56">
+            <Users size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <select
+              className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white appearance-none"
+              value={selectedCustomer}
+              onChange={(e) => setSelectedCustomer(e.target.value)}
+            >
+              <option value="">All customers</option>
+              {customersAvailable.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <datalist id="company-suggestions">
           {suggestions.companies.map((c) => (
             <option key={companyName(c)} value={companyName(c)} />
-          ))}
-        </datalist>
-        <datalist id="customer-suggestions">
-          {suggestions.customers.map((name) => (
-            <option key={name} value={name} />
           ))}
         </datalist>
         <datalist id="airline-suggestions">
@@ -2413,14 +2546,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <tr className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Employee</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Company</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Supplier</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Ticket #</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Customer</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Route</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Airline</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Date</th>
-                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Base</th>
-                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Taxes</th>
-                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Total</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net price</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Sold price</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Profit</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap"></th>
                   </tr>
@@ -2437,6 +2570,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       >
                         <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.employee || "-"}</td>
                         <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.company || "-"}</td>
+                        <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.supplier || "-"}</td>
                         <td className="px-2.5 py-1 text-slate-600 font-mono whitespace-nowrap">
                           {c.ticketNumber || "-"}
                         </td>
@@ -2456,10 +2590,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.from} → {t.to}</td>
                         <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.airline || "-"}</td>
                         <td className="px-2.5 py-1 text-slate-600 whitespace-nowrap">{t.date ? formatDisplayDate(t.date) : "-"}</td>
-                        <td className="px-2.5 py-1 text-slate-600 text-right whitespace-nowrap">{fmt(t.basePrice)}</td>
-                        <td className="px-2.5 py-1 text-slate-600 text-right whitespace-nowrap">{fmt(t.tax)}</td>
-                        <td className="px-2.5 py-1 text-slate-600 text-right whitespace-nowrap">{fmt(t.totalPrice)}</td>
-                        <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.basePrice, t.totalPrice, t.tax))}</td>
+                        <td className="px-2.5 py-1 text-slate-600 text-right whitespace-nowrap">{fmt(t.netPrice)}</td>
+                        <td className="px-2.5 py-1 text-slate-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
+                        <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
                         <td className="px-2.5 py-1 text-right whitespace-nowrap">
                           {(currentUser.isAdmin || canEditTickets) ? (
                             <div className="flex gap-0.5 justify-end">
@@ -2599,6 +2732,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <p className="text-sm font-medium text-slate-800">{viewingTicket.company || "-"}</p>
                 </div>
                 <div>
+                  <p className="text-xs text-slate-400 mb-1">Supplier</p>
+                  <p className="text-sm font-medium text-slate-800">{viewingTicket.supplier || "-"}</p>
+                </div>
+                <div>
                   <p className="text-xs text-slate-400 mb-1">Route</p>
                   <p className="text-sm font-medium text-slate-800">{viewingTicket.from} → {viewingTicket.to}</p>
                 </div>
@@ -2638,23 +2775,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 md:p-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 md:p-5">
                 <div>
-                  <p className="text-xs text-slate-400 mb-1">Base price</p>
-                  <p className="text-sm font-medium text-slate-800">{fmt(viewingTicket.basePrice)}</p>
+                  <p className="text-xs text-slate-400 mb-1">Net price</p>
+                  <p className="text-sm font-medium text-slate-800">{fmt(viewingTicket.netPrice)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400 mb-1">Taxes</p>
-                  <p className="text-sm font-medium text-slate-800">{fmt(viewingTicket.tax)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400 mb-1">Total price</p>
-                  <p className="text-sm font-medium text-slate-800">{fmt(viewingTicket.totalPrice)}</p>
+                  <p className="text-xs text-slate-400 mb-1">Sold price</p>
+                  <p className="text-sm font-medium text-slate-800">{fmt(viewingTicket.soldPrice)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400 mb-1">Profit</p>
                   <p className="text-sm font-semibold text-emerald-700">
-                    {fmt(profit(viewingTicket.basePrice, viewingTicket.totalPrice, viewingTicket.tax))}
+                    {fmt(profit(viewingTicket.netPrice, viewingTicket.soldPrice))}
                   </p>
                 </div>
               </div>
