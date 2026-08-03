@@ -2380,6 +2380,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return b.date.localeCompare(a.date);
   });
 
+  // Reissue chains: when a reissued ticket's original ticket is also visible in this
+  // filtered/sorted list, nest the reissued ticket under that original row instead of
+  // showing it a second time as its own separate top-level row further down the table.
+  const reissueChildrenByParentId = {};
+  const hiddenReissueChildIds = new Set();
+  {
+    const visibleIds = new Set(sortedFiltered.map((x) => x.id));
+    sortedFiltered.forEach((t2) => {
+      if (!t2.isReissued) return;
+      const parent = findTicketByNumber(t2.oldTicketNumber);
+      if (parent && parent.id !== t2.id && visibleIds.has(parent.id)) {
+        if (!reissueChildrenByParentId[parent.id]) reissueChildrenByParentId[parent.id] = [];
+        reissueChildrenByParentId[parent.id].push(t2);
+        hiddenReissueChildIds.add(t2.id);
+      }
+    });
+  }
+
   // The ticket currently open in the detail "page", if any.
   const viewingTicket = viewingTicketId ? visibleTickets.find((t) => t.id === viewingTicketId) : null;
 
@@ -2791,6 +2809,147 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       </div>
     );
   }
+
+  // Builds one ticket's row(s) for the main table: a row per customer, plus a refund
+  // sub-row if a refund has been recorded on this specific ticket. Used both for a
+  // ticket's normal top-level appearance and — with nested: true — for a reissued
+  // ticket shown directly under the original ticket it replaced.
+  const buildTicketRows = (t, { nested = false } = {}) => {
+    const customers = getCustomers(t);
+    const isMulti = customers.length > 1;
+    const rows = customers.map((c, i) => (
+      <tr
+        key={`${t.id}-${i}`}
+        onClick={() => openTicketDetail(t)}
+        className={`border-t leading-tight cursor-pointer ${
+          nested
+            ? `border-dashed border-amber-200 bg-amber-50/50 hover:bg-amber-100/50 ${i > 0 ? "border-t-0" : ""}`
+            : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-teal-50/60"}`
+        }`}
+      >
+        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
+          {nested && i === 0 && <span className="text-amber-500 mr-1">↳</span>}
+          {t.employee || "-"}
+        </td>
+        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
+          {t.company && t.company.trim() ? (
+            t.company
+          ) : (
+            <span className="text-stone-400 italic">Individual</span>
+          )}
+        </td>
+        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.supplier || "-"}</td>
+        <td className="px-2.5 py-1 text-stone-600 font-mono whitespace-nowrap">
+          <span className="inline-flex items-center gap-1.5">
+            {c.ticketNumber || "-"}
+            {t.isReissued && (
+              <span
+                title={`Reissued from ${t.oldTicketNumber || "an older ticket"}`}
+                className="inline-flex items-center text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5"
+              >
+                Reissued{t.oldTicketNumber ? ` (orig: ${t.oldTicketNumber})` : ""}
+              </span>
+            )}
+            {hasRefund(t) && (t.refund.customerIndex || 0) === i && (
+              <span
+                title={`Refunded — Airline: ${fmt(t.refund.airlineAmount)} · Customer: ${fmt(t.refund.customerAmount)}`}
+                className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5"
+              >
+                Refunded
+              </span>
+            )}
+          </span>
+        </td>
+        <td className="px-2.5 py-1 font-medium text-stone-800 whitespace-nowrap">
+          <span className="inline-flex items-center gap-1.5">
+            {c.name || "-"}
+            {isMulti && i === 0 && (
+              <span
+                title={`This booking has ${customers.length} customers / tickets`}
+                className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5"
+              >
+                <Users size={10} /> {customers.length}
+              </span>
+            )}
+          </span>
+        </td>
+        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{routeLabel(t)}</td>
+        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
+          {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
+        </td>
+        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.date ? formatDisplayDate(t.date) : "-"}</td>
+        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.netPrice)}</td>
+        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
+        <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
+        <td className="px-2.5 py-1 text-right whitespace-nowrap">
+          {(currentUser.isAdmin || canEditTickets) ? (
+            <div className="flex gap-0.5 justify-end">
+              <button onClick={(ev) => { ev.stopPropagation(); handleEdit(t); }} className="text-stone-400 hover:text-teal-800 p-0.5">
+                <Pencil size={13} />
+              </button>
+              {(currentUser.isAdmin || canDeleteTickets) && (
+                <button onClick={(ev) => { ev.stopPropagation(); handleDelete(t.id); }} className="text-stone-400 hover:text-red-600 p-0.5">
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </div>
+          ) : (
+            <span className="text-stone-300 text-[11px] block text-right">—</span>
+          )}
+        </td>
+      </tr>
+    ));
+    if (hasRefund(t)) {
+      const refundedCustomer = customers[t.refund.customerIndex || 0];
+      const refundTicketNumber = (refundedCustomer && refundedCustomer.ticketNumber) || (customers[0] && customers[0].ticketNumber) || "-";
+      rows.push(
+        <tr
+          key={`${t.id}-refund`}
+          onClick={() => openTicketDetail(t)}
+          className="border-t border-dashed border-sky-200 bg-sky-50/60 leading-tight cursor-pointer hover:bg-sky-100/60"
+        >
+          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{t.employee || "-"}</td>
+          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">
+            {t.company && t.company.trim() ? t.company : <span className="text-sky-400 italic">Individual</span>}
+          </td>
+          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{t.supplier || "-"}</td>
+          <td className="px-2.5 py-1 text-sky-700 font-mono whitespace-nowrap">
+            <span className="inline-flex items-center gap-1.5">
+              {refundTicketNumber}
+              <span className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5">
+                ↳ Refund
+              </span>
+            </span>
+          </td>
+          <td className="px-2.5 py-1 font-medium text-sky-800 whitespace-nowrap">{(refundedCustomer && refundedCustomer.name) || "-"}</td>
+          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{routeLabel(t)}</td>
+          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
+            {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
+          </td>
+          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{t.refund.date ? formatDisplayDate(t.refund.date) : "-"}</td>
+          <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">{fmt(t.refund.airlineAmount)}</td>
+          <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">{fmt(t.refund.customerAmount)}</td>
+          <td className="px-2.5 py-1 font-semibold text-sky-800 text-right whitespace-nowrap">
+            {fmt((parseFloat(t.refund.airlineAmount) || 0) - (parseFloat(t.refund.customerAmount) || 0))}
+          </td>
+          <td className="px-2.5 py-1 text-right whitespace-nowrap"><span className="text-sky-300 text-[11px] block text-right">—</span></td>
+        </tr>
+      );
+    }
+    return rows;
+  };
+
+  // Renders a ticket's rows followed by (recursively) any ticket(s) that reissued it,
+  // so a chain of reissues nests under the original ticket rather than each appearing
+  // separately at its own position in the sorted table.
+  const renderTicketChain = (t, nested = false) => {
+    const rows = buildTicketRows(t, { nested });
+    const children = reissueChildrenByParentId[t.id] || [];
+    children.forEach((child) => {
+      rows.push(...renderTicketChain(child, true));
+    });
+    return rows;
+  };
 
   // ---------- Render: main app ----------
   return (
@@ -3997,174 +4156,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedFiltered.flatMap((t) => {
-                    const customers = getCustomers(t);
-                    const isMulti = customers.length > 1;
-                    const rows = customers.map((c, i) => (
-                      <tr
-                        key={`${t.id}-${i}`}
-                        onClick={() => openTicketDetail(t)}
-                        className={`border-t border-stone-100 leading-tight cursor-pointer ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-teal-50/60"}`}
-                      >
-                        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.employee || "-"}</td>
-                        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
-                          {t.company && t.company.trim() ? (
-                            t.company
-                          ) : (
-                            <span className="text-stone-400 italic">Individual</span>
-                          )}
-                        </td>
-                        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.supplier || "-"}</td>
-                        <td className="px-2.5 py-1 text-stone-600 font-mono whitespace-nowrap">
-                          <span className="inline-flex items-center gap-1.5">
-                            {c.ticketNumber || "-"}
-                            {t.isReissued && (
-                              <span
-                                title={`Reissued from ${t.oldTicketNumber || "an older ticket"}`}
-                                className="inline-flex items-center text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5"
-                              >
-                                Reissued
-                              </span>
-                            )}
-                            {hasRefund(t) && (t.refund.customerIndex || 0) === i && (
-                              <span
-                                title={`Refunded — Airline: ${fmt(t.refund.airlineAmount)} · Customer: ${fmt(t.refund.customerAmount)}`}
-                                className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5"
-                              >
-                                Refunded
-                              </span>
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-2.5 py-1 font-medium text-stone-800 whitespace-nowrap">
-                          <span className="inline-flex items-center gap-1.5">
-                            {c.name || "-"}
-                            {isMulti && i === 0 && (
-                              <span
-                                title={`This booking has ${customers.length} customers / tickets`}
-                                className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5"
-                              >
-                                <Users size={10} /> {customers.length}
-                              </span>
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{routeLabel(t)}</td>
-                        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
-                          {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
-                        </td>
-                        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.date ? formatDisplayDate(t.date) : "-"}</td>
-                        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.netPrice)}</td>
-                        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
-                        <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
-                        <td className="px-2.5 py-1 text-right whitespace-nowrap">
-                          {(currentUser.isAdmin || canEditTickets) ? (
-                            <div className="flex gap-0.5 justify-end">
-                              <button onClick={(ev) => { ev.stopPropagation(); handleEdit(t); }} className="text-stone-400 hover:text-teal-800 p-0.5">
-                                <Pencil size={13} />
-                              </button>
-                              {(currentUser.isAdmin || canDeleteTickets) && (
-                                <button onClick={(ev) => { ev.stopPropagation(); handleDelete(t.id); }} className="text-stone-400 hover:text-red-600 p-0.5">
-                                  <Trash2 size={13} />
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-stone-300 text-[11px] block text-right">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ));
-                    if (hasRefund(t)) {
-                      const refundedCustomer = customers[t.refund.customerIndex || 0];
-                      const refundTicketNumber = (refundedCustomer && refundedCustomer.ticketNumber) || (customers[0] && customers[0].ticketNumber) || "-";
-                      rows.push(
-                        <tr
-                          key={`${t.id}-refund`}
-                          onClick={() => openTicketDetail(t)}
-                          className="border-t border-dashed border-sky-200 bg-sky-50/60 leading-tight cursor-pointer hover:bg-sky-100/60"
-                        >
-                          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{t.employee || "-"}</td>
-                          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">
-                            {t.company && t.company.trim() ? t.company : <span className="text-sky-400 italic">Individual</span>}
-                          </td>
-                          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{t.supplier || "-"}</td>
-                          <td className="px-2.5 py-1 text-sky-700 font-mono whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1.5">
-                              {refundTicketNumber}
-                              <span className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5">
-                                ↳ Refund
-                              </span>
-                            </span>
-                          </td>
-                          <td className="px-2.5 py-1 font-medium text-sky-800 whitespace-nowrap">{(refundedCustomer && refundedCustomer.name) || "-"}</td>
-                          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{routeLabel(t)}</td>
-                          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
-                            {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
-                          </td>
-                          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{t.refund.date ? formatDisplayDate(t.refund.date) : "-"}</td>
-                          <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">{fmt(t.refund.airlineAmount)}</td>
-                          <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">{fmt(t.refund.customerAmount)}</td>
-                          <td className="px-2.5 py-1 font-semibold text-sky-800 text-right whitespace-nowrap">
-                            {fmt((parseFloat(t.refund.airlineAmount) || 0) - (parseFloat(t.refund.customerAmount) || 0))}
-                          </td>
-                          <td className="px-2.5 py-1 text-right whitespace-nowrap"><span className="text-sky-300 text-[11px] block text-right">—</span></td>
-                        </tr>
-                      );
-                    }
-                    if (t.isReissued) {
-                      const oldTicket = findTicketByNumber(t.oldTicketNumber);
-                      const oldCustomers = oldTicket
-                        ? (Array.isArray(oldTicket.customers) && oldTicket.customers.length > 0
-                            ? oldTicket.customers
-                            : [{ name: oldTicket.customer || "", ticketNumber: oldTicket.ticketNumber || "" }])
-                        : [];
-                      const oldCustomer =
-                        oldCustomers.find(
-                          (c) => (c.ticketNumber || "").trim().toUpperCase() === (t.oldTicketNumber || "").trim().toUpperCase()
-                        ) || oldCustomers[0];
-                      rows.push(
-                        <tr
-                          key={`${t.id}-reissue`}
-                          onClick={() => (oldTicket ? openTicketDetail(oldTicket) : undefined)}
-                          className={`border-t border-dashed border-amber-200 bg-amber-50/60 leading-tight ${oldTicket ? "cursor-pointer hover:bg-amber-100/60" : ""}`}
-                        >
-                          <td className="px-2.5 py-1 text-amber-700 whitespace-nowrap">{oldTicket ? (oldTicket.employee || "-") : "-"}</td>
-                          <td className="px-2.5 py-1 text-amber-700 whitespace-nowrap">
-                            {oldTicket ? (
-                              oldTicket.company && oldTicket.company.trim() ? oldTicket.company : <span className="text-amber-400 italic">Individual</span>
-                            ) : (
-                              "-"
-                            )}
-                          </td>
-                          <td className="px-2.5 py-1 text-amber-700 whitespace-nowrap">{oldTicket ? (oldTicket.supplier || "-") : "-"}</td>
-                          <td className="px-2.5 py-1 text-amber-700 font-mono whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1.5">
-                              {t.oldTicketNumber || "-"}
-                              <span className="inline-flex items-center text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5">
-                                ↳ Reissued from
-                              </span>
-                            </span>
-                          </td>
-                          <td className="px-2.5 py-1 font-medium text-amber-800 whitespace-nowrap">{(oldCustomer && oldCustomer.name) || "-"}</td>
-                          <td className="px-2.5 py-1 text-amber-700 whitespace-nowrap">{oldTicket ? routeLabel(oldTicket) : "-"}</td>
-                          <td className="px-2.5 py-1 text-amber-700 whitespace-nowrap" title={oldTicket ? (getAirlineNameByIata(oldTicket.airline) || oldTicket.airline || "") : ""}>
-                            {oldTicket && oldTicket.airline ? (getAirlineIata(oldTicket.airline) || oldTicket.airline) : "-"}
-                          </td>
-                          <td className="px-2.5 py-1 text-amber-700 whitespace-nowrap">
-                            {t.oldTicketIssueDate ? formatDisplayDate(t.oldTicketIssueDate) : (oldTicket && oldTicket.date ? formatDisplayDate(oldTicket.date) : "-")}
-                          </td>
-                          <td className="px-2.5 py-1 text-amber-700 text-right whitespace-nowrap">{oldTicket ? fmt(oldTicket.netPrice) : "-"}</td>
-                          <td className="px-2.5 py-1 text-amber-700 text-right whitespace-nowrap">{oldTicket ? fmt(oldTicket.soldPrice) : "-"}</td>
-                          <td className="px-2.5 py-1 font-semibold text-amber-800 text-right whitespace-nowrap">
-                            {oldTicket ? fmt(profit(oldTicket.netPrice, oldTicket.soldPrice)) : "-"}
-                          </td>
-                          <td className="px-2.5 py-1 text-right whitespace-nowrap"><span className="text-amber-300 text-[11px] block text-right">—</span></td>
-                        </tr>
-                      );
-                    }
-                    return rows;
-                  })}
+                  {sortedFiltered.flatMap((t) =>
+                    hiddenReissueChildIds.has(t.id) ? [] : renderTicketChain(t, false)
+                  )}
                 </tbody>
               </table>
             </div>
