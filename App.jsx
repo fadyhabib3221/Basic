@@ -68,6 +68,36 @@ const formatDateTime = (iso) => {
   return `${dd}-${monthAbbr}-${yyyy} ${hh}:${min}`;
 };
 
+// ==================== License / Activation ====================
+// This app requires an activation code before it can be used at all.
+// Add, remove, or edit codes below yourself — no coding needed beyond this list.
+//   - expiresAt: null      -> the code works forever (permanent license)
+//   - expiresAt: "YYYY-MM-DD" -> the code stops working after that date (subscription-style)
+// You can list as many codes as you like — e.g. a different one per client, or one
+// permanent code plus a few time-limited trial codes.
+const LICENSE_KEYS = [
+  { code: "PERLA-DIMARE-2026", expiresAt: null },
+  { code: "PERLA-TRIAL-30D", expiresAt: "2026-09-04" },
+];
+
+// The key under which the activated code is remembered in this browser, so the
+// activation screen doesn't reappear every time the app is opened.
+const LICENSE_STORAGE_KEY = "ftm_license_activation";
+
+const checkLicenseCode = (rawCode) => {
+  const code = (rawCode || "").trim().toUpperCase();
+  if (!code) return { valid: false, reason: "Please enter an activation code" };
+  const entry = LICENSE_KEYS.find((l) => l.code.trim().toUpperCase() === code);
+  if (!entry) return { valid: false, reason: "Invalid activation code" };
+  if (entry.expiresAt) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (todayStr > entry.expiresAt) {
+      return { valid: false, reason: `This activation code expired on ${entry.expiresAt}` };
+    }
+  }
+  return { valid: true, code: entry.code, expiresAt: entry.expiresAt };
+};
+
 const emptyCustomerRow = () => ({ name: "", ticketNumber: "", conjunction: false, ticketNumber2: "" });
 
 // Ticket supplier / booking source options.
@@ -364,6 +394,27 @@ const conjunctionTicketSuffix = (ticketNumber) => {
   const tail = digits.slice(-3);
   const nextTail = ((parseInt(tail, 10) + 1) % 1000).toString().padStart(3, "0");
   return `-${nextTail}`;
+};
+
+// Given a customer row, returns the ticket number the NEXT customer's auto-sequenced
+// number should be generated from. If this customer has a conjunction (second) ticket,
+// that second number was already issued to them, so the next customer continues after
+// its tail rather than after the first ticket's tail — e.g. first ticket
+// "077-1234567890" with a conjunction suffix of "-891" means the next customer should
+// get "077-1234567892", not "077-1234567891" (which is this customer's own conjunction
+// ticket). Falls back to the plain ticket number when there's no conjunction ticket.
+const lastIssuedTicketNumber = (customer) => {
+  if (!customer) return "";
+  if (customer.conjunction && customer.ticketNumber2) {
+    const match = (customer.ticketNumber || "").match(/^([A-Z0-9]{3})-(\d+)$/);
+    const tailDigits = customer.ticketNumber2.replace(/[^0-9]/g, "");
+    if (match && tailDigits) {
+      const [, prefix, num] = match;
+      const head = num.length > 3 ? num.slice(0, -3) : "";
+      return `${prefix}-${head}${tailDigits.padStart(3, "0")}`;
+    }
+  }
+  return customer.ticketNumber;
 };
 
 // Fills/trims the customers array to match the requested count, keeping existing entries
@@ -791,6 +842,43 @@ const AIRPORTS = [
 ].map(([code, place]) => `${code} - ${place}`.toUpperCase());
 
 export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
+  // ---------- License / activation ----------
+  // Stored centrally (shared storage) so activation applies to every employee,
+  // not just the browser it was entered on. null = not loaded from storage yet.
+  const [licenseRecord, setLicenseRecord] = useState(null); // { code, expiresAt } | null
+  const [licenseLoaded, setLicenseLoaded] = useState(false);
+  const [showLicensePanel, setShowLicensePanel] = useState(false);
+  const [licenseInput, setLicenseInput] = useState("");
+  const [licenseError, setLicenseError] = useState("");
+  const [licenseSaving, setLicenseSaving] = useState(false);
+
+  const licenseCheck = licenseRecord ? checkLicenseCode(licenseRecord.code) : { valid: false };
+  const isLicensed = licenseCheck.valid;
+
+  const handleActivateLicense = async () => {
+    const result = checkLicenseCode(licenseInput);
+    if (!result.valid) {
+      setLicenseError(result.reason);
+      return;
+    }
+    setLicenseError("");
+    setLicenseSaving(true);
+    try {
+      await window.storage.set(
+        "tickets:license",
+        JSON.stringify({ code: result.code, expiresAt: result.expiresAt || null, activatedAt: Date.now() }),
+        true
+      );
+      setLicenseRecord({ code: result.code, expiresAt: result.expiresAt || null });
+      setLicenseInput("");
+      setShowLicensePanel(false);
+    } catch (e) {
+      setLicenseError("Couldn't save the activation code — please try again.");
+    } finally {
+      setLicenseSaving(false);
+    }
+  };
+
   const [tickets, setTickets] = useState([]);
   const [employees, setEmployees] = useState(null); // null = not loaded yet
   const [currentUser, setCurrentUser] = useState(null); // { username, name, isAdmin }
@@ -970,7 +1058,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   useEffect(() => {
     (async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, sessionRes, suggestionsRes, setupRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, sessionRes, suggestionsRes, setupRes, licenseRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:visas", true).catch(() => null),
@@ -980,6 +1068,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           window.storage.get("session:user", false).catch(() => null),
           window.storage.get("tickets:suggestions", true).catch(() => null),
           window.storage.get("tickets:setupComplete", true).catch(() => null),
+          window.storage.get("tickets:license", true).catch(() => null),
         ]);
         const ticketsData = ticketsRes && ticketsRes.value ? JSON.parse(ticketsRes.value) : [];
         const hotelsData = hotelsRes && hotelsRes.value ? JSON.parse(hotelsRes.value) : [];
@@ -993,6 +1082,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         setCarBookings(carsData);
         setFiles(filesData);
         setEmployees(employeesData);
+        if (licenseRes && licenseRes.value) {
+          try {
+            setLicenseRecord(JSON.parse(licenseRes.value));
+          } catch (e) {
+            setLicenseRecord(null);
+          }
+        }
+        setLicenseLoaded(true);
         // If accounts already exist, the setup step has clearly already happened even if the
         // flag itself is missing (e.g. app used before this flag existed).
         setSetupComplete(!!(setupRes && setupRes.value === "true") || employeesData.length > 0);
@@ -1051,7 +1148,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     let cancelled = false;
     const loadCoreData = async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, suggestionsRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, suggestionsRes, licenseRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:visas", true).catch(() => null),
@@ -1059,6 +1156,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           window.storage.get("tickets:files", true).catch(() => null),
           window.storage.get("tickets:employees", true).catch(() => null),
           window.storage.get("tickets:suggestions", true).catch(() => null),
+          window.storage.get("tickets:license", true).catch(() => null),
         ]);
         if (cancelled) return;
         if (ticketsRes && ticketsRes.value) {
@@ -1119,6 +1217,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           } catch (e) {
             // ignore malformed data for this cycle, try again next poll
           }
+        }
+        if (licenseRes && licenseRes.value) {
+          try {
+            setLicenseRecord(JSON.parse(licenseRes.value));
+          } catch (e) {
+            // ignore malformed data for this cycle, try again next poll
+          }
+        } else {
+          setLicenseRecord(null);
         }
       } catch (e) {
         // Live refresh is best-effort; a failed poll just tries again next interval
@@ -2553,7 +2660,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // When more customer rows are added, auto-sequence their ticket numbers by
     // increasing the previous customer's number by one (only if it was filled in).
     for (let i = form.customers.length; i < customers.length; i++) {
-      const generated = nextTicketNumber(customers[i - 1] && customers[i - 1].ticketNumber);
+      const generated = nextTicketNumber(lastIssuedTicketNumber(customers[i - 1]));
       if (generated) customers[i] = { ...customers[i], ticketNumber: generated };
     }
     setForm({ ...form, customersCount: count, customers });
@@ -2635,8 +2742,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // the second ticket number out.
   const handleCustomerConjunctionToggle = (index, checked) => {
     const customers = form.customers.map((c, i) =>
-      i === index ? { ...c, conjunction: checked, ticketNumber2: checked ? conjunctionTicketSuffix(c.ticketNumber) : "" } : c
+      i === index ? { ...c, conjunction: checked, ticketNumber2: checked ? conjunctionTicketSuffix(c.ticketNumber) : "" } : { ...c }
     );
+    // Switching the conjunction on/off shifts where the sequence for later customers
+    // should continue from, so re-run the same cascade as handleTicketNumberBlur below —
+    // still stopping at the first customer whose ticket number is already filled in.
+    let last = lastIssuedTicketNumber(customers[index]);
+    for (let i = index + 1; i < customers.length; i++) {
+      if (customers[i].ticketNumber) break;
+      const generated = nextTicketNumber(last);
+      if (!generated) break;
+      customers[i] = { ...customers[i], ticketNumber: generated };
+      last = generated;
+    }
     setForm({ ...form, customers });
   };
 
@@ -2652,6 +2770,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (customers[index].conjunction) {
       customers[index].ticketNumber2 = conjunctionTicketSuffix(last);
     }
+    // If this customer has a conjunction ticket, that second number was already issued
+    // to them — continue the sequence for later customers after ITS tail, not the first
+    // ticket's tail.
+    last = lastIssuedTicketNumber(customers[index]);
     for (let i = index + 1; i < customers.length; i++) {
       if (customers[i].ticketNumber) break;
       const generated = nextTicketNumber(last);
@@ -3928,7 +4050,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       className="w-full min-h-screen bg-gradient-to-b from-stone-50 via-white to-teal-50/50 text-stone-800"
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');
+        .price-input::-webkit-outer-spin-button,
+        .price-input::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        .price-input[type=number] {
+          -moz-appearance: textfield;
+        }
+      `}</style>
       <div className="max-w-5xl mx-auto p-4 md:p-6">
         {/* Boarding-pass style banner */}
         <div className="relative rounded-2xl bg-gradient-to-r from-teal-800 via-teal-800 to-teal-900 shadow-lg shadow-teal-900/20 overflow-hidden mb-0">
@@ -4005,6 +4136,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <button onClick={() => setShowManage(!showManage)}
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
                   <Users size={15} /> Manage employees
+                </button>
+              )}
+              {currentUser.isAdmin && (
+                <button onClick={() => setShowLicensePanel(!showLicensePanel)}
+                  className={`border text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors ${
+                    isLicensed
+                      ? "border-white/20 bg-white/10 hover:bg-white/20 text-white"
+                      : "border-amber-300/50 bg-amber-500/20 hover:bg-amber-500/30 text-amber-100"
+                  }`}>
+                  <Lock size={15} /> {isLicensed ? "License" : "Activate license"}
                 </button>
               )}
               {canManageCompanies && (
@@ -4104,6 +4245,52 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="absolute -right-2.5 top-0 w-5 h-5 rounded-full bg-stone-50" />
           <div className="absolute left-4 right-4 top-2.5 border-t-2 border-dashed border-teal-800/20" />
         </div>
+
+        {showLicensePanel && currentUser.isAdmin && (
+          <div className="mb-6">
+            <button onClick={() => { setShowLicensePanel(false); setLicenseError(""); setLicenseInput(""); }}
+              className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
+              <ArrowLeft size={15} /> Back
+            </button>
+            <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6 max-w-sm">
+              <h2 className="font-semibold text-stone-900 mb-1 flex items-center gap-2">
+                <Lock size={16} className="text-teal-800" /> App license
+              </h2>
+              {isLicensed ? (
+                <div className="bg-emerald-50 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-4">
+                  Active{licenseRecord && licenseRecord.expiresAt ? ` — valid until ${licenseRecord.expiresAt}` : " — permanent license"}
+                </div>
+              ) : (
+                <p className="text-xs text-stone-400 mb-4">
+                  {licenseRecord ? "The current activation code has expired." : "The app is not activated yet."} Enter a valid activation code below — the app stays locked for every employee until this is done.
+                </p>
+              )}
+              {isLicensed && (
+                <p className="text-xs text-stone-400 mb-4">
+                  Entering a new code below will replace the current one — useful for renewing or switching licenses.
+                </p>
+              )}
+              {licenseError && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{licenseError}</div>}
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Activation code</label>
+                <input
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 tracking-widest uppercase"
+                  value={licenseInput}
+                  onChange={(e) => setLicenseInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleActivateLicense()}
+                  placeholder="XXXX-XXXX-XXXX"
+                  autoFocus
+                />
+              </div>
+              <button
+                onClick={handleActivateLicense}
+                disabled={licenseSaving}
+                className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors disabled:opacity-60">
+                {licenseSaving ? "Saving..." : "Activate"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {(showManage || showManageCompanies) && (
           <div className="mb-6">
@@ -4542,7 +4729,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         )}
 
-        {!showManage && !showManageCompanies && (
+        {!showManage && !showManageCompanies && !showLicensePanel && (
+        <>
+        {isLicensed ? (
         <>
         {/* Top-level section switcher */}
         <div className="flex items-center justify-center gap-3 mb-6">
@@ -4873,12 +5062,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               </select>
                             </div>
                           )}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="text-xs text-stone-500 block mb-1">Refunded by airline</label>
                               <input
                                 type="number"
-                                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                                className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                                 value={row.airlineAmount}
                                 onChange={(e) =>
                                   setRefundRows(refundRows.map((r, i) => (i === index ? { ...r, airlineAmount: e.target.value } : r)))
@@ -4890,7 +5079,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <label className="text-xs text-stone-500 block mb-1">Refunded to customer</label>
                               <input
                                 type="number"
-                                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                                className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                                 value={row.customerAmount}
                                 onChange={(e) =>
                                   setRefundRows(refundRows.map((r, i) => (i === index ? { ...r, customerAmount: e.target.value } : r)))
@@ -4931,8 +5120,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-            <div>
+          <div className="flex flex-wrap items-start gap-2 mt-4">
+            <div className="flex-1 min-w-[160px]">
               <label className="text-xs text-stone-500 block mb-1">Company (optional)</label>
               <input
                 className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
@@ -4942,24 +5131,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 list="company-suggestions"
               />
             </div>
-            <div>
-              <label className="text-xs text-stone-500 block mb-1">Number of customers</label>
-              <input
-                type="number"
-                min={1}
-                max={50}
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                value={form.customersCount}
-                onChange={(e) => handleCustomersCountChange(e.target.value)}
-                onBlur={(e) => {
-                  if (e.target.value === "" || parseInt(e.target.value, 10) < 1) {
-                    handleCustomersCountChange(1);
-                  }
-                }}
-                placeholder="1"
-              />
-            </div>
-            <div>
+            <div className="w-40 shrink-0">
               <label className="text-xs text-stone-500 block mb-1">Supplier</label>
               {supplierOther ? (
                 <div className="flex gap-2">
@@ -4999,6 +5171,23 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </select>
               )}
             </div>
+            <div className="w-14 shrink-0">
+              <label className="text-xs text-stone-500 block mb-1">Customers</label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                className="w-14 border border-stone-300 rounded-xl px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                value={form.customersCount}
+                onChange={(e) => handleCustomersCountChange(e.target.value)}
+                onBlur={(e) => {
+                  if (e.target.value === "" || parseInt(e.target.value, 10) < 1) {
+                    handleCustomersCountChange(1);
+                  }
+                }}
+                placeholder="1"
+              />
+            </div>
           </div>
 
           {/* Dynamic customer name + ticket number cells, one row per customer. A
@@ -5033,7 +5222,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </label>
                   <div className="w-full md:flex-1 flex items-center border border-stone-300 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-teal-700">
                     <input
-                      className="flex-1 min-w-0 text-sm outline-none bg-transparent"
+                      className="min-w-0 text-sm outline-none bg-transparent flex-1"
+                      style={c.conjunction ? { flex: "0 0 auto", width: `${Math.max((c.ticketNumber || "").length, 3) + 1}ch` } : undefined}
                       value={c.ticketNumber}
                       onChange={(e) => handleCustomerFieldChange(i, "ticketNumber", e.target.value)}
                       onBlur={() => handleTicketNumberBlur(i)}
@@ -5041,7 +5231,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     />
                     {c.conjunction && (
                       <input
-                        className="w-14 shrink-0 text-sm outline-none bg-transparent text-stone-600"
+                        className="min-w-0 text-sm outline-none bg-transparent text-stone-600"
+                        style={{ flex: "0 0 auto", width: `${Math.max((c.ticketNumber2 || "").length, 1) + 1}ch` }}
                         value={c.ticketNumber2 || ""}
                         onChange={(e) => handleCustomerFieldChange(i, "ticketNumber2", e.target.value)}
                         placeholder="-891"
@@ -5058,92 +5249,90 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <label className="flex items-center gap-1.5 cursor-pointer select-none">
                 <input
                   type="radio"
-                  name="tripType"
-                  className="w-4 h-4 accent-teal-700"
-                  checked={(form.tripType || "oneWay") === "oneWay"}
-                  onChange={() => setForm({ ...form, tripType: "oneWay" })}
+                  name="routeMode"
+                  className="w-4 h-4 accent-green-600"
+                  checked={!form.multiDestination && (form.tripType || "oneWay") === "oneWay"}
+                  onChange={() => setForm({ ...form, tripType: "oneWay", multiDestination: false })}
                 />
                 One way
               </label>
               <label className="flex items-center gap-1.5 cursor-pointer select-none">
                 <input
                   type="radio"
-                  name="tripType"
-                  className="w-4 h-4 accent-teal-700"
-                  checked={form.tripType === "roundTrip"}
-                  onChange={() => setForm({ ...form, tripType: "roundTrip" })}
+                  name="routeMode"
+                  className="w-4 h-4 accent-green-600"
+                  checked={!form.multiDestination && form.tripType === "roundTrip"}
+                  onChange={() => setForm({ ...form, tripType: "roundTrip", multiDestination: false })}
                 />
                 Round trip
               </label>
+              <label className="flex items-center gap-2 text-xs font-semibold text-stone-500 cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="routeMode"
+                  className="w-4 h-4 accent-green-600"
+                  checked={!!form.multiDestination}
+                  onChange={() => {
+                    setForm({
+                      ...form,
+                      multiDestination: true,
+                      // Seed the stop list from the current From/To the first time this is
+                      // switched on, so nothing already typed gets lost.
+                      destinations:
+                        !(form.destinations || []).some((d) => (d || "").trim())
+                          ? [form.from || "", form.to || ""]
+                          : form.destinations,
+                    });
+                  }}
+                />
+                Multi-destination route (multi-city)
+              </label>
             </div>
-
-            <label className="flex items-center gap-2 text-xs font-semibold text-stone-500 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                className="w-4 h-4 accent-teal-700"
-                checked={!!form.multiDestination}
-                onChange={(e) => {
-                  const multiDestination = e.target.checked;
-                  setForm({
-                    ...form,
-                    multiDestination,
-                    // Seed the stop list from the current From/To the first time this is
-                    // switched on, so nothing already typed gets lost.
-                    destinations:
-                      multiDestination && !(form.destinations || []).some((d) => (d || "").trim())
-                        ? [form.from || "", form.to || ""]
-                        : form.destinations,
-                  });
-                }}
-              />
-              Multi-destination route (multi-city)
-            </label>
           </div>
 
-          <div className="flex flex-wrap items-end gap-3 mt-2">
+          <div className="flex flex-wrap items-end gap-2 mt-2">
             {form.multiDestination ? (
-              <div className="w-full md:w-auto md:flex-1 md:min-w-[280px]">
-                <label className="text-xs text-stone-500 block mb-1">Route stops (in order)</label>
-                <div className="space-y-2">
-                  {form.destinations.map((d, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="text-xs text-stone-400 w-14 shrink-0">
+              <>
+                {form.destinations.map((d, i) => (
+                  <div key={i} className="flex items-end gap-1">
+                    <div>
+                      <label className="text-[10px] text-stone-400 block mb-1">
                         {i === 0 ? "From" : i === form.destinations.length - 1 ? "Final" : `Stop ${i}`}
-                      </span>
+                      </label>
                       <input
-                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
                         value={d}
                         onChange={(e) => handleDestinationChange(i, e.target.value)}
-                        placeholder={i === 0 ? "Cairo" : "Dubai"}
+                        placeholder={i === 0 ? "CAI" : "DXB"}
                         list="city-suggestions"
                       />
-                      {form.destinations.length > 2 && (
-                        <button
-                          type="button"
-                          onClick={() => removeDestinationStop(i)}
-                          className="shrink-0 text-stone-400 hover:text-red-600"
-                          title="Remove stop"
-                        >
-                          <X size={16} />
-                        </button>
-                      )}
                     </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={addDestinationStop}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900"
-                  >
-                    <Plus size={14} /> Add stop
-                  </button>
-                </div>
-              </div>
+                    {form.destinations.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => removeDestinationStop(i)}
+                        className="shrink-0 text-stone-400 hover:text-red-600 mb-1.5"
+                        title="Remove stop"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addDestinationStop}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 mb-1.5"
+                >
+                  <Plus size={14} /> Add stop
+                </button>
+              </>
             ) : (
               <>
                 <div>
                   <label className="text-xs text-stone-500 block mb-1">From</label>
                   <input
-                    className="w-24 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
+                    className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
                     value={form.from}
                     onChange={(e) => handleCityChange("from", e.target.value)}
                     placeholder="CAI"
@@ -5153,7 +5342,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <div>
                   <label className="text-xs text-stone-500 block mb-1">To</label>
                   <input
-                    className="w-24 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
+                    className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
                     value={form.to}
                     onChange={(e) => handleCityChange("to", e.target.value)}
                     placeholder="DXB"
@@ -5164,7 +5353,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <div>
                     <label className="text-xs text-stone-500 block mb-1">Return airport</label>
                     <div
-                      className="w-24 border border-stone-200 bg-stone-50 rounded-xl px-3 py-2 text-sm text-stone-600 uppercase truncate"
+                      className="w-16 border border-stone-200 bg-stone-50 rounded-lg px-2 py-1.5 text-xs text-stone-600 uppercase truncate"
                       title="Automatically matches the first (From) airport"
                     >
                       {form.from || "-"}
@@ -5183,7 +5372,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 )}
               </label>
               <input
-                className="w-24 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.airline}
                 onChange={(e) => handleAirlineChange(e.target.value)}
                 placeholder="MS"
@@ -5192,7 +5381,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+          <div className="grid grid-cols-4 gap-3 mt-3">
             <div>
               <label className="text-xs text-stone-500 block mb-1">Ticket issue date</label>
               <input
@@ -5213,7 +5402,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <label className="text-xs text-stone-500 block mb-1">Net price</label>
               <input
                 type="number"
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                 value={form.netPrice}
                 onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
                 placeholder="0"
@@ -5223,7 +5412,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <label className="text-xs text-stone-500 block mb-1">Sold price</label>
               <input
                 type="number"
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                 value={form.soldPrice}
                 onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
                 placeholder="0"
@@ -5235,7 +5424,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 {fmt(profit(form.netPrice, form.soldPrice))}
               </div>
             </div>
-            <div className="md:col-span-3">
+            <div className="col-span-4">
               <label className="text-xs text-stone-500 block mb-1">Notes</label>
               <textarea
                 className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 min-h-[80px]"
@@ -5826,7 +6015,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </div>
 
                   {/* Row 2: # rooms, net, sold. */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
+                  <div className="grid grid-cols-3 gap-3 items-start">
                     <div>
                       <label className="text-[11px] text-stone-500 block mb-1"># rooms</label>
                       <input
@@ -5841,7 +6030,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <label className="text-[11px] text-stone-500 block mb-1">Net (per room/night)</label>
                       <input
                         type="number"
-                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        className="w-28 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                         value={line.netPrice}
                         onChange={(e) => updateHotelRoomLine(line.id, { netPrice: e.target.value })}
                         placeholder="0"
@@ -5851,7 +6040,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <label className="text-[11px] text-stone-500 block mb-1">Sold (per room/night)</label>
                       <input
                         type="number"
-                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        className="w-28 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                         value={line.soldPrice}
                         onChange={(e) => updateHotelRoomLine(line.id, { soldPrice: e.target.value })}
                         placeholder="0"
@@ -6342,7 +6531,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Currency</label>
                 <select
@@ -6359,7 +6548,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Price net (per person)</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={visaForm.netPrice}
                   onChange={(e) => setVisaForm({ ...visaForm, netPrice: e.target.value })}
                   placeholder="0"
@@ -6369,7 +6558,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Sold (per person)</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={visaForm.soldPrice}
                   onChange={(e) => setVisaForm({ ...visaForm, soldPrice: e.target.value })}
                   placeholder="0"
@@ -6696,7 +6885,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
 
             {/* Waiting hours / round trip / driver tip */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="flex items-center gap-2 text-xs text-stone-500 mb-1 cursor-pointer">
                   <input
@@ -6735,7 +6924,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Driver tip</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={carForm.driverTip}
                   onChange={(e) => setCarForm({ ...carForm, driverTip: e.target.value })}
                   placeholder="0"
@@ -6767,7 +6956,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
 
             {/* Currency, amount to collect from the customer, and net/sold prices */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-4 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Currency</label>
                 <select
@@ -6784,7 +6973,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Collection</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={carForm.collection}
                   onChange={(e) => setCarForm({ ...carForm, collection: e.target.value })}
                   placeholder="0"
@@ -6794,7 +6983,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Price net</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={carForm.netPrice}
                   onChange={(e) => setCarForm({ ...carForm, netPrice: e.target.value })}
                   placeholder="0"
@@ -6804,7 +6993,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Sold</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={carForm.soldPrice}
                   onChange={(e) => setCarForm({ ...carForm, soldPrice: e.target.value })}
                   placeholder="0"
@@ -7398,6 +7587,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </>
         )}
         </>
+        ) : (
+          <div className="bg-white rounded-2xl border border-stone-200 p-8 text-center max-w-sm mx-auto">
+            <Lock size={24} className="text-stone-300 mx-auto mb-3" />
+            <h2 className="font-semibold text-stone-900 mb-1">App not activated</h2>
+            <p className="text-xs text-stone-500 mb-4">
+              {currentUser.isAdmin
+                ? "This app isn't activated yet. Click \"Activate license\" above to enter an activation code."
+                : "This app hasn't been activated yet. Please contact your admin to activate it."}
+            </p>
+            {currentUser.isAdmin && (
+              <button
+                onClick={() => setShowLicensePanel(true)}
+                className="bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors"
+              >
+                Activate license
+              </button>
+            )}
+          </div>
+        )}
+        </>
         )}
       </div>
 
@@ -7496,9 +7705,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           <td className="px-3 py-2 text-stone-700 font-mono">
                             {c.ticketNumber || "-"}
                             {c.conjunction && c.ticketNumber2 && (
-                              <span className="block text-xs text-stone-400 mt-0.5">
-                                + {c.ticketNumber2} (conjunction)
-                              </span>
+                              <span className="text-stone-400">{c.ticketNumber2}</span>
                             )}
                           </td>
                         </tr>
