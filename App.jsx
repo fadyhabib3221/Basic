@@ -5702,24 +5702,39 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     {visibleFiles.map((f) => {
                       const t = fileTotals(f);
                       return (
-                        <button
+                        <div
                           key={f.id}
-                          onClick={() => setOpenFileId(f.id)}
-                          className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-teal-50/50 text-left"
+                          className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-teal-50/50"
                         >
-                          <div className="min-w-0">
-                            <p className="font-semibold text-stone-900 text-sm truncate">
-                              {f.serial} {f.company ? `· ${f.company}` : ""}
-                            </p>
-                            <p className="text-xs text-stone-400">
-                              {formatDisplayDate(f.createdAt)} · {f.createdBy} · {(f.items || []).length} item{(f.items || []).length === 1 ? "" : "s"}
-                            </p>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-sm font-bold">{fmt(t.sold)}</p>
-                            <p className="text-xs text-emerald-700 font-semibold">+{fmt(t.profit)}</p>
-                          </div>
-                        </button>
+                          <button
+                            onClick={() => setOpenFileId(f.id)}
+                            className="flex-1 min-w-0 flex items-center justify-between gap-3 text-left"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-semibold text-stone-900 text-sm truncate">
+                                {f.serial} {f.company ? `· ${f.company}` : ""}
+                              </p>
+                              <p className="text-xs text-stone-400">
+                                {formatDisplayDate(f.createdAt)} · {f.createdBy} · {(f.items || []).length} item{(f.items || []).length === 1 ? "" : "s"}
+                              </p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-sm font-bold">{fmt(t.sold)}</p>
+                              <p className="text-xs text-emerald-700 font-semibold">+{fmt(t.profit)}</p>
+                            </div>
+                          </button>
+                          <button
+                            onClick={() =>
+                              requestConfirm(`Delete file ${f.serial}? This cannot be undone.`, async () => {
+                                await deleteFile(f.id);
+                                setConfirmDialog(null);
+                              })
+                            }
+                            className="text-red-500 hover:text-red-700 p-1.5 shrink-0"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
