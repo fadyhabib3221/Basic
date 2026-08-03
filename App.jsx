@@ -75,47 +75,19 @@ const formatDateTime = (iso) => {
 //   - expiresAt: "YYYY-MM-DD" -> the code stops working after that date (subscription-style)
 // You can list as many codes as you like — e.g. a different one per client, or one
 // permanent code plus a few time-limited trial codes.
-// ==================== License / Activation ====================
-// This app requires an activation code before it can be used at all.
-//
-// SECURITY NOTE: the codes themselves are never written in this file — only their
-// SHA-256 fingerprints are. This means anyone who opens/reads this source file (e.g. a
-// client, a reseller, or someone poking at the app) cannot recover a working code from
-// it directly; they would have to guess it, which is computationally infeasible for a
-// long/random code. To add a new code, use the helper below to get its fingerprint,
-// then add ONLY the fingerprint here — never the plain code.
-//
-//   - expiresAt: null      -> the code works forever (permanent license)
-//   - expiresAt: "YYYY-MM-DD" -> the code stops working after that date (subscription-style)
-//
-// To generate a fingerprint for a brand-new code, run this once in any browser console:
-//   crypto.subtle.digest("SHA-256", new TextEncoder().encode("YOUR-CODE-HERE".trim().toUpperCase()))
-//     .then(b => console.log([...new Uint8Array(b)].map(x => x.toString(16).padStart(2,"0")).join("")))
 const LICENSE_KEYS = [
-  // PERLA-DIMARE-2026 (permanent)
-  { hash: "52e1d330c8eeab1e6c34b334ea978feb7d2f225cfd69ef8877796f249248f10", expiresAt: null },
-  // PERLA-TRIAL-30D (expires 2026-09-04)
-  { hash: "2f6b5b65577fd0a2b1cb1df3c68281ac66d339034c59ca51df34c97fc1ea5d6", expiresAt: "2026-09-04" },
+  { code: "PERLA-DIMARE-2026", expiresAt: null },
+  { code: "PERLA-TRIAL-30D", expiresAt: "2026-09-04" },
 ];
 
-const sha256Hex = async (text) => {
-  const enc = new TextEncoder().encode(text);
-  const buf = await window.crypto.subtle.digest("SHA-256", enc);
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-};
+// The key under which the activated code is remembered in this browser, so the
+// activation screen doesn't reappear every time the app is opened.
+const LICENSE_STORAGE_KEY = "ftm_license_activation";
 
-// Async because it hashes via the browser's crypto API — never compares plain-text
-// codes, so the valid codes can't be lifted from a memory/state inspector either.
-const checkLicenseCode = async (rawCode) => {
+const checkLicenseCode = (rawCode) => {
   const code = (rawCode || "").trim().toUpperCase();
   if (!code) return { valid: false, reason: "Please enter an activation code" };
-  let hash;
-  try {
-    hash = await sha256Hex(code);
-  } catch (e) {
-    return { valid: false, reason: "This browser can't verify activation codes securely" };
-  }
-  const entry = LICENSE_KEYS.find((l) => l.hash === hash);
+  const entry = LICENSE_KEYS.find((l) => l.code.trim().toUpperCase() === code);
   if (!entry) return { valid: false, reason: "Invalid activation code" };
   if (entry.expiresAt) {
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -123,9 +95,7 @@ const checkLicenseCode = async (rawCode) => {
       return { valid: false, reason: `This activation code expired on ${entry.expiresAt}` };
     }
   }
-  // Only the hash is persisted to shared storage, never the plain code — so anyone
-  // reading stored data directly (outside the app) can't recover it either.
-  return { valid: true, hash, expiresAt: entry.expiresAt };
+  return { valid: true, code: entry.code, expiresAt: entry.expiresAt };
 };
 
 const emptyCustomerRow = () => ({ name: "", ticketNumber: "", conjunction: false, ticketNumber2: "" });
@@ -874,44 +844,32 @@ const AIRPORTS = [
 export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // ---------- License / activation ----------
   // Stored centrally (shared storage) so activation applies to every employee,
-  // not just the browser it was entered on. Only a SHA-256 hash is ever stored or
-  // compared — never the plain code — so reading storage directly reveals nothing.
-  const [licenseRecord, setLicenseRecord] = useState(null); // { hash, expiresAt } | null
+  // not just the browser it was entered on. null = not loaded from storage yet.
+  const [licenseRecord, setLicenseRecord] = useState(null); // { code, expiresAt } | null
   const [licenseLoaded, setLicenseLoaded] = useState(false);
   const [showLicensePanel, setShowLicensePanel] = useState(false);
   const [licenseInput, setLicenseInput] = useState("");
   const [licenseError, setLicenseError] = useState("");
   const [licenseSaving, setLicenseSaving] = useState(false);
 
-  // Re-validated against the known hash list (and expiry) on every render, rather than
-  // just trusting whatever is in storage — so a forged storage entry with a made-up
-  // hash still won't unlock the app.
-  const isLicensed = (() => {
-    if (!licenseRecord || !licenseRecord.hash) return false;
-    const entry = LICENSE_KEYS.find((l) => l.hash === licenseRecord.hash);
-    if (!entry) return false;
-    if (entry.expiresAt) {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      if (todayStr > entry.expiresAt) return false;
-    }
-    return true;
-  })();
+  const licenseCheck = licenseRecord ? checkLicenseCode(licenseRecord.code) : { valid: false };
+  const isLicensed = licenseCheck.valid;
 
   const handleActivateLicense = async () => {
+    const result = checkLicenseCode(licenseInput);
+    if (!result.valid) {
+      setLicenseError(result.reason);
+      return;
+    }
     setLicenseError("");
     setLicenseSaving(true);
     try {
-      const result = await checkLicenseCode(licenseInput);
-      if (!result.valid) {
-        setLicenseError(result.reason);
-        return;
-      }
       await window.storage.set(
         "tickets:license",
-        JSON.stringify({ hash: result.hash, expiresAt: result.expiresAt || null, activatedAt: Date.now() }),
+        JSON.stringify({ code: result.code, expiresAt: result.expiresAt || null, activatedAt: Date.now() }),
         true
       );
-      setLicenseRecord({ hash: result.hash, expiresAt: result.expiresAt || null });
+      setLicenseRecord({ code: result.code, expiresAt: result.expiresAt || null });
       setLicenseInput("");
       setShowLicensePanel(false);
     } catch (e) {
@@ -4288,54 +4246,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="absolute left-4 right-4 top-2.5 border-t-2 border-dashed border-teal-800/20" />
         </div>
 
-        {showChangePassword && (
-          <div className="fixed inset-0 bg-white z-40 overflow-y-auto">
-          <div className="max-w-3xl mx-auto p-4 md:p-6">
-            <button onClick={() => { setShowChangePassword(false); setPasswordError(""); setPasswordSuccess(""); }}
-              className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
-              <ArrowLeft size={15} /> Back
-            </button>
-            <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6 max-w-sm">
-              <h2 className="font-semibold text-stone-900 mb-1 flex items-center gap-2">
-                <Lock size={16} className="text-teal-800" /> Change your password
-              </h2>
-              <p className="text-xs text-stone-400 mb-4">
-                Signed in as {currentUser.name} ({currentUser.username})
-              </p>
-              {passwordError && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{passwordError}</div>}
-              {passwordSuccess && <div className="bg-emerald-50 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">{passwordSuccess}</div>}
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-stone-500 block mb-1">Current password</label>
-                  <input type="password"
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                    value={currentPasswordInput} onChange={(e) => setCurrentPasswordInput(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-xs text-stone-500 block mb-1">New password</label>
-                  <input type="password"
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                    value={newPasswordInput} onChange={(e) => setNewPasswordInput(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-xs text-stone-500 block mb-1">Confirm new password</label>
-                  <input type="password"
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                    value={confirmPasswordInput} onChange={(e) => setConfirmPasswordInput(e.target.value)} />
-                </div>
-              </div>
-              <button onClick={handleChangePassword}
-                className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors">
-                Update password
-              </button>
-            </div>
-          </div>
-          </div>
-        )}
-
         {showLicensePanel && currentUser.isAdmin && (
-          <div className="fixed inset-0 bg-white z-40 overflow-y-auto">
-          <div className="max-w-3xl mx-auto p-4 md:p-6">
+          <div className="mb-6">
             <button onClick={() => { setShowLicensePanel(false); setLicenseError(""); setLicenseInput(""); }}
               className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
               <ArrowLeft size={15} /> Back
@@ -4378,12 +4290,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </button>
             </div>
           </div>
-          </div>
         )}
 
         {(showManage || showManageCompanies) && (
-          <div className="fixed inset-0 bg-white z-40 overflow-y-auto">
-          <div className="max-w-3xl mx-auto p-4 md:p-6">
+          <div className="mb-6">
         {showManage && currentUser.isAdmin && (
           <div className="bg-stone-50">
             <button onClick={() => setShowManage(false)}
@@ -4817,10 +4727,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         )}
           </div>
-          </div>
         )}
 
-        {!showManage && !showManageCompanies && !showLicensePanel && !showChangePassword && (
+        {!showManage && !showManageCompanies && !showLicensePanel && (
         <>
         {isLicensed ? (
         <>
@@ -4898,6 +4807,45 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         {currentUser.isAdmin && (restoreError || restoreSuccess) && (
           <div className={`text-sm rounded-xl px-3 py-2 mb-4 ${restoreError ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
             {restoreError || restoreSuccess}
+          </div>
+        )}
+
+
+
+        {showChangePassword && (
+          <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6 max-w-sm">
+            <h2 className="font-semibold text-stone-900 mb-1 flex items-center gap-2">
+              <Lock size={16} className="text-teal-800" /> Change your password
+            </h2>
+            <p className="text-xs text-stone-400 mb-4">
+              Signed in as {currentUser.name} ({currentUser.username})
+            </p>
+            {passwordError && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{passwordError}</div>}
+            {passwordSuccess && <div className="bg-emerald-50 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">{passwordSuccess}</div>}
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Current password</label>
+                <input type="password"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={currentPasswordInput} onChange={(e) => setCurrentPasswordInput(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">New password</label>
+                <input type="password"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={newPasswordInput} onChange={(e) => setNewPasswordInput(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Confirm new password</label>
+                <input type="password"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={confirmPasswordInput} onChange={(e) => setConfirmPasswordInput(e.target.value)} />
+              </div>
+            </div>
+            <button onClick={handleChangePassword}
+              className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors">
+              Update password
+            </button>
           </div>
         )}
 
