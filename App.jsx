@@ -10,6 +10,28 @@ import {
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus,
 } from "lucide-react";
 
+// A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
+// by hand since lucide-react has no built-in "passport" glyph. Mirrors the sizing/stroke
+// conventions of the lucide icons it sits alongside (accepts size + className props).
+const PassportIcon = ({ size = 22, className = "" }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <rect x="5" y="2" width="14" height="20" rx="2" />
+    <circle cx="12" cy="10" r="3.2" />
+    <path d="M12 6.8v6.4M8.8 10h6.4" />
+    <path d="M9 17.5h6" />
+  </svg>
+);
+
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
@@ -198,6 +220,34 @@ const getEmptyHotelForm = () => ({
   // check-in/check-out dates below.
   bookingDate: todayDateStr(),
   notes: "",
+});
+
+// A single customer on a visa booking — just a name (visas don't track per-customer
+// ticket numbers the way flight tickets do).
+const emptyVisaCustomer = () => ({ name: "" });
+
+// Fills/trims a visa booking's customer list to match the requested count, keeping any
+// names already entered — same rationale as resizeCustomers() above.
+const resizeVisaCustomers = (customers, count) => {
+  const n = Math.max(1, Math.min(50, parseInt(count, 10) || 1));
+  const next = [...customers];
+  while (next.length < n) next.push(emptyVisaCustomer());
+  next.length = n;
+  return next;
+};
+
+// A function (not a static object) so every new/reset visa booking picks up TODAY'S
+// date at the moment it's created, same rationale as getEmptyHotelForm() above.
+const getEmptyVisaForm = () => ({
+  id: null,
+  customersCount: 1,
+  customers: [emptyVisaCustomer()],
+  visaType: "",
+  supplier: "",
+  currency: "EGP",
+  netPrice: "",
+  soldPrice: "",
+  bookingDate: todayDateStr(),
 });
 
 // Given a ticket number like "077-1234567890", returns the same prefix with the numeric
@@ -713,6 +763,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // own name" mode, same pattern as supplierOther for flight tickets above.
   const [hotelSupplierOther, setHotelSupplierOther] = useState(false);
   const [hotelNameOther, setHotelNameOther] = useState(false);
+
+  // ---------- Visa ----------
+  const [visaBookings, setVisaBookings] = useState([]);
+  const [visaForm, setVisaForm] = useState(getEmptyVisaForm);
+  const [visaError, setVisaError] = useState("");
+  const [visaEditingId, setVisaEditingId] = useState(null);
+  // Whether the Supplier field on the visa booking form is in "type your own name" mode,
+  // same pattern as supplierOther / hotelSupplierOther above.
+  const [visaSupplierOther, setVisaSupplierOther] = useState(false);
   // USD -> EGP exchange rate, used to also show a USD booking's value in EGP.
   // Entered by hand (no CBE API is publicly reachable from the browser), and saved so
   // everyone signed in sees today's rate without re-typing it.
@@ -767,9 +826,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   useEffect(() => {
     (async () => {
       try {
-        const [ticketsRes, hotelsRes, employeesRes, sessionRes, suggestionsRes, setupRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, employeesRes, sessionRes, suggestionsRes, setupRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
+          window.storage.get("tickets:visas", true).catch(() => null),
           window.storage.get("tickets:employees", true).catch(() => null),
           window.storage.get("session:user", false).catch(() => null),
           window.storage.get("tickets:suggestions", true).catch(() => null),
@@ -777,9 +837,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         ]);
         const ticketsData = ticketsRes && ticketsRes.value ? JSON.parse(ticketsRes.value) : [];
         const hotelsData = hotelsRes && hotelsRes.value ? JSON.parse(hotelsRes.value) : [];
+        const visasData = visasRes && visasRes.value ? JSON.parse(visasRes.value) : [];
         const employeesData = employeesRes && employeesRes.value ? JSON.parse(employeesRes.value) : [];
         setTickets(ticketsData);
         setHotelBookings(hotelsData);
+        setVisaBookings(visasData);
         setEmployees(employeesData);
         // If accounts already exist, the setup step has clearly already happened even if the
         // flag itself is missing (e.g. app used before this flag existed).
@@ -809,7 +871,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             try {
               const lastSectionRes = await window.storage.get(`tickets:lastSection:${match.username}`, false).catch(() => null);
               const lastSection = lastSectionRes && lastSectionRes.value;
-              if (["flights", "hotels", "cars", "files"].includes(lastSection)) {
+              if (["flights", "hotels", "visa", "cars", "files"].includes(lastSection)) {
                 setActiveSection(lastSection);
               }
             } catch (e) {
@@ -837,9 +899,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     let cancelled = false;
     const loadCoreData = async () => {
       try {
-        const [ticketsRes, hotelsRes, employeesRes, suggestionsRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, employeesRes, suggestionsRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
+          window.storage.get("tickets:visas", true).catch(() => null),
           window.storage.get("tickets:employees", true).catch(() => null),
           window.storage.get("tickets:suggestions", true).catch(() => null),
         ]);
@@ -854,6 +917,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         if (hotelsRes && hotelsRes.value) {
           try {
             setHotelBookings(JSON.parse(hotelsRes.value));
+          } catch (e) {
+            // ignore malformed data for this cycle, try again next poll
+          }
+        }
+        if (visasRes && visasRes.value) {
+          try {
+            setVisaBookings(JSON.parse(visasRes.value));
           } catch (e) {
             // ignore malformed data for this cycle, try again next poll
           }
@@ -914,6 +984,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         return `Editing hotel booking — ${(hb && hb.hotel) || "hotel"}`;
       }
       return "Browsing hotel bookings";
+    }
+    if (activeSection === "visa") {
+      if (visaEditingId) {
+        const vb = visaBookings.find((v) => v.id === visaEditingId);
+        return `Editing visa booking — ${(vb && vb.visaType) || "visa"}`;
+      }
+      return "Browsing visa bookings";
     }
     if (activeSection === "cars") return "Cars";
     if (activeSection === "files") return "Files";
@@ -1130,6 +1207,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       await window.storage.set("tickets:hotels", JSON.stringify(next), true);
     } catch (e) {
       setHotelError("Could not save data, please try again");
+    }
+  };
+
+  const persistVisaBookings = async (next) => {
+    setVisaBookings(next);
+    try {
+      await window.storage.set("tickets:visas", JSON.stringify(next), true);
+    } catch (e) {
+      setVisaError("Could not save data, please try again");
     }
   };
 
@@ -1434,6 +1520,81 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     persistSuggestions({ ...suggestions, hotelNames: (suggestions.hotelNames || []).filter((h) => h !== name) });
   };
 
+  // ---------- Visa ----------
+  const resetVisaForm = () => {
+    setVisaForm(getEmptyVisaForm());
+    setVisaEditingId(null);
+    setVisaError("");
+    setVisaSupplierOther(false);
+  };
+
+  const handleVisaCustomersCountChange = (value) => {
+    const count = parseInt(value, 10) || 1;
+    const customers = resizeVisaCustomers(visaForm.customers, count);
+    setVisaForm({ ...visaForm, customersCount: count, customers });
+  };
+
+  const handleVisaCustomerNameChange = (index, name) => {
+    const customers = visaForm.customers.map((c, i) => (i === index ? { ...c, name } : c));
+    setVisaForm({ ...visaForm, customers });
+  };
+
+  const handleSaveVisa = async () => {
+    setVisaError("");
+    if (!visaForm.visaType.trim()) {
+      setVisaError("Please fill in the visa field");
+      return;
+    }
+    if (!visaForm.supplier.trim()) {
+      setVisaError("Please fill in the supplier field");
+      return;
+    }
+    if (!visaForm.customers[0] || !visaForm.customers[0].name.trim()) {
+      setVisaError("Please enter at least the first customer's name");
+      return;
+    }
+    if (visaForm.netPrice === "" || visaForm.soldPrice === "") {
+      setVisaError("Please fill in the net and sold prices");
+      return;
+    }
+    if (visaEditingId) {
+      const next = visaBookings.map((v) => (v.id === visaEditingId ? { ...v, ...visaForm, id: visaEditingId } : v));
+      await persistVisaBookings(next);
+    } else {
+      const record = {
+        ...visaForm,
+        id: `V-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      };
+      await persistVisaBookings([record, ...visaBookings]);
+    }
+    resetVisaForm();
+  };
+
+  const handleEditVisaClick = (v) => {
+    setVisaEditingId(v.id);
+    setVisaForm({
+      id: v.id,
+      customersCount: (v.customers || []).length || 1,
+      customers: v.customers && v.customers.length > 0 ? v.customers.map((c) => ({ ...c })) : [emptyVisaCustomer()],
+      visaType: v.visaType || "",
+      supplier: v.supplier || "",
+      currency: v.currency || "EGP",
+      netPrice: v.netPrice,
+      soldPrice: v.soldPrice,
+      bookingDate: v.bookingDate || todayDateStr(),
+    });
+    setVisaSupplierOther(!!v.supplier && !suggestions.suppliers.includes(v.supplier));
+    setVisaError("");
+  };
+
+  const handleDeleteVisa = (id) => {
+    requestConfirm("Delete this visa booking? This cannot be undone.", async () => {
+      await persistVisaBookings(visaBookings.filter((v) => v.id !== id));
+      if (visaEditingId === id) resetVisaForm();
+      setConfirmDialog(null);
+    });
+  };
+
   // ---------- Auth ----------
   const handleCreateFirstAdmin = async () => {
     setLoginError("");
@@ -1474,7 +1635,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     try {
       const lastSectionRes = await window.storage.get(`tickets:lastSection:${match.username}`, false).catch(() => null);
       const lastSection = lastSectionRes && lastSectionRes.value;
-      if (["flights", "hotels", "cars", "files"].includes(lastSection)) {
+      if (["flights", "hotels", "visa", "cars", "files"].includes(lastSection)) {
         setActiveSection(lastSection);
       }
     } catch (e) {
@@ -3585,6 +3746,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             Hotels
           </button>
           <button
+            onClick={() => setActiveSection("visa")}
+            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+              activeSection === "visa"
+                ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
+                : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
+            }`}
+          >
+            <PassportIcon size={22} />
+            Visa
+          </button>
+          <button
             onClick={() => setActiveSection("cars")}
             className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "cars"
@@ -4917,6 +5089,229 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <p className="text-sm font-bold text-emerald-700">{fmt(hotelProfitTotal(viewingHotelBooking))}</p>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+        </>
+        )}
+
+        {activeSection === "visa" && (
+        <>
+        {visaError && (
+          <div className="text-sm rounded-xl px-3 py-2 mb-4 bg-red-50 text-red-700">{visaError}</div>
+        )}
+
+        {canAddTickets && (
+          <div className="bg-white border border-stone-200 rounded-2xl p-5 mb-6">
+            <h3 className="text-sm font-bold text-stone-700 mb-4">
+              {visaEditingId ? "Edit visa booking" : "New visa booking"}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Number of customers</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={visaForm.customersCount}
+                  onChange={(e) => handleVisaCustomersCountChange(e.target.value)}
+                  onBlur={(e) => {
+                    if (e.target.value === "" || parseInt(e.target.value, 10) < 1) {
+                      handleVisaCustomersCountChange(1);
+                    }
+                  }}
+                  placeholder="1"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Visa</label>
+                <input
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={visaForm.visaType}
+                  onChange={(e) => setVisaForm({ ...visaForm, visaType: e.target.value })}
+                  placeholder="e.g. Schengen, UK, Dubai"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Supplier</label>
+                {visaSupplierOther ? (
+                  <div className="flex gap-2">
+                    <input
+                      className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={visaForm.supplier}
+                      onChange={(e) => setVisaForm({ ...visaForm, supplier: e.target.value })}
+                      placeholder="Enter supplier name"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setVisaSupplierOther(false); setVisaForm({ ...visaForm, supplier: "" }); }}
+                      className="shrink-0 text-xs text-stone-500 hover:text-teal-800 border border-stone-300 rounded-xl px-2"
+                    >
+                      List
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                    value={visaForm.supplier}
+                    onChange={(e) => {
+                      if (e.target.value === "__other__") {
+                        setVisaSupplierOther(true);
+                        setVisaForm({ ...visaForm, supplier: "" });
+                      } else {
+                        setVisaForm({ ...visaForm, supplier: e.target.value });
+                      }
+                    }}
+                  >
+                    <option value="">Select supplier</option>
+                    {suggestions.suppliers.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                    <option value="__other__">Other</option>
+                  </select>
+                )}
+              </div>
+            </div>
+
+            {/* Dynamic customer name cells, one row per customer */}
+            <div className="mb-4">
+              <label className="text-xs text-stone-500 block mb-2">
+                Customers ({visaForm.customers.length})
+              </label>
+              <div className="space-y-2">
+                {visaForm.customers.map((c, i) => (
+                  <input
+                    key={i}
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={c.name}
+                    onChange={(e) => handleVisaCustomerNameChange(i, e.target.value)}
+                    placeholder={i === 0 ? `Customer ${i + 1} name (required)` : `Customer ${i + 1} name`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Currency</label>
+                <select
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                  value={visaForm.currency}
+                  onChange={(e) => setVisaForm({ ...visaForm, currency: e.target.value })}
+                >
+                  {HOTEL_CURRENCIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Price net</label>
+                <input
+                  type="number"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={visaForm.netPrice}
+                  onChange={(e) => setVisaForm({ ...visaForm, netPrice: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Sold</label>
+                <input
+                  type="number"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={visaForm.soldPrice}
+                  onChange={(e) => setVisaForm({ ...visaForm, soldPrice: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSaveVisa}
+                className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110"
+              >
+                {visaEditingId ? "Save changes" : "Add visa booking"}
+              </button>
+              {visaEditingId && (
+                <button
+                  onClick={resetVisaForm}
+                  className="text-sm text-stone-500 hover:text-stone-700 border border-stone-300 rounded-xl px-4 py-2"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Visa bookings list */}
+        {visaBookings.length === 0 ? (
+          <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
+            <PassportIcon size={40} className="mx-auto mb-3 text-stone-300" />
+            <p className="text-sm">No visa bookings yet.</p>
+          </div>
+        ) : (
+          <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-stone-50 text-stone-500 text-xs">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-semibold"># Customers</th>
+                    <th className="text-left px-4 py-3 font-semibold">Names</th>
+                    <th className="text-left px-4 py-3 font-semibold">Visa</th>
+                    <th className="text-left px-4 py-3 font-semibold">Supplier</th>
+                    <th className="text-right px-4 py-3 font-semibold">Net</th>
+                    <th className="text-right px-4 py-3 font-semibold">Sold</th>
+                    <th className="text-right px-4 py-3 font-semibold">Profit</th>
+                    <th className="text-right px-4 py-3 font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {visaBookings.map((v) => {
+                    const net = parseFloat(v.netPrice) || 0;
+                    const sold = parseFloat(v.soldPrice) || 0;
+                    const profit = sold - net;
+                    return (
+                      <tr key={v.id} className="hover:bg-stone-50">
+                        <td className="px-4 py-3 text-stone-700">{(v.customers || []).length}</td>
+                        <td className="px-4 py-3 text-stone-700">
+                          {(v.customers || []).map((c) => c.name || "-").join(", ")}
+                        </td>
+                        <td className="px-4 py-3 text-stone-700">{v.visaType}</td>
+                        <td className="px-4 py-3 text-stone-700">{v.supplier}</td>
+                        <td className="px-4 py-3 text-right text-stone-700">{fmt(net)} {v.currency}</td>
+                        <td className="px-4 py-3 text-right text-stone-700">{fmt(sold)} {v.currency}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-emerald-700">{fmt(profit)} {v.currency}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {canEditTickets && (
+                              <button
+                                onClick={() => handleEditVisaClick(v)}
+                                className="text-teal-800 hover:text-teal-900"
+                                title="Edit"
+                              >
+                                <Pencil size={16} />
+                              </button>
+                            )}
+                            {canDeleteTickets && (
+                              <button
+                                onClick={() => handleDeleteVisa(v.id)}
+                                className="text-red-500 hover:text-red-700"
+                                title="Delete"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
