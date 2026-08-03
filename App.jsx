@@ -2392,7 +2392,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     });
     return sorted.flatMap((t) => {
       const customers = getCustomers(t);
-      const rows = customers.map((c, i) => ({
+      const refundedIdx = hasRefund(t) ? t.refund.customerIndex || 0 : -1;
+      return customers.map((c, i) => ({
         "Type": "Ticket",
         "Employee": t.employee || "",
         "Company": t.company || "",
@@ -2406,60 +2407,43 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         "Airline": t.airline || "",
         "Issue date": t.date ? formatDisplayDate(t.date) : "",
         // Net/sold price and profit are the ORIGINAL booking amounts, shown once on the
-        // first customer's row; if the ticket was refunded, the refund amounts appear in
-        // their own row directly underneath (see below) rather than being blended in here.
+        // first customer's row. Any recorded refund gets its own columns on that SAME
+        // row — kept visually/accounting-wise separate from the original price columns
+        // rather than netted into them — plus the resulting after-refund figures.
         "Net price": i === 0 ? parseFloat(t.netPrice) || 0 : "",
         "Sold price": i === 0 ? parseFloat(t.soldPrice) || 0 : "",
         "Profit": i === 0 ? profit(t.netPrice, t.soldPrice) : "",
-        "Refund (airline)": "",
-        "Refund (customer)": "",
+        "Refund date": i === refundedIdx && t.refund.date ? formatDisplayDate(t.refund.date) : "",
+        "Refund (airline)": i === refundedIdx ? parseFloat(t.refund.airlineAmount) || 0 : "",
+        "Refund (customer)": i === refundedIdx ? parseFloat(t.refund.customerAmount) || 0 : "",
+        "Net after refund": i === 0 ? netAfterRefund(t) : "",
+        "Sold after refund": i === 0 ? soldAfterRefund(t) : "",
+        "Profit after refund": i === 0 ? profitAfterRefund(t) : "",
         "Notes": t.notes || "",
       }));
-      // A refund, if one's been recorded, gets its own row directly under the original
-      // ticket's row(s) — its own "Type", with the two refund amounts in their own columns,
-      // and the specific customer/ticket number it was recorded against.
-      if (hasRefund(t)) {
-        const refundedCustomer = customers[t.refund.customerIndex || 0] || customers[0];
-        rows.push({
-          "Type": "Refund",
-          "Employee": t.employee || "",
-          "Company": t.company || "",
-          "Supplier": "",
-          "Status": "Refunded",
-          "Customer": refundedCustomer ? refundedCustomer.name || "" : "",
-          "Ticket number": `Refund — ${(refundedCustomer && refundedCustomer.ticketNumber) || firstTicketNumber(t) || "ticket"}`,
-          "From": "",
-          "To": "",
-          "Route": "",
-          "Airline": "",
-          "Issue date": t.refund.date ? formatDisplayDate(t.refund.date) : "",
-          "Net price": "",
-          "Sold price": "",
-          "Profit": "",
-          "Refund (airline)": parseFloat(t.refund.airlineAmount) || 0,
-          "Refund (customer)": parseFloat(t.refund.customerAmount) || 0,
-          "Notes": "",
-        });
-      }
-      return rows;
     });
   };
 
-  // Sums net price / sold price / profit across a raw ticket list (once per booking,
-  // matching how those columns are only populated on each booking's first row above),
-  // with any recorded refund deducted so the totals row matches actual accounting.
+  // Sums the original price columns, the refund columns, and the resulting after-refund
+  // figures across a raw ticket list (once per booking, matching how those columns are
+  // only populated on each booking's first/refunded row above).
   const sumTicketPrices = (rows) =>
     rows.reduce(
       (acc, t) => {
-        acc.net += netAfterRefund(t);
-        acc.sold += soldAfterRefund(t);
-        acc.profit += profitAfterRefund(t);
+        acc.net += parseFloat(t.netPrice) || 0;
+        acc.sold += parseFloat(t.soldPrice) || 0;
+        acc.profit += profit(t.netPrice, t.soldPrice);
+        acc.refundAirline += hasRefund(t) ? parseFloat(t.refund.airlineAmount) || 0 : 0;
+        acc.refundCustomer += hasRefund(t) ? parseFloat(t.refund.customerAmount) || 0 : 0;
+        acc.netAfter += netAfterRefund(t);
+        acc.soldAfter += soldAfterRefund(t);
+        acc.profitAfter += profitAfterRefund(t);
         return acc;
       },
-      { net: 0, sold: 0, profit: 0 }
+      { net: 0, sold: 0, profit: 0, refundAirline: 0, refundCustomer: 0, netAfter: 0, soldAfter: 0, profitAfter: 0 }
     );
 
-  // Appends a totals row (net price / sold price / profit) to the end of a sheet's rows.
+  // Appends a totals row (original + refund + after-refund figures) to the end of a sheet's rows.
   const rowsWithTotals = (rows) => {
     const sums = sumTicketPrices(rows);
     return [
@@ -2470,6 +2454,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         "Net price": Math.round(sums.net * 100) / 100,
         "Sold price": Math.round(sums.sold * 100) / 100,
         "Profit": Math.round(sums.profit * 100) / 100,
+        "Refund date": "",
+        "Refund (airline)": Math.round(sums.refundAirline * 100) / 100,
+        "Refund (customer)": Math.round(sums.refundCustomer * 100) / 100,
+        "Net after refund": Math.round(sums.netAfter * 100) / 100,
+        "Sold after refund": Math.round(sums.soldAfter * 100) / 100,
+        "Profit after refund": Math.round(sums.profitAfter * 100) / 100,
         "Notes": "",
       },
     ];
@@ -3917,6 +3907,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net price</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Sold price</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Profit</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap text-sky-700">Refund (airline)</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap text-sky-700">Refund (customer)</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap"></th>
                   </tr>
                 </thead>
@@ -3978,9 +3970,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
                         </td>
                         <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.date ? formatDisplayDate(t.date) : "-"}</td>
-                        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(netAfterRefund(t))}</td>
-                        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(soldAfterRefund(t))}</td>
-                        <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profitAfterRefund(t))}</td>
+                        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.netPrice)}</td>
+                        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
+                        <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
+                        <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">
+                          {hasRefund(t) && (t.refund.customerIndex || 0) === i ? fmt(t.refund.airlineAmount) : ""}
+                        </td>
+                        <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">
+                          {hasRefund(t) && (t.refund.customerIndex || 0) === i ? fmt(t.refund.customerAmount) : ""}
+                        </td>
                         <td className="px-2.5 py-1 text-right whitespace-nowrap">
                           {(currentUser.isAdmin || canEditTickets) ? (
                             <div className="flex gap-0.5 justify-end">
@@ -4884,26 +4882,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 md:p-5">
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Net price</p>
-                  <p className="text-sm font-medium text-stone-800">{fmt(netAfterRefund(viewingTicket))}</p>
+                  <p className="text-sm font-medium text-stone-800">{fmt(viewingTicket.netPrice)}</p>
                   {hasRefund(viewingTicket) && (
-                    <p className="text-[11px] text-stone-400">Before refund: {fmt(viewingTicket.netPrice)}</p>
+                    <p className="text-[11px] text-sky-600">After refund: {fmt(netAfterRefund(viewingTicket))}</p>
                   )}
                 </div>
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Sold price</p>
-                  <p className="text-sm font-medium text-stone-800">{fmt(soldAfterRefund(viewingTicket))}</p>
+                  <p className="text-sm font-medium text-stone-800">{fmt(viewingTicket.soldPrice)}</p>
                   {hasRefund(viewingTicket) && (
-                    <p className="text-[11px] text-stone-400">Before refund: {fmt(viewingTicket.soldPrice)}</p>
+                    <p className="text-[11px] text-sky-600">After refund: {fmt(soldAfterRefund(viewingTicket))}</p>
                   )}
                 </div>
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Profit</p>
                   <p className="text-sm font-semibold text-emerald-700">
-                    {fmt(profitAfterRefund(viewingTicket))}
+                    {fmt(profit(viewingTicket.netPrice, viewingTicket.soldPrice))}
                   </p>
                   {hasRefund(viewingTicket) && (
-                    <p className="text-[11px] text-stone-400">
-                      Before refund: {fmt(profit(viewingTicket.netPrice, viewingTicket.soldPrice))}
+                    <p className="text-[11px] text-sky-600">
+                      After refund: {fmt(profitAfterRefund(viewingTicket))}
                     </p>
                   )}
                 </div>
