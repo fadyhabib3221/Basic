@@ -73,6 +73,8 @@ const emptyCustomerRow = () => ({ name: "", ticketNumber: "" });
 // Ticket supplier / booking source options.
 const SUPPLIERS = ["Amadeus", "Sabre", "NDC", "Lowcost"];
 
+const CAR_TYPES = ["Sedan", "Mini Van", "H1", "Coaster", "Bus"];
+
 // Saved companies were originally plain strings; this reads the name whether an entry
 // is still a legacy string or the newer { name, taxNumber, commercialReg, phones } record.
 const companyName = (c) => (typeof c === "string" ? c : (c && c.name) || "");
@@ -1750,10 +1752,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       setCarError("Please fill in the car type");
       return;
     }
-    if (!carForm.supplier.trim()) {
-      setCarError("Please fill in the supplier field");
-      return;
-    }
     if (carForm.startsAtAirport && !carForm.flightNumber.trim()) {
       setCarError("Please enter the flight number");
       return;
@@ -1811,10 +1809,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Opens a printable receipt for a single transfer booking in a new tab and
   // triggers the browser print dialog automatically.
   const handlePrintCar = (c) => {
-    const net = parseFloat(c.netPrice) || 0;
-    const sold = parseFloat(c.soldPrice) || 0;
-    const profit = sold - net;
-    const currency = c.currency || "";
     const printedBy = currentUser?.name || "";
 
     const row = (label, value) =>
@@ -1867,19 +1861,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <table>
             ${row("Route", `${c.routeFrom || "-"} &rarr; ${c.routeTo || "-"}`)}
             ${row("Car type", c.carType || "-")}
-            ${row("Supplier", c.supplier || "-")}
             ${row("Trip", c.isRoundTrip ? "Round trip" : "One way")}
             ${row("Waiting", c.hasWaiting ? `${c.waitingHours || 0} h` : "-")}
             ${row("Flight number", c.startsAtAirport ? (c.flightNumber || "-") : "-")}
             ${row("Booking date", c.bookingDate ? formatDisplayDate(c.bookingDate) : "-")}
-          </table>
-
-          <h2>Payment</h2>
-          <table class="totals">
-            ${row("Driver tip", c.driverTip ? `${fmt(parseFloat(c.driverTip) || 0)} ${currency}` : "-")}
-            ${row("Net price", `${fmt(net)} ${currency}`)}
-            ${row("Sold price", `${fmt(sold)} ${currency}`)}
-            <tr><td class="label">Profit</td><td class="value profit">${fmt(profit)} ${currency}</td></tr>
           </table>
 
           <div class="footer">
@@ -6088,12 +6073,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Car type</label>
-                <input
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                <select
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
                   value={carForm.carType}
                   onChange={(e) => setCarForm({ ...carForm, carType: e.target.value })}
-                  placeholder="e.g. Sedan, Van, Coaster"
-                />
+                >
+                  <option value="">Select car type</option>
+                  {CAR_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Supplier</label>
