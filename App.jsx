@@ -303,6 +303,25 @@ const ROLE_PRESETS = {
 
 const roleLabel = (value) => (EMPLOYEE_ROLES.find((r) => r.value === value) || {}).label || "Employee";
 
+// Which of the app's sections (Flights/Hotels/Visa/Transportation/Files) an employee can
+// see and use, independent of their ticket permissions (view/add/edit/delete) above — an
+// employee could, for example, be allowed to add tickets but only in the Hotels section.
+// Every existing employee predates this feature, so any section missing from a stored
+// record is treated as allowed (see employeeSections below) rather than silently locking
+// people out of sections they already had access to.
+const SECTION_OPTIONS = [
+  { value: "flights", label: "Flights" },
+  { value: "hotels", label: "Hotels" },
+  { value: "visa", label: "Visa" },
+  { value: "cars", label: "Transportation" },
+  { value: "files", label: "Files" },
+];
+const DEFAULT_SECTIONS = { flights: true, hotels: true, visa: true, cars: true, files: true };
+// Merges an employee's stored section toggles over the all-allowed defaults, so a
+// legacy record with no "sections" field at all (or missing individual keys) still
+// resolves to full access rather than blocking every section.
+const employeeSections = (emp) => ({ ...DEFAULT_SECTIONS, ...((emp && emp.sections) || {}) });
+
 // Applies the coherence rules that keep the six permission toggles consistent with
 // each other, no matter which one was just changed by hand:
 // - Editing, deleting, or accounting access all require view access first.
@@ -327,33 +346,7 @@ const emptyNewEmployee = {
   canDelete: false,
   isAccounting: false,
   canManageCompanies: false,
-};
-
-// Per-employee permissions button used in the employee table: shows a quick summary
-// of the current access and opens the full-screen EmployeePermissionsModal below on
-// click. Kept as a plain button (not a popover) because the table it sits in has
-// overflow-hidden on its wrapper, which would otherwise clip a dropdown open below it.
-const PermissionsCell = ({ emp, onOpen }) => {
-  const summary = [
-    emp.canViewAll && "View all",
-    emp.canEdit && "Edit",
-    emp.canDelete && "Delete",
-    emp.isAccounting && "Notes only",
-    emp.canManageCompanies && "Companies",
-  ]
-    .filter(Boolean)
-    .join(" · ") || "Own tickets only";
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs text-stone-700 hover:bg-teal-50 hover:border-teal-300 flex items-center gap-1.5 max-w-[220px]"
-    >
-      <span className="truncate">{summary}</span>
-      <Pencil size={11} className="text-stone-400 shrink-0" />
-    </button>
-  );
+  sections: { ...DEFAULT_SECTIONS },
 };
 
 // Full-screen modal for editing one employee's grade and detailed permissions. Centered
@@ -361,8 +354,9 @@ const PermissionsCell = ({ emp, onOpen }) => {
 // fully visible and easy to use — this is the one place permissions for an existing
 // employee are changed. Closes itself if the employee record disappears (e.g. deleted
 // from another tab) or is promoted to a main account (which no longer uses these toggles).
-const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission }) => {
+const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, onSetSection }) => {
   if (!emp) return null;
+  const sections = employeeSections(emp);
   return (
     <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
@@ -396,7 +390,7 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission }) 
         </div>
 
         <p className="text-xs text-stone-500 mb-1">Individual permissions</p>
-        <div className="border border-stone-200 rounded-xl px-3 divide-y divide-stone-100">
+        <div className="border border-stone-200 rounded-xl px-3 divide-y divide-stone-100 mb-4">
           <ToggleSwitch
             label="View all tickets"
             description="See every employee's tickets, not just their own"
@@ -430,6 +424,18 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission }) 
             checked={emp.canManageCompanies}
             onChange={(v) => onSetPermission("canManageCompanies", v)}
           />
+        </div>
+
+        <p className="text-xs text-stone-500 mb-1">Section access</p>
+        <div className="border border-stone-200 rounded-xl px-3 divide-y divide-stone-100">
+          {SECTION_OPTIONS.map((s) => (
+            <ToggleSwitch
+              key={s.value}
+              label={s.label}
+              checked={!!sections[s.value]}
+              onChange={(v) => onSetSection(s.value, v)}
+            />
+          ))}
         </div>
 
         <button
@@ -787,9 +793,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [fileError, setFileError] = useState("");
   // Which file (by id) is currently open in the detail view; null = showing the list.
   const [openFileId, setOpenFileId] = useState(null);
+  // Whether the currently open file's services list is in "edit" mode (showing the Add
+  // service button and each item's delete/trash icon). Off by default so the file detail
+  // view opens as a clean read-only summary; toggled on with the "Edit services" button.
+  const [editingFileServices, setEditingFileServices] = useState(false);
   // Whether the "add a copy from a service" picker is open, and which service tab it's on.
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [filePickerTab, setFilePickerTab] = useState("flights");
+  // A file being newly created but not yet confirmed/saved: null while not creating,
+  // otherwise { company, notes, createdAt, items }. Lives only in local state — nothing is
+  // written to the files table until the "Add file" (confirm) button is pressed. Services
+  // can still be pulled in via "Add services" while in this draft state.
+  const [draftFile, setDraftFile] = useState(null);
   // Set when "copy to a file" is clicked from the Flights/Hotels/Visa tables directly —
   // { type: 'flights'|'hotels'|'visa', record } — opens a modal asking which file (by
   // its serial number) to drop the copy into.
@@ -1793,6 +1808,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     await persistEmployees(next);
   };
 
+  // Toggles one section (Flights/Hotels/Visa/Transportation/Files) on or off for an
+  // employee, independent of their ticket permissions above.
+  const handleToggleSection = async (username, section, checked) => {
+    if (!currentUser.isAdmin) {
+      setManageError("Only the main account can change employee permissions");
+      return;
+    }
+    const next = (employees || []).map((e) =>
+      e.username === username ? { ...e, sections: { ...employeeSections(e), [section]: checked } } : e
+    );
+    await persistEmployees(next);
+  };
+
   // Promotes an employee to a main/admin account. Any main account can promote another one.
   const handlePromoteToAdmin = async (username) => {
     if (!currentUser.isAdmin) {
@@ -2401,6 +2429,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const currentEmployeeRecord = currentUser
     ? (employees || []).find((e) => e.username === currentUser.username)
     : null;
+  // The main account always has every section; everyone else is gated by their
+  // individually-granted section access (defaulting to all-allowed for legacy records).
+  const mySections = currentUser && currentUser.isAdmin ? DEFAULT_SECTIONS : employeeSections(currentEmployeeRecord);
+  // If the current section is no longer (or was never) allowed for this employee —
+  // e.g. their access was just changed by the main account — bounce them to the first
+  // section they do have access to, instead of leaving them stuck on a blocked one.
+  useEffect(() => {
+    if (!currentUser) return;
+    if (mySections[activeSection]) return;
+    const firstAllowed = SECTION_OPTIONS.find((s) => mySections[s.value]);
+    if (firstAllowed) setActiveSection(firstAllowed.value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, activeSection, mySections.flights, mySections.hotels, mySections.visa, mySections.cars, mySections.files]);
   const canViewAllTickets =
     !!currentUser &&
     (currentUser.isAdmin ||
@@ -2651,24 +2692,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     { net: 0, sold: 0, profit: 0 }
   );
 
-  const createFile = async () => {
-    // Adding services into a file is intentionally open to every signed-in employee,
-    // regardless of their add/edit/delete permissions elsewhere in the app.
-    if (!currentUser) return;
-    const record = {
-      id: `FL-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      serial: nextFileSerial(files),
-      createdAt: todayDateStr(),
-      createdBy: currentUser.name,
-      employeeUsername: currentUser.username,
-      company: "",
-      notes: "",
-      items: [],
-    };
-    await persistFiles([record, ...files]);
-    setOpenFileId(record.id);
-  };
-
   const updateFileField = async (id, field, value) => {
     await persistFiles(files.map((f) => (f.id === id ? { ...f, [field]: value } : f)));
   };
@@ -2734,6 +2757,51 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     };
     await persistFiles([record, ...files]);
     setCopyPickerSource(null);
+  };
+
+  // Starts a new file in "draft" mode: nothing is saved to the files table yet, but the
+  // serial number is generated right away (based on today's date) so it's visible while
+  // filling in the rest. The user fills in details and can pull in service copies, then
+  // presses "Add file" to confirm.
+  const startNewFileDraft = () => {
+    if (!currentUser) return;
+    const createdAt = todayDateStr();
+    setDraftFile({ serial: nextFileSerial(files, createdAt), company: "", notes: "", createdAt, items: [] });
+  };
+
+  const updateDraftField = (field, value) =>
+    setDraftFile((d) => (d ? { ...d, [field]: value } : d));
+
+  // Changing the draft's date re-generates its serial to match (same as updateFileDate
+  // does for an already-saved file), so the serial shown always reflects the file's date.
+  const updateDraftDate = (newDate) =>
+    setDraftFile((d) => (d ? { ...d, createdAt: newDate, serial: nextFileSerial(files, newDate) } : d));
+
+  const addDraftItem = (sourceType, record) =>
+    setDraftFile((d) => (d ? { ...d, items: [...(d.items || []), buildFileItem(sourceType, record)] } : d));
+
+  const removeDraftItem = (itemId) =>
+    setDraftFile((d) => (d ? { ...d, items: (d.items || []).filter((i) => i.id !== itemId) } : d));
+
+  const cancelDraftFile = () => setDraftFile(null);
+
+  // "Add file" (confirm) button on the draft panel: this is the moment the file actually
+  // gets created and placed in the main files table, using the serial that was already
+  // generated (and shown) while in draft mode.
+  const confirmDraftFile = async () => {
+    if (!currentUser || !draftFile) return;
+    const record = {
+      id: `FL-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      serial: draftFile.serial || nextFileSerial(files, draftFile.createdAt),
+      createdAt: draftFile.createdAt || todayDateStr(),
+      createdBy: currentUser.name,
+      employeeUsername: currentUser.username,
+      company: draftFile.company || "",
+      notes: draftFile.notes || "",
+      items: draftFile.items || [],
+    };
+    await persistFiles([record, ...files]);
+    setDraftFile(null);
   };
 
   const monthsAvailable = Array.from(new Set(visibleTickets.map((t) => monthKey(t.date)))).sort((a, b) =>
@@ -3575,7 +3643,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
             <h2 className="font-semibold text-stone-900 mb-1">Employee accounts</h2>
             <p className="text-xs text-stone-400 mb-4">
-              As the main account, you can view and change every employee's password, edit their name or username, add or remove accounts, assign a grade (Manager, Supervisor, Employee, Accountant), and grant or remove main-account access. A grade fills in a starting set of permissions, but every permission — view all tickets, add tickets, edit tickets, delete tickets, accounting/notes-only mode, and manage companies — is an individual on/off switch you can set by hand for each employee, click the Permissions button on their row to open it. This is a basic access gate, not a secure authentication system — anyone with technical access to the app's stored data can read these passwords. Avoid reusing important passwords here.
+              As the main account, you can view and change every employee's password, edit their name or username, add or remove accounts, assign a grade (Manager, Supervisor, Employee, Accountant), and grant or remove main-account access. A grade fills in a starting set of permissions, but every permission — view all tickets, add tickets, edit tickets, delete tickets, accounting/notes-only mode, manage companies, and which sections (Flights, Hotels, Visa, Transportation, Files) they can access — is an individual on/off switch you can set by hand for each employee: click their name to open it. This is a basic access gate, not a secure authentication system — anyone with technical access to the app's stored data can read these passwords. Avoid reusing important passwords here.
             </p>
             {manageError && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{manageError}</div>}
             <p className="text-xs text-stone-500 mb-3 flex items-center gap-1.5">
@@ -3591,7 +3659,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <th className="text-left px-3 py-2 font-medium">Username</th>
                     <th className="text-left px-3 py-2 font-medium">Password</th>
                     <th className="text-left px-3 py-2 font-medium">Grade</th>
-                    <th className="text-left px-3 py-2 font-medium">Permissions</th>
                     <th className="text-left px-3 py-2 font-medium"></th>
                   </tr>
                 </thead>
@@ -3656,13 +3723,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             )}
                           </td>
                           <td className="px-3 py-2">
-                            {e.isAdmin ? (
-                              <span className="text-xs text-stone-400">Everything (main account)</span>
-                            ) : (
-                              <PermissionsCell emp={e} onOpen={() => setOpenPermissionsFor(e.username)} />
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
                             <div className="flex gap-1 justify-end">
                               <button onClick={saveEditEmployee} className="text-emerald-600 hover:text-emerald-800 p-1">
                                 <Check size={15} />
@@ -3683,7 +3743,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             {isOnline(e.username) ? "Online" : "Offline"}
                           </span>
                         </td>
-                        <td className="px-3 py-2">{e.name}</td>
+                        <td className="px-3 py-2">
+                          {e.isAdmin ? (
+                            e.name
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setOpenPermissionsFor(e.username)}
+                              title="View or change this employee's permissions"
+                              className="text-teal-800 hover:text-teal-900 hover:underline font-medium text-left"
+                            >
+                              {e.name}
+                            </button>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-stone-500">{e.username}</td>
                         <td className="px-3 py-2 text-stone-500">
                           <div className="flex items-center gap-2">
@@ -3710,13 +3783,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 <option key={r.value} value={r.value}>{r.label}</option>
                               ))}
                             </select>
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          {e.isAdmin ? (
-                            <span className="text-xs text-stone-400">Everything (main account)</span>
-                          ) : (
-                            <PermissionsCell emp={e} onOpen={() => setOpenPermissionsFor(e.username)} />
                           )}
                         </td>
                         <td className="px-3 py-2 text-right">
@@ -3847,6 +3913,22 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     checked={newEmployee.canManageCompanies}
                     onChange={(v) => setNewEmployee({ ...newEmployee, canManageCompanies: v })}
                   />
+                  <div className="pt-2">
+                    <p className="text-xs text-stone-500 mb-1 pt-1.5">Section access</p>
+                    {SECTION_OPTIONS.map((s) => (
+                      <ToggleSwitch
+                        key={s.value}
+                        label={s.label}
+                        checked={!!employeeSections(newEmployee)[s.value]}
+                        onChange={(v) =>
+                          setNewEmployee({
+                            ...newEmployee,
+                            sections: { ...employeeSections(newEmployee), [s.value]: v },
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -3991,6 +4073,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <>
         {/* Top-level section switcher */}
         <div className="flex items-center justify-center gap-3 mb-6">
+          {mySections.flights && (
           <button
             onClick={() => setActiveSection("flights")}
             className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -4002,6 +4085,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <Plane size={22} className="rotate-45" />
             Flights
           </button>
+          )}
+          {mySections.hotels && (
           <button
             onClick={() => setActiveSection("hotels")}
             className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -4013,6 +4098,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <Building2 size={22} />
             Hotels
           </button>
+          )}
+          {mySections.visa && (
           <button
             onClick={() => setActiveSection("visa")}
             className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -4024,6 +4111,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <PassportIcon size={22} />
             Visa
           </button>
+          )}
+          {mySections.cars && (
           <button
             onClick={() => setActiveSection("cars")}
             className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -4035,6 +4124,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <Car size={22} />
             Transportation
           </button>
+          )}
+          {mySections.files && (
           <button
             onClick={() => setActiveSection("files")}
             className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -4046,6 +4137,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <FileText size={22} />
             Files
           </button>
+          )}
         </div>
 
         {activeSection === "flights" && (
@@ -5658,7 +5750,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-4">{fileError}</div>
             )}
 
-            {!openFile && (
+            {!openFile && !draftFile && (
               <>
                 {/* Summary cards, same style as the Flights section */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
@@ -5685,21 +5777,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </div>
                 </div>
 
-                <button
-                  onClick={createFile}
-                  className="mb-6 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2.5 shadow-sm shadow-teal-800/30 flex items-center gap-2"
-                >
-                  <Plus size={16} /> New file
-                </button>
+                <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100 overflow-hidden mb-6">
+                  <button
+                    onClick={startNewFileDraft}
+                    className="w-full flex items-center gap-2 px-4 py-3 text-teal-800 hover:bg-teal-50/50 text-sm font-semibold text-left"
+                  >
+                    <Plus size={16} /> Create new file
+                  </button>
 
-                {visibleFiles.length === 0 ? (
-                  <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
-                    <FileText size={40} className="mx-auto mb-3 text-stone-300" />
-                    <p className="text-sm">No files yet — create one and pull in copies from Flights, Hotels, or Visa.</p>
-                  </div>
-                ) : (
-                  <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100 overflow-hidden">
-                    {visibleFiles.map((f) => {
+                  {visibleFiles.length === 0 ? (
+                    <p className="text-sm text-stone-400 text-center py-10">
+                      No files yet — create one and pull in copies from Flights, Hotels, or Visa.
+                    </p>
+                  ) : (
+                    visibleFiles.map((f) => {
                       const t = fileTotals(f);
                       return (
                         <div
@@ -5707,7 +5798,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-teal-50/50"
                         >
                           <button
-                            onClick={() => setOpenFileId(f.id)}
+                            onClick={() => { setOpenFileId(f.id); setEditingFileServices(false); }}
                             className="flex-1 min-w-0 flex items-center justify-between gap-3 text-left"
                           >
                             <div className="min-w-0">
@@ -5736,16 +5827,138 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           </button>
                         </div>
                       );
-                    })}
-                  </div>
-                )}
+                    })
+                  )}
+                </div>
               </>
+            )}
+
+            {draftFile && (
+              <div>
+                <button
+                  onClick={cancelDraftFile}
+                  className="mb-4 text-stone-500 hover:text-teal-800 text-sm font-semibold flex items-center gap-1.5"
+                >
+                  <ArrowLeft size={15} /> Cancel
+                </button>
+
+                <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
+                  <p className="text-xs text-stone-400 mb-4">New file — not saved yet</p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="text-xs text-stone-500 block mb-1">Serial</label>
+                      <input
+                        type="text"
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={draftFile.serial || ""}
+                        onChange={(e) => updateDraftField("serial", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-stone-500 block mb-1">File date</label>
+                      <input
+                        type="date"
+                        max={todayDateStr()}
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={draftFile.createdAt || ""}
+                        onChange={(e) =>
+                          e.target.value && updateDraftDate(e.target.value > todayDateStr() ? todayDateStr() : e.target.value)
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-stone-500 block mb-1">Company</label>
+                      <input
+                        type="text"
+                        list="file-company-list"
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={draftFile.company || ""}
+                        onChange={(e) => updateDraftField("company", e.target.value)}
+                      />
+                      <datalist id="file-company-list">
+                        {suggestions.companies.map((c, i) => (
+                          <option key={i} value={companyName(c)} />
+                        ))}
+                      </datalist>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="text-xs text-stone-500 block mb-1">Notes</label>
+                      <input
+                        type="text"
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={draftFile.notes || ""}
+                        onChange={(e) => updateDraftField("notes", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <button
+                      onClick={() => setShowFilePicker(true)}
+                      className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
+                    >
+                      <Plus size={14} /> Add services
+                    </button>
+                    <button
+                      onClick={confirmDraftFile}
+                      className="bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-xs font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5 shadow-sm shadow-teal-800/30"
+                    >
+                      <Plus size={14} /> Add file
+                    </button>
+                  </div>
+
+                  {/* Totals for the draft's items so far */}
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="bg-stone-50 rounded-xl p-3 text-center">
+                      <p className="text-[11px] text-stone-500">Net</p>
+                      <p className="font-bold text-sm">{fmt(fileTotals(draftFile).net)}</p>
+                    </div>
+                    <div className="bg-stone-50 rounded-xl p-3 text-center">
+                      <p className="text-[11px] text-stone-500">Sold</p>
+                      <p className="font-bold text-sm">{fmt(fileTotals(draftFile).sold)}</p>
+                    </div>
+                    <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                      <p className="text-[11px] text-emerald-700">Profit</p>
+                      <p className="font-bold text-sm text-emerald-700">{fmt(fileTotals(draftFile).profit)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100 overflow-hidden">
+                  {(draftFile.items || []).length === 0 ? (
+                    <p className="text-sm text-stone-400 text-center py-10">No services added yet — use "Add services" above.</p>
+                  ) : (
+                    (draftFile.items || []).map((it) => (
+                      <div key={it.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="text-xs text-teal-800 font-semibold">{FILE_SOURCE_LABELS[it.sourceType] || it.sourceType}</p>
+                          <p className="text-sm text-stone-900 truncate">{it.label}</p>
+                          <p className="text-xs text-stone-400">{formatDisplayDate(it.date)}</p>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-right">
+                            <p className="text-sm font-bold">{fmt(it.soldPrice)} {it.currency}</p>
+                            <p className="text-xs text-emerald-700">net {fmt(it.netPrice)} {it.currency}</p>
+                          </div>
+                          <button
+                            onClick={() => removeDraftItem(it.id)}
+                            className="text-red-500 hover:text-red-700 p-1"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             )}
 
             {openFile && (
               <div>
                 <button
-                  onClick={() => setOpenFileId(null)}
+                  onClick={() => { setOpenFileId(null); setEditingFileServices(false); }}
                   className="mb-4 text-stone-500 hover:text-teal-800 text-sm font-semibold flex items-center gap-1.5"
                 >
                   <ArrowLeft size={15} /> Back to files
@@ -5757,12 +5970,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <h2 className="font-semibold text-stone-900">{openFile.serial}</h2>
                       <p className="text-xs text-stone-400">{formatDisplayDate(openFile.createdAt)} · Created by {openFile.createdBy}</p>
                     </div>
-                    <button
-                      onClick={() => deleteFile(openFile.id)}
-                      className="text-red-600 border border-red-200 hover:bg-red-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
-                    >
-                      <Trash2 size={13} /> Delete file
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setEditingFileServices((v) => !v)}
+                        className={
+                          editingFileServices
+                            ? "bg-teal-800 text-white text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
+                            : "text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
+                        }
+                      >
+                        <Pencil size={13} /> {editingFileServices ? "Done editing" : "Edit services"}
+                      </button>
+                      <button
+                        onClick={() => deleteFile(openFile.id)}
+                        className="text-red-600 border border-red-200 hover:bg-red-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
+                      >
+                        <Trash2 size={13} /> Delete file
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
@@ -5814,6 +6039,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     </div>
                   </div>
 
+                  {editingFileServices && (
+                    <button
+                      onClick={() => setShowFilePicker(true)}
+                      className="mb-4 text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
+                    >
+                      <Plus size={14} /> Add service
+                    </button>
+                  )}
+
                   {/* Totals for this file only — separate from every other section's totals */}
                   <div className="grid grid-cols-3 gap-3 mb-4">
                     <div className="bg-stone-50 rounded-xl p-3 text-center">
@@ -5829,13 +6063,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <p className="font-bold text-sm text-emerald-700">{fmt(fileTotals(openFile).profit)}</p>
                     </div>
                   </div>
-
-                  <button
-                    onClick={() => setShowFilePicker(true)}
-                    className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
-                  >
-                    <Plus size={14} /> Add a copy from a service
-                  </button>
                 </div>
 
                 <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100 overflow-hidden">
@@ -5854,7 +6081,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <p className="text-sm font-bold">{fmt(it.soldPrice)} {it.currency}</p>
                             <p className="text-xs text-emerald-700">net {fmt(it.netPrice)} {it.currency}</p>
                           </div>
-                          {canEditTickets && (
+                          {editingFileServices && canEditTickets && (
                             <button
                               onClick={() => removeItemFromFile(openFile.id, it.id)}
                               className="text-red-500 hover:text-red-700 p-1"
@@ -5874,14 +6101,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 the currently open file. Selecting a record only ever ADDS a snapshot here —
                 it never edits, deletes, or otherwise affects the original record or that
                 section's own totals. */}
-            {showFilePicker && openFile && (
+            {showFilePicker && (openFile || draftFile) && (
               <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50" onClick={() => setShowFilePicker(false)}>
                 <div
                   className="bg-white rounded-2xl border border-stone-200 w-full max-w-lg max-h-[85vh] flex flex-col"
                   onClick={(ev) => ev.stopPropagation()}
                 >
                   <div className="flex items-center justify-between p-4 border-b border-stone-100">
-                    <h3 className="font-semibold text-stone-900">Add a copy to {openFile.serial}</h3>
+                    <h3 className="font-semibold text-stone-900">
+                      {draftFile ? "Add services" : `Add a copy to ${openFile.serial}`}
+                    </h3>
                     <button onClick={() => setShowFilePicker(false)} className="text-stone-400 hover:text-stone-700 p-1">
                       <X size={16} />
                     </button>
@@ -5915,7 +6144,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         visibleTickets.map((t) => (
                           <button
                             key={t.id}
-                            onClick={async () => { await addItemToFile(openFile.id, "flights", t); setShowFilePicker(false); }}
+                            onClick={async () => {
+                              if (draftFile) addDraftItem("flights", t);
+                              else await addItemToFile(openFile.id, "flights", t);
+                              setShowFilePicker(false);
+                            }}
                             className="w-full text-left border border-stone-200 rounded-xl px-3 py-2 hover:bg-teal-50 hover:border-teal-300 flex items-center justify-between gap-2"
                           >
                             <span className="text-sm text-stone-800 truncate">
@@ -5933,7 +6166,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         visibleHotelBookings.map((h) => (
                           <button
                             key={h.id}
-                            onClick={async () => { await addItemToFile(openFile.id, "hotels", h); setShowFilePicker(false); }}
+                            onClick={async () => {
+                              if (draftFile) addDraftItem("hotels", h);
+                              else await addItemToFile(openFile.id, "hotels", h);
+                              setShowFilePicker(false);
+                            }}
                             className="w-full text-left border border-stone-200 rounded-xl px-3 py-2 hover:bg-teal-50 hover:border-teal-300 flex items-center justify-between gap-2"
                           >
                             <span className="text-sm text-stone-800 truncate">
@@ -5951,7 +6188,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         visibleVisaBookingsForFiles.map((v) => (
                           <button
                             key={v.id}
-                            onClick={async () => { await addItemToFile(openFile.id, "visa", v); setShowFilePicker(false); }}
+                            onClick={async () => {
+                              if (draftFile) addDraftItem("visa", v);
+                              else await addItemToFile(openFile.id, "visa", v);
+                              setShowFilePicker(false);
+                            }}
                             className="w-full text-left border border-stone-200 rounded-xl px-3 py-2 hover:bg-teal-50 hover:border-teal-300 flex items-center justify-between gap-2"
                           >
                             <span className="text-sm text-stone-800 truncate">
@@ -6312,6 +6553,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           onClose={() => setOpenPermissionsFor(null)}
           onSetRole={(role) => handleRoleChange(openPermissionsFor, role)}
           onSetPermission={(field, value) => handleTogglePermission(openPermissionsFor, field, value)}
+          onSetSection={(section, value) => handleToggleSection(openPermissionsFor, section, value)}
         />
       )}
 
