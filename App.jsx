@@ -2762,56 +2762,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     </span>
                   )}
                   {currentUser.isAdmin && (
-                    <span className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setShowOnlineList(!showOnlineList)}
-                        className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-50 bg-emerald-500/20 border border-emerald-300/30 rounded-full px-2 py-0.5 hover:bg-emerald-500/30"
-                      >
-                        <Wifi size={11} />
-                        {onlineUsernames.length} online now
-                      </button>
-                      {showOnlineList && (
-                        <div className="absolute z-20 top-full mt-1 left-0 w-64 bg-white border border-stone-300 rounded-2xl shadow-lg p-2">
-                          {onlineUsernames.length === 0 ? (
-                            <p className="text-xs text-stone-400 px-1 py-1">No one online right now</p>
-                          ) : (
-                            <ul className="space-y-1 max-h-56 overflow-y-auto">
-                              {onlineUsernames.map((u) => {
-                                const emp = (employees || []).find((e) => e.username === u);
-                                const activity = presenceMap[u] && presenceMap[u].activity;
-                                return (
-                                  <li key={u} className="flex items-center gap-1.5 text-xs text-stone-700 px-1 py-0.5">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                                    <span className="flex-1 truncate">
-                                      {emp ? emp.name : u}
-                                      {emp && emp.isAdmin && (
-                                        <span className="text-[9px] text-teal-700 font-semibold"> (main)</span>
-                                      )}
-                                      {activity && (
-                                        <span className="block text-[10px] text-stone-400 truncate">{activity}</span>
-                                      )}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (window.confirm(`Sign out ${emp ? emp.name : u} now?`)) {
-                                          handleForceSignOut(u);
-                                        }
-                                      }}
-                                      title="Sign out this employee"
-                                      className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 hover:text-red-800 border border-red-200 hover:border-red-300 bg-red-50 rounded-full px-1.5 py-0.5"
-                                    >
-                                      <LogOut size={10} /> Sign out
-                                    </button>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowOnlineList(!showOnlineList)}
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-50 bg-emerald-500/20 border border-emerald-300/30 rounded-full px-2 py-0.5 hover:bg-emerald-500/30"
+                    >
+                      <Wifi size={11} />
+                      {onlineUsernames.length} online now
+                    </button>
                   )}
                 </p>
               </div>
@@ -2886,6 +2844,55 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </header>
         </div>
+        {currentUser.isAdmin && showOnlineList && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setShowOnlineList(false)} />
+            <div className="fixed z-40 top-24 left-4 right-4 md:left-auto md:right-6 md:w-72 bg-white border border-stone-300 rounded-2xl shadow-lg p-2">
+              <div className="flex items-center justify-between px-1 pb-1 mb-1 border-b border-stone-100">
+                <p className="text-xs font-semibold text-stone-600">{onlineUsernames.length} online now</p>
+                <button onClick={() => setShowOnlineList(false)} className="text-stone-400 hover:text-stone-700 p-0.5">
+                  <X size={14} />
+                </button>
+              </div>
+              {onlineUsernames.length === 0 ? (
+                <p className="text-xs text-stone-400 px-1 py-1">No one online right now</p>
+              ) : (
+                <ul className="space-y-1 max-h-72 overflow-y-auto">
+                  {onlineUsernames.map((u) => {
+                    const emp = (employees || []).find((e) => e.username === u);
+                    const activity = presenceMap[u] && presenceMap[u].activity;
+                    return (
+                      <li key={u} className="flex items-center gap-1.5 text-xs text-stone-700 px-1 py-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                        <span className="flex-1 truncate">
+                          {emp ? emp.name : u}
+                          {emp && emp.isAdmin && (
+                            <span className="text-[9px] text-teal-700 font-semibold"> (main)</span>
+                          )}
+                          {activity && (
+                            <span className="block text-[10px] text-stone-400 truncate">{activity}</span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Sign out ${emp ? emp.name : u} now?`)) {
+                              handleForceSignOut(u);
+                            }
+                          }}
+                          title="Sign out this employee"
+                          className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 hover:text-red-800 border border-red-200 hover:border-red-300 bg-red-50 rounded-full px-1.5 py-0.5"
+                        >
+                          <LogOut size={10} /> Sign out
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </>
+        )}
         {/* Perforated tear line, like separating a boarding-pass stub from the rest */}
         <div className="relative h-6 mb-4">
           <div className="absolute -left-2.5 top-0 w-5 h-5 rounded-full bg-stone-50" />
