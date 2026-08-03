@@ -286,7 +286,6 @@ const emptyNewEmployee = {
 const PermissionsCell = ({ emp, onOpen }) => {
   const summary = [
     emp.canViewAll && "View all",
-    emp.canAdd && "Add",
     emp.canEdit && "Edit",
     emp.canDelete && "Delete",
     emp.isAccounting && "Notes only",
@@ -354,13 +353,6 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission }) 
             checked={emp.canViewAll || emp.canEdit || emp.canDelete}
             disabled={emp.isAccounting || emp.canEdit || emp.canDelete}
             onChange={(v) => onSetPermission("canViewAll", v)}
-          />
-          <ToggleSwitch
-            label="Add tickets"
-            description="Create new tickets"
-            checked={emp.canAdd}
-            disabled={emp.isAccounting}
-            onChange={(v) => onSetPermission("canAdd", v)}
           />
           <ToggleSwitch
             label="Edit tickets"
@@ -2142,13 +2134,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // edit anywhere in the app is the Notes field on a ticket's detail page.
   const isAccountingUser =
     !!currentUser && !currentUser.isAdmin && !!(currentEmployeeRecord && currentEmployeeRecord.isAccounting);
-  // A non-admin employee can be granted permission to add new tickets. Defaults to true
-  // for freshly created accounts, but the main account can switch it off (e.g. for a
-  // view-only or edit-only employee). Accounting accounts never get this either way.
+  // Every employee can add new tickets — this is no longer an individually
+  // switchable permission. Accounting accounts are the one exception: their only
+  // allowed edit anywhere in the app is the Notes field.
   const canAddTickets =
     !!currentUser &&
     (currentUser.isAdmin ||
-      !!(currentEmployeeRecord && currentEmployeeRecord.canAdd && !currentEmployeeRecord.isAccounting));
+      !!(currentEmployeeRecord && !currentEmployeeRecord.isAccounting));
   // A non-admin employee can be granted permission to edit tickets (within whatever
   // set of tickets they can already see). Accounting accounts are excluded even if the
   // flag is set — their only allowed edit is the Notes field, never the ticket itself.
@@ -3139,7 +3131,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <span className="text-xs text-stone-500 truncate">
                   {[
                     newEmployee.canViewAll && "View all",
-                    newEmployee.canAdd && "Add",
                     newEmployee.canEdit && "Edit",
                     newEmployee.canDelete && "Delete",
                     newEmployee.isAccounting && "Notes only",
@@ -3158,13 +3149,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     checked={newEmployee.canViewAll || newEmployee.canEdit || newEmployee.canDelete}
                     disabled={newEmployee.isAccounting || newEmployee.canEdit || newEmployee.canDelete}
                     onChange={(v) => setNewEmployee(reconcilePermissions({ ...newEmployee, canViewAll: v }))}
-                  />
-                  <ToggleSwitch
-                    label="Add tickets"
-                    description="Create new tickets"
-                    checked={newEmployee.canAdd}
-                    disabled={newEmployee.isAccounting}
-                    onChange={(v) => setNewEmployee(reconcilePermissions({ ...newEmployee, canAdd: v }))}
                   />
                   <ToggleSwitch
                     label="Edit tickets"
