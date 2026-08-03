@@ -88,15 +88,6 @@ const todayDateStr = () => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-// Current local time as HHMM (no separator), used to fold the time-of-day into file
-// serial numbers.
-const nowTimeStr = () => {
-  const d = new Date();
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}${mm}`;
-};
-
 // A function (not a static object) so every new/reset ticket picks up TODAY'S date
 // at the moment it's created, rather than whatever date happened to be "today" when
 // the app first loaded. The user can still change it manually afterward.
@@ -2573,14 +2564,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const FILE_SOURCE_LABELS = { flights: "Flight", hotels: "Hotel", visa: "Visa", cars: "Transportation" };
 
-  // Auto-generates the next serial number for a file, based on the file's own date
+  // Auto-generates a starting serial number for a file, based on the file's own date
   // (defaults to today, but the date is user-editable — see updateFileDate below):
-  // F-YYYYMMDD-HHMM-001, F-YYYYMMDD-HHMM-002, ... The running number at the end restarts
-  // at 001 for each new date, and is always computed against files sharing that SAME date
+  // F-YYYYMMDD-00001, F-YYYYMMDD-00002, ... The running number at the end restarts at
+  // 00001 for each new date, and is always computed against files sharing that SAME date
   // — so if a file's date is changed later, its running number re-lines-up with whatever
   // date it now belongs to, keeping the trailing sequence ordered by date rather than by
-  // creation order. HHMM is the time the serial was (re)generated, folded in so serials
-  // created on the same date/day are also distinguishable by time.
+  // creation order. This is only a suggested starting value: the serial is a plain text
+  // field the user can freely retype per file afterwards (see the "Serial" input on the
+  // open file panel), so it isn't locked to this pattern.
   // Computed off the full (unfiltered) files list so numbering stays globally consistent
   // no matter who's creating/editing the file.
   const nextFileSerial = (list, dateStr) => {
@@ -2589,10 +2581,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const maxN = (list || []).reduce((max, f) => {
       if (!(f.serial || "").startsWith(prefix)) return max;
       const tail = (f.serial || "").slice(prefix.length);
-      const n = parseInt(tail.slice(-3), 10) || 0; // last 3 digits are the running number
+      const n = parseInt(tail.slice(-5), 10) || 0; // last 5 digits are the running number
       return Math.max(max, n);
     }, 0);
-    return `${prefix}${nowTimeStr()}-${String(maxN + 1).padStart(3, "0")}`;
+    return `${prefix}${String(maxN + 1).padStart(5, "0")}`;
   };
 
   // Builds a read-only price snapshot of a ticket/hotel/visa record to drop into a
@@ -2707,8 +2699,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     );
   };
 
+  // Unlike deleting elsewhere in the app, deleting a FILE is intentionally open to every
+  // signed-in employee (not gated by canDeleteTickets) — same reasoning as adding items to
+  // a file above: files are a shared working space, not permission-gated per employee.
   const deleteFile = async (id) => {
-    if (!canDeleteTickets) return;
+    if (!currentUser) return;
     await persistFiles(files.filter((f) => f.id !== id));
     if (openFileId === id) setOpenFileId(null);
   };
@@ -5747,17 +5742,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <h2 className="font-semibold text-stone-900">{openFile.serial}</h2>
                       <p className="text-xs text-stone-400">{formatDisplayDate(openFile.createdAt)} · Created by {openFile.createdBy}</p>
                     </div>
-                    {canDeleteTickets && (
-                      <button
-                        onClick={() => deleteFile(openFile.id)}
-                        className="text-red-600 border border-red-200 hover:bg-red-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
-                      >
-                        <Trash2 size={13} /> Delete file
-                      </button>
-                    )}
+                    <button
+                      onClick={() => deleteFile(openFile.id)}
+                      className="text-red-600 border border-red-200 hover:bg-red-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
+                    >
+                      <Trash2 size={13} /> Delete file
+                    </button>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="text-xs text-stone-500 block mb-1">Serial</label>
+                      <input
+                        type="text"
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={openFile.serial || ""}
+                        onChange={(e) => updateFileField(openFile.id, "serial", e.target.value)}
+                      />
+                    </div>
                     <div>
                       <label className="text-xs text-stone-500 block mb-1">File date</label>
                       <input
