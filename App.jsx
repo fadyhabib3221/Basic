@@ -5762,9 +5762,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <label className="text-xs text-stone-500 block mb-1">File date</label>
                       <input
                         type="date"
+                        max={todayDateStr()}
                         className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                         value={openFile.createdAt || ""}
-                        onChange={(e) => e.target.value && updateFileDate(openFile.id, e.target.value)}
+                        onChange={(e) =>
+                          e.target.value &&
+                          updateFileDate(openFile.id, e.target.value > todayDateStr() ? todayDateStr() : e.target.value)
+                        }
                       />
                     </div>
                     <div>
