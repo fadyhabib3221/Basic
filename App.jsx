@@ -2637,7 +2637,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   );
 
   const createFile = async () => {
-    if (!canAddTickets) return;
+    // Adding services into a file is intentionally open to every signed-in employee,
+    // regardless of their add/edit/delete permissions elsewhere in the app.
+    if (!currentUser) return;
     const record = {
       id: `FL-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       serial: nextFileSerial(files),
@@ -2657,7 +2659,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const addItemToFile = async (fileId, sourceType, record) => {
-    if (!canAddTickets) return;
+    if (!currentUser) return;
     const item = buildFileItem(sourceType, record);
     await persistFiles(files.map((f) => (f.id === fileId ? { ...f, items: [...(f.items || []), item] } : f)));
   };
@@ -2688,7 +2690,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // "New file" shortcut inside the copy picker: creates the file, then immediately
   // drops the pending copy into it.
   const createFileAndCopySource = async () => {
-    if (!canAddTickets || !copyPickerSource) return;
+    if (!currentUser || !copyPickerSource) return;
     const record = {
       id: `FL-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       serial: nextFileSerial(files),
@@ -3277,27 +3279,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
         <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
         <td className="px-2.5 py-1 text-right whitespace-nowrap" onClick={(ev) => ev.stopPropagation()}>
-          {(canAddTickets || currentUser.isAdmin || canEditTickets || canDeleteTickets) ? (
-            <div className="flex gap-0.5 justify-end">
-              {canAddTickets && (
-                <button onClick={() => setCopyPickerSource({ type: "flights", record: t })} className="text-stone-400 hover:text-amber-600 p-0.5" title="Copy to a file">
-                  <FileText size={13} />
-                </button>
-              )}
-              {(currentUser.isAdmin || canEditTickets) && (
-                <button onClick={() => handleEdit(t)} className="text-stone-400 hover:text-teal-800 p-0.5">
-                  <Pencil size={13} />
-                </button>
-              )}
-              {(currentUser.isAdmin || canDeleteTickets) && (
-                <button onClick={() => handleDelete(t.id)} className="text-stone-400 hover:text-red-600 p-0.5">
-                  <Trash2 size={13} />
-                </button>
-              )}
-            </div>
-          ) : (
-            <span className="text-stone-300 text-[11px] block text-right">—</span>
-          )}
+          <div className="flex gap-0.5 justify-end">
+            <button onClick={() => setCopyPickerSource({ type: "flights", record: t })} className="text-stone-400 hover:text-amber-600 p-0.5" title="Copy to a file">
+              <FileText size={13} />
+            </button>
+            {(currentUser.isAdmin || canEditTickets) && (
+              <button onClick={() => handleEdit(t)} className="text-stone-400 hover:text-teal-800 p-0.5">
+                <Pencil size={13} />
+              </button>
+            )}
+            {(currentUser.isAdmin || canDeleteTickets) && (
+              <button onClick={() => handleDelete(t.id)} className="text-stone-400 hover:text-red-600 p-0.5">
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
         </td>
       </tr>
     ));
@@ -5171,9 +5167,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net total (EGP)</th>
                 <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Sold total (EGP)</th>
                 <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Profit (EGP)</th>
-                {(canAddTickets || canEditTickets || canDeleteTickets) && (
-                  <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Actions</th>
-                )}
+                <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -5214,37 +5208,33 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">
                     {fmt(hotelProfitTotal(h))}
                   </td>
-                  {(canAddTickets || canEditTickets || canDeleteTickets) && (
-                    <td className="px-2.5 py-1 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      {canAddTickets && (
-                        <button
-                          onClick={() => setCopyPickerSource({ type: "hotels", record: h })}
-                          className="text-amber-600 hover:text-amber-800 mr-2"
-                          title="Copy to a file"
-                        >
-                          <FileText size={14} />
-                        </button>
-                      )}
-                      {canEditTickets && (
-                        <button
-                          onClick={() => handleEditHotelClick(h)}
-                          className="text-teal-700 hover:text-teal-900 mr-2"
-                          title="Edit"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                      )}
-                      {canDeleteTickets && (
-                        <button
-                          onClick={() => handleDeleteHotel(h.id)}
-                          className="text-red-600 hover:text-red-800"
-                          title="Delete"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </td>
-                  )}
+                  <td className="px-2.5 py-1 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => setCopyPickerSource({ type: "hotels", record: h })}
+                      className="text-amber-600 hover:text-amber-800 mr-2"
+                      title="Copy to a file"
+                    >
+                      <FileText size={14} />
+                    </button>
+                    {canEditTickets && (
+                      <button
+                        onClick={() => handleEditHotelClick(h)}
+                        className="text-teal-700 hover:text-teal-900 mr-2"
+                        title="Edit"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                    )}
+                    {canDeleteTickets && (
+                      <button
+                        onClick={() => handleDeleteHotel(h.id)}
+                        className="text-red-600 hover:text-red-800"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -5586,15 +5576,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-4 py-3 text-right font-semibold text-emerald-700">{fmt(profit)} {v.currency}</td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {canAddTickets && (
-                              <button
-                                onClick={() => setCopyPickerSource({ type: "visa", record: v })}
-                                className="text-amber-600 hover:text-amber-800"
-                                title="Copy to a file"
-                              >
-                                <FileText size={16} />
-                              </button>
-                            )}
+                            <button
+                              onClick={() => setCopyPickerSource({ type: "visa", record: v })}
+                              className="text-amber-600 hover:text-amber-800"
+                              title="Copy to a file"
+                            >
+                              <FileText size={16} />
+                            </button>
                             {canEditTickets && (
                               <button
                                 onClick={() => handleEditVisaClick(v)}
@@ -5666,14 +5654,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </div>
                 </div>
 
-                {canAddTickets && (
-                  <button
-                    onClick={createFile}
-                    className="mb-6 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2.5 shadow-sm shadow-teal-800/30 flex items-center gap-2"
-                  >
-                    <Plus size={16} /> New file
-                  </button>
-                )}
+                <button
+                  onClick={createFile}
+                  className="mb-6 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2.5 shadow-sm shadow-teal-800/30 flex items-center gap-2"
+                >
+                  <Plus size={16} /> New file
+                </button>
 
                 {visibleFiles.length === 0 ? (
                   <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
@@ -5740,7 +5726,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <label className="text-xs text-stone-500 block mb-1">Company</label>
                       <input
                         type="text"
-                        disabled={!canEditTickets && !canAddTickets}
                         list="file-company-list"
                         className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                         value={openFile.company || ""}
@@ -5756,7 +5741,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <label className="text-xs text-stone-500 block mb-1">Notes</label>
                       <input
                         type="text"
-                        disabled={!canEditTickets && !canAddTickets}
                         className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                         value={openFile.notes || ""}
                         onChange={(e) => updateFileField(openFile.id, "notes", e.target.value)}
@@ -5780,14 +5764,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     </div>
                   </div>
 
-                  {canAddTickets && (
-                    <button
-                      onClick={() => setShowFilePicker(true)}
-                      className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
-                    >
-                      <Plus size={14} /> Add a copy from a service
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setShowFilePicker(true)}
+                    className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
+                  >
+                    <Plus size={14} /> Add a copy from a service
+                  </button>
                 </div>
 
                 <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100 overflow-hidden">
