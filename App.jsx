@@ -366,27 +366,6 @@ const conjunctionTicketSuffix = (ticketNumber) => {
   return `-${nextTail}`;
 };
 
-// Given a customer row, returns the ticket number the NEXT customer's auto-sequenced
-// number should be generated from. If this customer has a conjunction (second) ticket,
-// that second number was already issued to them, so the next customer continues after
-// its tail rather than after the first ticket's tail — e.g. first ticket
-// "077-1234567890" with a conjunction suffix of "-891" means the next customer should
-// get "077-1234567892", not "077-1234567891" (which is this customer's own conjunction
-// ticket). Falls back to the plain ticket number when there's no conjunction ticket.
-const lastIssuedTicketNumber = (customer) => {
-  if (!customer) return "";
-  if (customer.conjunction && customer.ticketNumber2) {
-    const match = (customer.ticketNumber || "").match(/^([A-Z0-9]{3})-(\d+)$/);
-    const tailDigits = customer.ticketNumber2.replace(/[^0-9]/g, "");
-    if (match && tailDigits) {
-      const [, prefix, num] = match;
-      const head = num.length > 3 ? num.slice(0, -3) : "";
-      return `${prefix}-${head}${tailDigits.padStart(3, "0")}`;
-    }
-  }
-  return customer.ticketNumber;
-};
-
 // Fills/trims the customers array to match the requested count, keeping existing entries
 const resizeCustomers = (customers, count) => {
   const n = Math.max(1, Math.min(50, parseInt(count, 10) || 1));
@@ -2574,7 +2553,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // When more customer rows are added, auto-sequence their ticket numbers by
     // increasing the previous customer's number by one (only if it was filled in).
     for (let i = form.customers.length; i < customers.length; i++) {
-      const generated = nextTicketNumber(lastIssuedTicketNumber(customers[i - 1]));
+      const generated = nextTicketNumber(customers[i - 1] && customers[i - 1].ticketNumber);
       if (generated) customers[i] = { ...customers[i], ticketNumber: generated };
     }
     setForm({ ...form, customersCount: count, customers });
@@ -2656,19 +2635,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // the second ticket number out.
   const handleCustomerConjunctionToggle = (index, checked) => {
     const customers = form.customers.map((c, i) =>
-      i === index ? { ...c, conjunction: checked, ticketNumber2: checked ? conjunctionTicketSuffix(c.ticketNumber) : "" } : { ...c }
+      i === index ? { ...c, conjunction: checked, ticketNumber2: checked ? conjunctionTicketSuffix(c.ticketNumber) : "" } : c
     );
-    // Switching the conjunction on/off shifts where the sequence for later customers
-    // should continue from, so re-run the same cascade as handleTicketNumberBlur below —
-    // still stopping at the first customer whose ticket number is already filled in.
-    let last = lastIssuedTicketNumber(customers[index]);
-    for (let i = index + 1; i < customers.length; i++) {
-      if (customers[i].ticketNumber) break;
-      const generated = nextTicketNumber(last);
-      if (!generated) break;
-      customers[i] = { ...customers[i], ticketNumber: generated };
-      last = generated;
-    }
     setForm({ ...form, customers });
   };
 
@@ -2684,10 +2652,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (customers[index].conjunction) {
       customers[index].ticketNumber2 = conjunctionTicketSuffix(last);
     }
-    // If this customer has a conjunction ticket, that second number was already issued
-    // to them — continue the sequence for later customers after ITS tail, not the first
-    // ticket's tail.
-    last = lastIssuedTicketNumber(customers[index]);
     for (let i = index + 1; i < customers.length; i++) {
       if (customers[i].ticketNumber) break;
       const generated = nextTicketNumber(last);
@@ -3964,16 +3928,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       className="w-full min-h-screen bg-gradient-to-b from-stone-50 via-white to-teal-50/50 text-stone-800"
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');
-        .price-input::-webkit-outer-spin-button,
-        .price-input::-webkit-inner-spin-button {
-          -webkit-appearance: none;
-          margin: 0;
-        }
-        .price-input[type=number] {
-          -moz-appearance: textfield;
-        }
-      `}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');`}</style>
+      <div className="max-w-5xl mx-auto p-4 md:p-6">
         {/* Boarding-pass style banner */}
         <div className="relative rounded-2xl bg-gradient-to-r from-teal-800 via-teal-800 to-teal-900 shadow-lg shadow-teal-900/20 overflow-hidden mb-0">
           <Plane size={140} className="pointer-events-none absolute -bottom-8 -right-6 text-white/[0.06] rotate-45" />
@@ -4922,7 +4878,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <label className="text-xs text-stone-500 block mb-1">Refunded by airline</label>
                               <input
                                 type="number"
-                                className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                                 value={row.airlineAmount}
                                 onChange={(e) =>
                                   setRefundRows(refundRows.map((r, i) => (i === index ? { ...r, airlineAmount: e.target.value } : r)))
@@ -4934,7 +4890,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <label className="text-xs text-stone-500 block mb-1">Refunded to customer</label>
                               <input
                                 type="number"
-                                className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                                 value={row.customerAmount}
                                 onChange={(e) =>
                                   setRefundRows(refundRows.map((r, i) => (i === index ? { ...r, customerAmount: e.target.value } : r)))
@@ -5124,7 +5080,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <label className="flex items-center gap-2 text-xs font-semibold text-stone-500 cursor-pointer select-none">
               <input
                 type="checkbox"
-                className="w-4 h-4 rounded-full border-2 border-stone-300 appearance-none checked:bg-teal-700 checked:border-teal-700 cursor-pointer transition-colors"
+                className="w-4 h-4 accent-teal-700"
                 checked={!!form.multiDestination}
                 onChange={(e) => {
                   const multiDestination = e.target.checked;
@@ -5144,49 +5100,50 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </label>
           </div>
 
-          <div className="flex flex-wrap items-end gap-2 mt-2">
+          <div className="flex flex-wrap items-end gap-3 mt-2">
             {form.multiDestination ? (
-              <>
-                {form.destinations.map((d, i) => (
-                  <div key={i} className="flex items-end gap-1">
-                    <div>
-                      <label className="text-[10px] text-stone-400 block mb-1">
+              <div className="w-full md:w-auto md:flex-1 md:min-w-[280px]">
+                <label className="text-xs text-stone-500 block mb-1">Route stops (in order)</label>
+                <div className="space-y-2">
+                  {form.destinations.map((d, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-xs text-stone-400 w-14 shrink-0">
                         {i === 0 ? "From" : i === form.destinations.length - 1 ? "Final" : `Stop ${i}`}
-                      </label>
+                      </span>
                       <input
-                        className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                         value={d}
                         onChange={(e) => handleDestinationChange(i, e.target.value)}
-                        placeholder={i === 0 ? "CAI" : "DXB"}
+                        placeholder={i === 0 ? "Cairo" : "Dubai"}
                         list="city-suggestions"
                       />
+                      {form.destinations.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => removeDestinationStop(i)}
+                          className="shrink-0 text-stone-400 hover:text-red-600"
+                          title="Remove stop"
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
                     </div>
-                    {form.destinations.length > 2 && (
-                      <button
-                        type="button"
-                        onClick={() => removeDestinationStop(i)}
-                        className="shrink-0 text-stone-400 hover:text-red-600 mb-1.5"
-                        title="Remove stop"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={addDestinationStop}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 mb-1.5"
-                >
-                  <Plus size={14} /> Add stop
-                </button>
-              </>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addDestinationStop}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900"
+                  >
+                    <Plus size={14} /> Add stop
+                  </button>
+                </div>
+              </div>
             ) : (
               <>
                 <div>
                   <label className="text-xs text-stone-500 block mb-1">From</label>
                   <input
-                    className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
+                    className="w-24 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
                     value={form.from}
                     onChange={(e) => handleCityChange("from", e.target.value)}
                     placeholder="CAI"
@@ -5196,7 +5153,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <div>
                   <label className="text-xs text-stone-500 block mb-1">To</label>
                   <input
-                    className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
+                    className="w-24 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
                     value={form.to}
                     onChange={(e) => handleCityChange("to", e.target.value)}
                     placeholder="DXB"
@@ -5207,7 +5164,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <div>
                     <label className="text-xs text-stone-500 block mb-1">Return airport</label>
                     <div
-                      className="w-16 border border-stone-200 bg-stone-50 rounded-lg px-2 py-1.5 text-xs text-stone-600 uppercase truncate"
+                      className="w-24 border border-stone-200 bg-stone-50 rounded-xl px-3 py-2 text-sm text-stone-600 uppercase truncate"
                       title="Automatically matches the first (From) airport"
                     >
                       {form.from || "-"}
@@ -5226,7 +5183,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 )}
               </label>
               <input
-                className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-24 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.airline}
                 onChange={(e) => handleAirlineChange(e.target.value)}
                 placeholder="MS"
@@ -5256,7 +5213,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <label className="text-xs text-stone-500 block mb-1">Net price</label>
               <input
                 type="number"
-                className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.netPrice}
                 onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
                 placeholder="0"
@@ -5266,7 +5223,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <label className="text-xs text-stone-500 block mb-1">Sold price</label>
               <input
                 type="number"
-                className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.soldPrice}
                 onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
                 placeholder="0"
@@ -5884,7 +5841,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <label className="text-[11px] text-stone-500 block mb-1">Net (per room/night)</label>
                       <input
                         type="number"
-                        className="w-full border border-stone-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                         value={line.netPrice}
                         onChange={(e) => updateHotelRoomLine(line.id, { netPrice: e.target.value })}
                         placeholder="0"
@@ -5894,7 +5851,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <label className="text-[11px] text-stone-500 block mb-1">Sold (per room/night)</label>
                       <input
                         type="number"
-                        className="w-full border border-stone-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                         value={line.soldPrice}
                         onChange={(e) => updateHotelRoomLine(line.id, { soldPrice: e.target.value })}
                         placeholder="0"
@@ -6402,7 +6359,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Price net (per person)</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                   value={visaForm.netPrice}
                   onChange={(e) => setVisaForm({ ...visaForm, netPrice: e.target.value })}
                   placeholder="0"
@@ -6412,7 +6369,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Sold (per person)</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                   value={visaForm.soldPrice}
                   onChange={(e) => setVisaForm({ ...visaForm, soldPrice: e.target.value })}
                   placeholder="0"
@@ -6778,7 +6735,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Driver tip</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                   value={carForm.driverTip}
                   onChange={(e) => setCarForm({ ...carForm, driverTip: e.target.value })}
                   placeholder="0"
@@ -6827,7 +6784,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Collection</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                   value={carForm.collection}
                   onChange={(e) => setCarForm({ ...carForm, collection: e.target.value })}
                   placeholder="0"
@@ -6837,7 +6794,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Price net</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                   value={carForm.netPrice}
                   onChange={(e) => setCarForm({ ...carForm, netPrice: e.target.value })}
                   placeholder="0"
@@ -6847,7 +6804,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Sold</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                   value={carForm.soldPrice}
                   onChange={(e) => setCarForm({ ...carForm, soldPrice: e.target.value })}
                   placeholder="0"
@@ -7539,7 +7496,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           <td className="px-3 py-2 text-stone-700 font-mono">
                             {c.ticketNumber || "-"}
                             {c.conjunction && c.ticketNumber2 && (
-                              <span className="text-stone-400">{c.ticketNumber2}</span>
+                              <span className="block text-xs text-stone-400 mt-0.5">
+                                + {c.ticketNumber2} (conjunction)
+                              </span>
                             )}
                           </td>
                         </tr>
