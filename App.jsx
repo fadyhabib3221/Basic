@@ -2387,10 +2387,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         "Route": routeLabel(t),
         "Airline": t.airline || "",
         "Issue date": t.date ? formatDisplayDate(t.date) : "",
-        // Net/sold price and profit reflect the whole booking (after any refund) and are shown once, on the first customer's row
-        "Net price": i === 0 ? netAfterRefund(t) : "",
-        "Sold price": i === 0 ? soldAfterRefund(t) : "",
-        "Profit": i === 0 ? profitAfterRefund(t) : "",
+        // Net/sold price and profit are the ORIGINAL booking amounts, shown once on the
+        // first customer's row; if the ticket was refunded, the refund amounts appear in
+        // their own row directly underneath (see below) rather than being blended in here.
+        "Net price": i === 0 ? parseFloat(t.netPrice) || 0 : "",
+        "Sold price": i === 0 ? parseFloat(t.soldPrice) || 0 : "",
+        "Profit": i === 0 ? profit(t.netPrice, t.soldPrice) : "",
         "Refund (airline)": "",
         "Refund (customer)": "",
         "Notes": t.notes || "",
