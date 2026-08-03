@@ -772,6 +772,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Whether the Supplier field on the visa booking form is in "type your own name" mode,
   // same pattern as supplierOther / hotelSupplierOther above.
   const [visaSupplierOther, setVisaSupplierOther] = useState(false);
+  // Whether the Visa page's own "Add supplier" panel is open, plus its draft text —
+  // kept separate from the Hotels/Flights supplier panels so each section's suppliers
+  // are independent lists.
+  const [showAddVisaSupplierPanel, setShowAddVisaSupplierPanel] = useState(false);
+  const [newVisaSupplierDraft, setNewVisaSupplierDraft] = useState("");
   // USD -> EGP exchange rate, used to also show a USD booking's value in EGP.
   // Entered by hand (no CBE API is publicly reachable from the browser), and saved so
   // everyone signed in sees today's rate without re-typing it.
@@ -797,7 +802,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Every value ever entered (companies, customers, airlines, cities) is kept here so it
   // can be offered as an autocomplete suggestion later, even if the original ticket is deleted.
-  const [suggestions, setSuggestions] = useState({ companies: [], customers: [], airlines: [], cities: [], suppliers: [], hotelNames: [] });
+  const [suggestions, setSuggestions] = useState({ companies: [], customers: [], airlines: [], cities: [], suppliers: [], hotelNames: [], visaSuppliers: [] });
 
   // Tracks whether the one-time "create the main account" step has ever been completed.
   // Once true, the first-run setup screen must never be shown again — even if the employee
@@ -856,6 +861,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               cities: parsed.cities || [],
               suppliers: parsed.suppliers || [],
               hotelNames: parsed.hotelNames || [],
+              visaSuppliers: parsed.visaSuppliers || [],
             });
           } catch (e) {
             // ignore malformed suggestions data
@@ -945,6 +951,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               cities: parsed.cities || [],
               suppliers: parsed.suppliers || [],
               hotelNames: parsed.hotelNames || [],
+              visaSuppliers: parsed.visaSuppliers || [],
             });
           } catch (e) {
             // ignore malformed data for this cycle, try again next poll
@@ -1583,7 +1590,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       soldPrice: v.soldPrice,
       bookingDate: v.bookingDate || todayDateStr(),
     });
-    setVisaSupplierOther(!!v.supplier && !suggestions.suppliers.includes(v.supplier));
+    setVisaSupplierOther(!!v.supplier && !(suggestions.visaSuppliers || []).includes(v.supplier));
     setVisaError("");
   };
 
@@ -1593,6 +1600,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       if (visaEditingId === id) resetVisaForm();
       setConfirmDialog(null);
     });
+  };
+
+  // Registers a new supplier name in the Visa page's OWN supplier list — kept separate
+  // from the Hotels/Flights supplier lists, via the "+ Add supplier" button at the top
+  // of the Visa page.
+  const handleAddVisaSupplierName = () => {
+    const name = newVisaSupplierDraft.trim();
+    if (!name) return;
+    const duplicate = (suggestions.visaSuppliers || []).some((s) => s.toLowerCase() === name.toLowerCase());
+    if (duplicate) {
+      setVisaError("This supplier already exists");
+      return;
+    }
+    persistSuggestions({ ...suggestions, visaSuppliers: [...(suggestions.visaSuppliers || []), name] });
+    setNewVisaSupplierDraft("");
+    setVisaError("");
+  };
+
+  const handleDeleteVisaSupplierName = (name) => {
+    persistSuggestions({ ...suggestions, visaSuppliers: (suggestions.visaSuppliers || []).filter((s) => s !== name) });
   };
 
   // ---------- Auth ----------
@@ -5097,6 +5124,55 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
         {activeSection === "visa" && (
         <>
+        {/* Button to register new supplier names for the Visa page's own supplier list —
+            kept separate from the Hotels/Flights supplier lists. */}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <button
+            onClick={() => setShowAddVisaSupplierPanel(!showAddVisaSupplierPanel)}
+            className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-xl px-3 py-2 hover:bg-teal-50 flex items-center gap-1.5"
+          >
+            <Plus size={14} /> Add supplier
+          </button>
+        </div>
+
+        {showAddVisaSupplierPanel && (
+          <div className="bg-white border border-stone-200 rounded-2xl p-4 mb-4">
+            <h3 className="text-sm font-bold text-stone-700 mb-3">Visa suppliers</h3>
+            <div className="flex gap-2 mb-3">
+              <input
+                className="w-full max-w-xs border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                value={newVisaSupplierDraft}
+                onChange={(e) => setNewVisaSupplierDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddVisaSupplierName()}
+                placeholder="Supplier name"
+              />
+              <button
+                onClick={handleAddVisaSupplierName}
+                className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110"
+              >
+                Add
+              </button>
+            </div>
+            {(suggestions.visaSuppliers || []).length === 0 ? (
+              <p className="text-xs text-stone-400">No suppliers saved yet</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {(suggestions.visaSuppliers || []).map((s) => (
+                  <span
+                    key={s}
+                    className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700"
+                  >
+                    {s}
+                    <button onClick={() => handleDeleteVisaSupplierName(s)} className="text-red-500 hover:text-red-700">
+                      <Trash2 size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {visaError && (
           <div className="text-sm rounded-xl px-3 py-2 mb-4 bg-red-50 text-red-700">{visaError}</div>
         )}
@@ -5166,7 +5242,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     }}
                   >
                     <option value="">Select supplier</option>
-                    {suggestions.suppliers.map((s) => (
+                    {(suggestions.visaSuppliers || []).map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                     <option value="__other__">Other</option>
