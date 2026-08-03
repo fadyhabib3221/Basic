@@ -7,7 +7,7 @@ import {
   Plane, Search, Trash2, Pencil, X, Check, TrendingUp, Ticket, Wallet,
   Calendar, Download, Upload, Building2, Factory, Lock, LogOut, UserPlus, Users, Eye, EyeOff,
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
-  MapPin, Compass, Luggage, Anchor, Sparkles, Plus,
+  MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -1806,6 +1806,98 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       if (carEditingId === id) resetCarForm();
       setConfirmDialog(null);
     });
+  };
+
+  // Opens a printable receipt for a single transfer booking in a new tab and
+  // triggers the browser print dialog automatically.
+  const handlePrintCar = (c) => {
+    const net = parseFloat(c.netPrice) || 0;
+    const sold = parseFloat(c.soldPrice) || 0;
+    const profit = sold - net;
+    const currency = c.currency || "";
+    const printedBy = currentUser?.name || "";
+
+    const row = (label, value) =>
+      value === "" || value === null || value === undefined
+        ? ""
+        : `<tr><td class="label">${label}</td><td class="value">${value}</td></tr>`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Transfer Booking - ${c.customerName || ""}</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { font-family: Arial, Helvetica, sans-serif; color: #292524; padding: 32px; }
+            .header { display: flex; align-items: center; gap: 16px; border-bottom: 2px solid #115e59; padding-bottom: 16px; margin-bottom: 24px; }
+            .header img { width: 90px; height: auto; object-fit: contain; }
+            .header h1 { font-size: 20px; margin: 0; color: #115e59; }
+            .header p { margin: 2px 0 0; font-size: 12px; color: #78716c; }
+            h2 { font-size: 14px; color: #115e59; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+            table { width: 100%; border-collapse: collapse; font-size: 13px; }
+            td.label { padding: 6px 10px; color: #78716c; width: 40%; border-bottom: 1px solid #e7e5e4; }
+            td.value { padding: 6px 10px; font-weight: 600; border-bottom: 1px solid #e7e5e4; }
+            .totals td { padding: 8px 10px; font-size: 14px; }
+            .totals td.value { text-align: right; }
+            .profit { color: #047857; }
+            .footer { margin-top: 32px; font-size: 11px; color: #a8a29e; text-align: right; }
+            @media print {
+              body { padding: 0 24px; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <img src="${LOGO_DATA_URL}" alt="Perla Di Mare" />
+            <div>
+              <h1>Transfer Booking Receipt</h1>
+              <p>Perla Di Mare</p>
+            </div>
+          </div>
+
+          <h2>Customer</h2>
+          <table>
+            ${row("Customer name", c.customerName || "-")}
+            ${row("Phone", c.phone || "-")}
+          </table>
+
+          <h2>Transfer details</h2>
+          <table>
+            ${row("Route", `${c.routeFrom || "-"} &rarr; ${c.routeTo || "-"}`)}
+            ${row("Car type", c.carType || "-")}
+            ${row("Supplier", c.supplier || "-")}
+            ${row("Trip", c.isRoundTrip ? "Round trip" : "One way")}
+            ${row("Waiting", c.hasWaiting ? `${c.waitingHours || 0} h` : "-")}
+            ${row("Flight number", c.startsAtAirport ? (c.flightNumber || "-") : "-")}
+            ${row("Booking date", c.bookingDate ? formatDisplayDate(c.bookingDate) : "-")}
+          </table>
+
+          <h2>Payment</h2>
+          <table class="totals">
+            ${row("Driver tip", c.driverTip ? `${fmt(parseFloat(c.driverTip) || 0)} ${currency}` : "-")}
+            ${row("Net price", `${fmt(net)} ${currency}`)}
+            ${row("Sold price", `${fmt(sold)} ${currency}`)}
+            <tr><td class="label">Profit</td><td class="value profit">${fmt(profit)} ${currency}</td></tr>
+          </table>
+
+          <div class="footer">
+            ${printedBy ? `Printed by ${printedBy} &middot; ` : ""}${new Date().toLocaleString()}
+          </div>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank", "width=800,height=900");
+    if (!printWindow) return;
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.onload = () => {
+      printWindow.print();
+    };
   };
 
   // Registers a new supplier name in the Transfers page's OWN supplier list — kept
@@ -6224,6 +6316,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-4 py-3 text-right font-semibold text-emerald-700">{fmt(profit)} {c.currency}</td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handlePrintCar(c)}
+                              className="text-stone-500 hover:text-teal-800"
+                              title="Print"
+                            >
+                              <Printer size={16} />
+                            </button>
                             {canEditTickets && (
                               <button
                                 onClick={() => handleEditCarClick(c)}
