@@ -880,6 +880,32 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const ONLINE_THRESHOLD_MS = 15 * 1000; // considered "connected" if seen in the last 15s
   const HEARTBEAT_INTERVAL_MS = 5 * 1000;
 
+  // A short, human-readable description of what this signed-in account appears to be
+  // doing right now, broadcast alongside the presence heartbeat below so the main
+  // account's "online now" list can show it next to each employee.
+  const myActivity = (() => {
+    if (showManage) return "Managing employees";
+    if (showManageCompanies) return "Managing companies";
+    if (activeSection === "hotels") {
+      if (viewingHotelBooking) return "Viewing a hotel booking";
+      if (hotelEditingId) return "Editing a hotel booking";
+      return "Hotels";
+    }
+    if (activeSection === "cars") return "Cars";
+    if (activeSection === "files") return "Files";
+    // Flights (the default section)
+    if (viewingTicketId) return "Viewing a ticket";
+    if (form.id) return "Editing a ticket";
+    return "Flights";
+  })();
+  // Kept in a ref (rather than read directly) so the heartbeat interval below — which
+  // only re-subscribes when currentUser changes — always sends the latest activity
+  // instead of the value captured when the interval was first created.
+  const myActivityRef = useRef(myActivity);
+  useEffect(() => {
+    myActivityRef.current = myActivity;
+  }, [myActivity]);
+
   // While signed in, periodically mark this account as "connected" so the main account can see it
   useEffect(() => {
     if (!currentUser) return;
@@ -888,7 +914,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       try {
         await window.storage.set(
           `tickets:presence:${currentUser.username}`,
-          JSON.stringify({ name: currentUser.name, ts: Date.now() }),
+          JSON.stringify({ name: currentUser.name, ts: Date.now(), activity: myActivityRef.current }),
           true
         );
       } catch (e) {
@@ -920,7 +946,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               if (!r || !r.value) return null;
               const parsed = JSON.parse(r.value);
               const username = k.replace("tickets:presence:", "");
-              return [username, parsed.ts];
+              return [username, { ts: parsed.ts, activity: parsed.activity || "" }];
             } catch (e) {
               return null;
             }
@@ -945,8 +971,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   }, [currentUser]);
 
   const isOnline = (username) => {
-    const ts = presenceMap[username];
-    return !!ts && Date.now() - ts < ONLINE_THRESHOLD_MS;
+    const entry = presenceMap[username];
+    return !!entry && Date.now() - entry.ts < ONLINE_THRESHOLD_MS;
   };
   const onlineUsernames = Object.keys(presenceMap).filter((u) => isOnline(u));
 
@@ -2761,6 +2787,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <ul className="space-y-1 max-h-56 overflow-y-auto">
                               {onlineUsernames.map((u) => {
                                 const emp = (employees || []).find((e) => e.username === u);
+                                const activity = presenceMap[u] && presenceMap[u].activity;
                                 return (
                                   <li key={u} className="flex items-center gap-1.5 text-xs text-stone-700 px-1 py-0.5">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
@@ -2768,6 +2795,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                       {emp ? emp.name : u}
                                       {emp && emp.isAdmin && (
                                         <span className="text-[9px] text-teal-700 font-semibold"> (main)</span>
+                                      )}
+                                      {activity && (
+                                        <span className="block text-[10px] text-stone-400 truncate">{activity}</span>
                                       )}
                                     </span>
                                     <button
