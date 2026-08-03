@@ -2773,6 +2773,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const hotelSoldTotal = (h) =>
     (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineSoldTotal(l, roomLineNights(l, h)), l.currency), 0);
   const hotelProfitTotal = (h) => hotelSoldTotal(h) - hotelNetTotal(h);
+
+  // Visa prices are entered per applicant, so a booking's real net/sold amounts are the
+  // per-person price multiplied by how many customers are on that booking (falls back to
+  // 1 if the customer list is empty, so older records without a list still total correctly).
+  const visaCustomersCount = (v) => (v.customers || []).length || 1;
+  const visaNetTotal = (v) => (parseFloat(v.netPrice) || 0) * visaCustomersCount(v);
+  const visaSoldTotal = (v) => (parseFloat(v.soldPrice) || 0) * visaCustomersCount(v);
+  const visaProfitTotal = (v) => visaSoldTotal(v) - visaNetTotal(v);
   // A booking is Corporate when a company name was entered; otherwise it's an
   // Individual booking automatically — no separate toggle needed.
   const hotelBookingType = (h) => (h.customer && h.customer.trim() ? "Corporate" : "Individual");
@@ -2791,12 +2799,42 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const hotelTotals = visibleHotelBookings.reduce(
     (acc, h) => {
+      acc.count += 1;
       acc.net += hotelNetTotal(h);
       acc.sold += hotelSoldTotal(h);
       acc.profit += hotelProfitTotal(h);
       return acc;
     },
-    { net: 0, sold: 0, profit: 0 }
+    { count: 0, net: 0, sold: 0, profit: 0 }
+  );
+
+  // Visa and Transfers totals, same EGP-conversion approach as hotelTotals above
+  // (each booking's own currency is converted to EGP so mixed-currency bookings can
+  // be summed together). Counts the number of applicants/customers on each visa
+  // booking, and the number of bookings for transfers.
+  const visaTotals = visaBookings.reduce(
+    (acc, v) => {
+      const net = hotelInEgp(visaNetTotal(v), v.currency);
+      const sold = hotelInEgp(visaSoldTotal(v), v.currency);
+      acc.count += visaCustomersCount(v);
+      acc.net += net;
+      acc.sold += sold;
+      acc.profit += sold - net;
+      return acc;
+    },
+    { count: 0, net: 0, sold: 0, profit: 0 }
+  );
+  const carTotals = carBookings.reduce(
+    (acc, c) => {
+      const net = hotelInEgp(parseFloat(c.netPrice) || 0, c.currency);
+      const sold = hotelInEgp(parseFloat(c.soldPrice) || 0, c.currency);
+      acc.count += 1;
+      acc.net += net;
+      acc.sold += sold;
+      acc.profit += sold - net;
+      return acc;
+    },
+    { count: 0, net: 0, sold: 0, profit: 0 }
   );
 
 
@@ -2891,8 +2929,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         label: `${record.visaType || "Visa"}${names ? " · " + names : ""}`,
         date: record.bookingDate,
         currency: record.currency || "EGP",
-        netPrice: parseFloat(record.netPrice) || 0,
-        soldPrice: parseFloat(record.soldPrice) || 0,
+        netPrice: visaNetTotal(record),
+        soldPrice: visaSoldTotal(record),
       };
     }
     return { ...base, label: "-", date: "", currency: "EGP", netPrice: 0, soldPrice: 0 };
@@ -4436,26 +4474,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <Download size={14} /> {hasActiveFilter ? "Export filtered results to Excel" : "Export all months to Excel"}
           </button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-          <div className="bg-white rounded-2xl border border-stone-200 p-4 flex items-center gap-3">
-            <div className="bg-stone-100 rounded-xl p-2 text-stone-600"><Ticket size={20} /></div>
-            <div>
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-6">
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="bg-stone-100 rounded-xl p-1.5 sm:p-2 text-stone-600 shrink-0"><Ticket size={18} className="sm:hidden" /><Ticket size={20} className="hidden sm:block" /></div>
+            <div className="min-w-0">
               <p className="text-xs text-stone-500">Tickets</p>
-              <p className="text-lg font-bold">{totals.count}</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{totals.count}</p>
             </div>
           </div>
-          <div className="bg-white rounded-2xl border border-stone-200 p-4 flex items-center gap-3">
-            <div className="bg-teal-50 rounded-xl p-2 text-teal-900"><Wallet size={20} /></div>
-            <div>
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="bg-teal-50 rounded-xl p-1.5 sm:p-2 text-teal-900 shrink-0"><Wallet size={18} className="sm:hidden" /><Wallet size={20} className="hidden sm:block" /></div>
+            <div className="min-w-0">
               <p className="text-xs text-stone-500">Total sales</p>
-              <p className="text-lg font-bold">{fmt(totals.total)}</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{fmt(totals.total)}</p>
             </div>
           </div>
-          <div className="bg-white rounded-2xl border border-stone-200 p-4 flex items-center gap-3">
-            <div className="bg-emerald-50 rounded-xl p-2 text-emerald-700"><TrendingUp size={20} /></div>
-            <div>
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="bg-emerald-50 rounded-xl p-1.5 sm:p-2 text-emerald-700 shrink-0"><TrendingUp size={18} className="sm:hidden" /><TrendingUp size={20} className="hidden sm:block" /></div>
+            <div className="min-w-0">
               <p className="text-xs text-stone-500">Total profit</p>
-              <p className="text-lg font-bold text-emerald-700">{fmt(totals.profit)}</p>
+              <p className="text-sm sm:text-lg font-bold text-emerald-700 truncate">{fmt(totals.profit)}</p>
             </div>
           </div>
         </div>
@@ -5015,6 +5053,31 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
         {activeSection === "hotels" && (
         <>
+        {/* Summary cards, same style as the Flights section */}
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-6">
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="bg-stone-100 rounded-xl p-1.5 sm:p-2 text-stone-600 shrink-0"><Building2 size={18} className="sm:hidden" /><Building2 size={20} className="hidden sm:block" /></div>
+            <div className="min-w-0">
+              <p className="text-xs text-stone-500">Bookings</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{hotelTotals.count}</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="bg-teal-50 rounded-xl p-1.5 sm:p-2 text-teal-900 shrink-0"><Wallet size={18} className="sm:hidden" /><Wallet size={20} className="hidden sm:block" /></div>
+            <div className="min-w-0">
+              <p className="text-xs text-stone-500">Total sales (EGP)</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{fmt(hotelTotals.sold)}</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="bg-emerald-50 rounded-xl p-1.5 sm:p-2 text-emerald-700 shrink-0"><TrendingUp size={18} className="sm:hidden" /><TrendingUp size={20} className="hidden sm:block" /></div>
+            <div className="min-w-0">
+              <p className="text-xs text-stone-500">Total profit (EGP)</p>
+              <p className="text-sm sm:text-lg font-bold text-emerald-700 truncate">{fmt(hotelTotals.profit)}</p>
+            </div>
+          </div>
+        </div>
+
         {/* Buttons to register new supplier names and hotel names, so they're always
             available to pick from the Supplier / Hotel name fields below. */}
         <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -5490,22 +5553,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         )}
 
-        {/* Totals, converted to EGP for USD-priced bookings */}
-        <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-white border border-stone-200 rounded-2xl px-4 py-3 text-center">
-            <p className="text-xs text-stone-500">Total net (EGP)</p>
-            <p className="text-lg font-bold text-stone-800">{fmt(hotelTotals.net)}</p>
-          </div>
-          <div className="bg-white border border-stone-200 rounded-2xl px-4 py-3 text-center">
-            <p className="text-xs text-stone-500">Total sold (EGP)</p>
-            <p className="text-lg font-bold text-stone-800">{fmt(hotelTotals.sold)}</p>
-          </div>
-          <div className="bg-white border border-stone-200 rounded-2xl px-4 py-3 text-center">
-            <p className="text-xs text-stone-500">Total profit (EGP)</p>
-            <p className="text-lg font-bold text-emerald-700">{fmt(hotelTotals.profit)}</p>
-          </div>
-        </div>
-
         <div className="bg-white border border-stone-200 rounded-2xl overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
@@ -5690,6 +5737,31 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
         {activeSection === "visa" && (
         <>
+        {/* Summary cards, same style as the Flights section */}
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-6">
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="bg-stone-100 rounded-xl p-1.5 sm:p-2 text-stone-600 shrink-0"><PassportIcon size={18} className="sm:hidden" /><PassportIcon size={20} className="hidden sm:block" /></div>
+            <div className="min-w-0">
+              <p className="text-xs text-stone-500">Applicants</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{visaTotals.count}</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="bg-teal-50 rounded-xl p-1.5 sm:p-2 text-teal-900 shrink-0"><Wallet size={18} className="sm:hidden" /><Wallet size={20} className="hidden sm:block" /></div>
+            <div className="min-w-0">
+              <p className="text-xs text-stone-500">Total sales (EGP)</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{fmt(visaTotals.sold)}</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="bg-emerald-50 rounded-xl p-1.5 sm:p-2 text-emerald-700 shrink-0"><TrendingUp size={18} className="sm:hidden" /><TrendingUp size={20} className="hidden sm:block" /></div>
+            <div className="min-w-0">
+              <p className="text-xs text-stone-500">Total profit (EGP)</p>
+              <p className="text-sm sm:text-lg font-bold text-emerald-700 truncate">{fmt(visaTotals.profit)}</p>
+            </div>
+          </div>
+        </div>
+
         {/* Button to register new supplier names for the Visa page's own supplier list —
             kept separate from the Hotels/Flights supplier lists. */}
         <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -5849,7 +5921,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </select>
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">Price net</label>
+                <label className="text-xs text-stone-500 block mb-1">Price net (per person)</label>
                 <input
                   type="number"
                   className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
@@ -5859,7 +5931,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 />
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">Sold</label>
+                <label className="text-xs text-stone-500 block mb-1">Sold (per person)</label>
                 <input
                   type="number"
                   className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
@@ -5867,6 +5939,23 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   onChange={(e) => setVisaForm({ ...visaForm, soldPrice: e.target.value })}
                   placeholder="0"
                 />
+              </div>
+            </div>
+
+            {/* Live total preview: per-person prices above multiplied by the number of
+                customers entered, same style as the Hotels form's totals box. */}
+            <div className="grid grid-cols-3 gap-3 mt-1 mb-4">
+              <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                <p className="text-[11px] text-stone-500">Net total (× {visaForm.customers.length || 1})</p>
+                <p className="text-sm font-bold text-stone-800">{fmt(visaNetTotal(visaForm))} {visaForm.currency}</p>
+              </div>
+              <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                <p className="text-[11px] text-stone-500">Sold total (× {visaForm.customers.length || 1})</p>
+                <p className="text-sm font-bold text-stone-800">{fmt(visaSoldTotal(visaForm))} {visaForm.currency}</p>
+              </div>
+              <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                <p className="text-[11px] text-stone-500">Profit (auto)</p>
+                <p className="text-sm font-bold text-emerald-700">{fmt(visaProfitTotal(visaForm))} {visaForm.currency}</p>
               </div>
             </div>
 
@@ -5913,8 +6002,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {visaBookings.map((v) => {
-                    const net = parseFloat(v.netPrice) || 0;
-                    const sold = parseFloat(v.soldPrice) || 0;
+                    const net = visaNetTotal(v);
+                    const sold = visaSoldTotal(v);
                     const profit = sold - net;
                     return (
                       <tr key={v.id} className="hover:bg-stone-50">
@@ -5969,6 +6058,31 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
         {activeSection === "cars" && (
         <>
+        {/* Summary cards, same style as the Flights section */}
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-6">
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="bg-stone-100 rounded-xl p-1.5 sm:p-2 text-stone-600 shrink-0"><Car size={18} className="sm:hidden" /><Car size={20} className="hidden sm:block" /></div>
+            <div className="min-w-0">
+              <p className="text-xs text-stone-500">Bookings</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{carTotals.count}</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="bg-teal-50 rounded-xl p-1.5 sm:p-2 text-teal-900 shrink-0"><Wallet size={18} className="sm:hidden" /><Wallet size={20} className="hidden sm:block" /></div>
+            <div className="min-w-0">
+              <p className="text-xs text-stone-500">Total sales (EGP)</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{fmt(carTotals.sold)}</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="bg-emerald-50 rounded-xl p-1.5 sm:p-2 text-emerald-700 shrink-0"><TrendingUp size={18} className="sm:hidden" /><TrendingUp size={20} className="hidden sm:block" /></div>
+            <div className="min-w-0">
+              <p className="text-xs text-stone-500">Total profit (EGP)</p>
+              <p className="text-sm sm:text-lg font-bold text-emerald-700 truncate">{fmt(carTotals.profit)}</p>
+            </div>
+          </div>
+        </div>
+
         {/* Button to register new supplier names for the Transfers page's own supplier
             list — kept separate from the Hotels/Flights/Visa supplier lists. */}
         <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -6352,26 +6466,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {!openFile && !draftFile && (
               <>
                 {/* Summary cards, same style as the Flights section */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-                  <div className="bg-white rounded-2xl border border-stone-200 p-4 flex items-center gap-3">
-                    <div className="bg-stone-100 rounded-xl p-2 text-stone-600"><FileText size={20} /></div>
-                    <div>
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-6">
+                  <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+                    <div className="bg-stone-100 rounded-xl p-1.5 sm:p-2 text-stone-600 shrink-0"><FileText size={18} className="sm:hidden" /><FileText size={20} className="hidden sm:block" /></div>
+                    <div className="min-w-0">
                       <p className="text-xs text-stone-500">Files</p>
-                      <p className="text-lg font-bold">{visibleFiles.length}</p>
+                      <p className="text-sm sm:text-lg font-bold truncate">{visibleFiles.length}</p>
                     </div>
                   </div>
-                  <div className="bg-white rounded-2xl border border-stone-200 p-4 flex items-center gap-3">
-                    <div className="bg-teal-50 rounded-xl p-2 text-teal-900"><Wallet size={20} /></div>
-                    <div>
+                  <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+                    <div className="bg-teal-50 rounded-xl p-1.5 sm:p-2 text-teal-900 shrink-0"><Wallet size={18} className="sm:hidden" /><Wallet size={20} className="hidden sm:block" /></div>
+                    <div className="min-w-0">
                       <p className="text-xs text-stone-500">Total sales</p>
-                      <p className="text-lg font-bold">{fmt(filesGrandTotals.sold)}</p>
+                      <p className="text-sm sm:text-lg font-bold truncate">{fmt(filesGrandTotals.sold)}</p>
                     </div>
                   </div>
-                  <div className="bg-white rounded-2xl border border-stone-200 p-4 flex items-center gap-3">
-                    <div className="bg-emerald-50 rounded-xl p-2 text-emerald-700"><TrendingUp size={20} /></div>
-                    <div>
+                  <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+                    <div className="bg-emerald-50 rounded-xl p-1.5 sm:p-2 text-emerald-700 shrink-0"><TrendingUp size={18} className="sm:hidden" /><TrendingUp size={20} className="hidden sm:block" /></div>
+                    <div className="min-w-0">
                       <p className="text-xs text-stone-500">Total profit</p>
-                      <p className="text-lg font-bold text-emerald-700">{fmt(filesGrandTotals.profit)}</p>
+                      <p className="text-sm sm:text-lg font-bold text-emerald-700 truncate">{fmt(filesGrandTotals.profit)}</p>
                     </div>
                   </div>
                 </div>
@@ -6797,7 +6911,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <span className="text-sm text-stone-800 truncate">
                               {v.visaType || "Visa"} · {(v.customers || []).map((c) => c.name).filter(Boolean).join(", ") || "-"}
                             </span>
-                            <span className="text-xs text-stone-400 shrink-0">{fmt(v.soldPrice)} {v.currency}</span>
+                            <span className="text-xs text-stone-400 shrink-0">{fmt(visaSoldTotal(v))} {v.currency}</span>
                           </button>
                         ))
                       )
