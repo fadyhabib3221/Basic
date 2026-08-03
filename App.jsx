@@ -5000,19 +5000,53 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     {viewingTicket.date ? formatDisplayDate(viewingTicket.date) : "-"}
                   </p>
                 </div>
-                {viewingTicket.isReissued && (
-                  <div className="sm:col-span-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                    <p className="text-xs font-semibold text-amber-800 mb-1">Reissued ticket</p>
-                    <p className="text-sm text-amber-900">
-                      Old ticket number: {viewingTicket.oldTicketNumber || "-"}
-                      {" · "}
-                      Old issue date:{" "}
-                      {viewingTicket.oldTicketIssueDate
-                        ? formatDisplayDate(viewingTicket.oldTicketIssueDate)
-                        : "not found"}
-                    </p>
-                  </div>
-                )}
+                {viewingTicket.isReissued && (() => {
+                  const oldTicket = findTicketByNumber(viewingTicket.oldTicketNumber);
+                  return (
+                    <div className="sm:col-span-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                      <p className="text-xs font-semibold text-amber-800 mb-1">Reissued ticket — original ticket</p>
+                      <p className="text-sm text-amber-900">
+                        Ticket number:{" "}
+                        {oldTicket ? (
+                          <button
+                            type="button"
+                            onClick={() => openTicketDetail(oldTicket)}
+                            className="font-mono font-semibold underline decoration-dashed underline-offset-2 hover:text-amber-700"
+                            title="Open the original ticket"
+                          >
+                            {viewingTicket.oldTicketNumber || "-"}
+                          </button>
+                        ) : (
+                          <span className="font-mono">{viewingTicket.oldTicketNumber || "-"}</span>
+                        )}
+                        {" · "}
+                        Issue date:{" "}
+                        {viewingTicket.oldTicketIssueDate
+                          ? formatDisplayDate(viewingTicket.oldTicketIssueDate)
+                          : oldTicket && oldTicket.date
+                          ? formatDisplayDate(oldTicket.date)
+                          : "not found"}
+                      </p>
+                      {oldTicket ? (
+                        <p className="text-xs text-amber-800 mt-1">
+                          {oldTicket.company && oldTicket.company.trim() ? oldTicket.company : "Individual"}
+                          {" · "}
+                          {oldTicket.supplier || "-"}
+                          {" · "}
+                          {routeLabel(oldTicket)}
+                          {" · "}
+                          {oldTicket.airline ? (getAirlineIata(oldTicket.airline) || oldTicket.airline) : "-"}
+                          {" · Net "}
+                          {fmt(oldTicket.netPrice)}
+                          {" · Sold "}
+                          {fmt(oldTicket.soldPrice)}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-amber-700 italic mt-1">Original ticket not found in stored data</p>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="p-4 md:p-5">
