@@ -4077,20 +4077,89 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     ));
                     if (hasRefund(t)) {
                       const refundedCustomer = customers[t.refund.customerIndex || 0];
+                      const refundTicketNumber = (refundedCustomer && refundedCustomer.ticketNumber) || (customers[0] && customers[0].ticketNumber) || "-";
                       rows.push(
                         <tr
                           key={`${t.id}-refund`}
                           onClick={() => openTicketDetail(t)}
-                          className="border-t border-dashed border-sky-200 bg-sky-50/60 text-[11px] cursor-pointer hover:bg-sky-100/60"
+                          className="border-t border-dashed border-sky-200 bg-sky-50/60 leading-tight cursor-pointer hover:bg-sky-100/60"
                         >
-                          <td colSpan={8} className="px-2.5 py-1 text-sky-700 italic whitespace-nowrap">
-                            ↳ Refund{refundedCustomer && refundedCustomer.name ? ` — ${refundedCustomer.name}` : ""}
-                            {t.refund.date ? ` · ${formatDisplayDate(t.refund.date)}` : ""}
+                          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{t.employee || "-"}</td>
+                          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">
+                            {t.company && t.company.trim() ? t.company : <span className="text-sky-400 italic">Individual</span>}
                           </td>
+                          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{t.supplier || "-"}</td>
+                          <td className="px-2.5 py-1 text-sky-700 font-mono whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5">
+                              {refundTicketNumber}
+                              <span className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5">
+                                ↳ Refund
+                              </span>
+                            </span>
+                          </td>
+                          <td className="px-2.5 py-1 font-medium text-sky-800 whitespace-nowrap">{(refundedCustomer && refundedCustomer.name) || "-"}</td>
+                          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{routeLabel(t)}</td>
+                          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
+                            {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
+                          </td>
+                          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{t.refund.date ? formatDisplayDate(t.refund.date) : "-"}</td>
                           <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">{fmt(t.refund.airlineAmount)}</td>
                           <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">{fmt(t.refund.customerAmount)}</td>
-                          <td className="px-2.5 py-1 text-right whitespace-nowrap"></td>
-                          <td className="px-2.5 py-1 text-right whitespace-nowrap"></td>
+                          <td className="px-2.5 py-1 font-semibold text-sky-800 text-right whitespace-nowrap">
+                            {fmt((parseFloat(t.refund.airlineAmount) || 0) - (parseFloat(t.refund.customerAmount) || 0))}
+                          </td>
+                          <td className="px-2.5 py-1 text-right whitespace-nowrap"><span className="text-sky-300 text-[11px] block text-right">—</span></td>
+                        </tr>
+                      );
+                    }
+                    if (t.isReissued) {
+                      const oldTicket = findTicketByNumber(t.oldTicketNumber);
+                      const oldCustomers = oldTicket
+                        ? (Array.isArray(oldTicket.customers) && oldTicket.customers.length > 0
+                            ? oldTicket.customers
+                            : [{ name: oldTicket.customer || "", ticketNumber: oldTicket.ticketNumber || "" }])
+                        : [];
+                      const oldCustomer =
+                        oldCustomers.find(
+                          (c) => (c.ticketNumber || "").trim().toUpperCase() === (t.oldTicketNumber || "").trim().toUpperCase()
+                        ) || oldCustomers[0];
+                      rows.push(
+                        <tr
+                          key={`${t.id}-reissue`}
+                          onClick={() => (oldTicket ? openTicketDetail(oldTicket) : undefined)}
+                          className={`border-t border-dashed border-amber-200 bg-amber-50/60 leading-tight ${oldTicket ? "cursor-pointer hover:bg-amber-100/60" : ""}`}
+                        >
+                          <td className="px-2.5 py-1 text-amber-700 whitespace-nowrap">{oldTicket ? (oldTicket.employee || "-") : "-"}</td>
+                          <td className="px-2.5 py-1 text-amber-700 whitespace-nowrap">
+                            {oldTicket ? (
+                              oldTicket.company && oldTicket.company.trim() ? oldTicket.company : <span className="text-amber-400 italic">Individual</span>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+                          <td className="px-2.5 py-1 text-amber-700 whitespace-nowrap">{oldTicket ? (oldTicket.supplier || "-") : "-"}</td>
+                          <td className="px-2.5 py-1 text-amber-700 font-mono whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5">
+                              {t.oldTicketNumber || "-"}
+                              <span className="inline-flex items-center text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5">
+                                ↳ Reissued from
+                              </span>
+                            </span>
+                          </td>
+                          <td className="px-2.5 py-1 font-medium text-amber-800 whitespace-nowrap">{(oldCustomer && oldCustomer.name) || "-"}</td>
+                          <td className="px-2.5 py-1 text-amber-700 whitespace-nowrap">{oldTicket ? routeLabel(oldTicket) : "-"}</td>
+                          <td className="px-2.5 py-1 text-amber-700 whitespace-nowrap" title={oldTicket ? (getAirlineNameByIata(oldTicket.airline) || oldTicket.airline || "") : ""}>
+                            {oldTicket && oldTicket.airline ? (getAirlineIata(oldTicket.airline) || oldTicket.airline) : "-"}
+                          </td>
+                          <td className="px-2.5 py-1 text-amber-700 whitespace-nowrap">
+                            {t.oldTicketIssueDate ? formatDisplayDate(t.oldTicketIssueDate) : (oldTicket && oldTicket.date ? formatDisplayDate(oldTicket.date) : "-")}
+                          </td>
+                          <td className="px-2.5 py-1 text-amber-700 text-right whitespace-nowrap">{oldTicket ? fmt(oldTicket.netPrice) : "-"}</td>
+                          <td className="px-2.5 py-1 text-amber-700 text-right whitespace-nowrap">{oldTicket ? fmt(oldTicket.soldPrice) : "-"}</td>
+                          <td className="px-2.5 py-1 font-semibold text-amber-800 text-right whitespace-nowrap">
+                            {oldTicket ? fmt(profit(oldTicket.netPrice, oldTicket.soldPrice)) : "-"}
+                          </td>
+                          <td className="px-2.5 py-1 text-right whitespace-nowrap"><span className="text-amber-300 text-[11px] block text-right">—</span></td>
                         </tr>
                       );
                     }
