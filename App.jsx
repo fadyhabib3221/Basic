@@ -1856,6 +1856,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // True once a refund (either side) has actually been recorded for a ticket.
   const hasRefund = (t) => !!(t && t.refund && (t.refund.airlineAmount !== "" || t.refund.customerAmount !== ""));
 
+  // Accounting-adjusted figures for a ticket: a recorded refund is deducted from both
+  // sides — what the airline paid back reduces our cost (net price), and what we paid
+  // back to the customer reduces our revenue (sold price) — so sales/profit totals
+  // everywhere (ticket rows, summary cards, monthly/company breakdowns, exports)
+  // reflect the refund rather than the original pre-refund booking amounts.
+  const netAfterRefund = (t) =>
+    (parseFloat(t.netPrice) || 0) - (hasRefund(t) ? parseFloat(t.refund.airlineAmount) || 0 : 0);
+  const soldAfterRefund = (t) =>
+    (parseFloat(t.soldPrice) || 0) - (hasRefund(t) ? parseFloat(t.refund.customerAmount) || 0 : 0);
+  const profitAfterRefund = (t) => soldAfterRefund(t) - netAfterRefund(t);
+
   // Saves the two refund amounts (from the airline, to the customer) onto a ticket. Kept
   // as its own record — separate from editing the ticket itself — with its own history
   // trail, and shows up as its own row directly under the original ticket in exports.
@@ -2279,13 +2290,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // customers contributes its full (unsplit) total/profit once for each customer, and
   // each customer counts as one ticket. This keeps the summary cards, monthly totals,
   // and company breakdown consistent with the per-customer rows shown in the ticket table.
+  // A recorded refund is a real, one-time amount for the booking, so it's deducted once
+  // (not multiplied by customer count) — reducing sales by what went back to the customer
+  // and adjusting profit by that same amount net of whatever the airline refunded back.
   const countAndSum = (rows) =>
     rows.reduce(
       (acc, t) => {
         const n = getCustomers(t).length || 1;
+        const refundCustomerAmt = hasRefund(t) ? parseFloat(t.refund.customerAmount) || 0 : 0;
+        const refundAirlineAmt = hasRefund(t) ? parseFloat(t.refund.airlineAmount) || 0 : 0;
         acc.count += n;
-        acc.total += (parseFloat(t.soldPrice) || 0) * n;
-        acc.profit += profit(t.netPrice, t.soldPrice) * n;
+        acc.total += (parseFloat(t.soldPrice) || 0) * n - refundCustomerAmt;
+        acc.profit += profit(t.netPrice, t.soldPrice) * n + refundAirlineAmt - refundCustomerAmt;
         return acc;
       },
       { count: 0, total: 0, profit: 0 }
@@ -2348,10 +2364,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         "Route": routeLabel(t),
         "Airline": t.airline || "",
         "Issue date": t.date ? formatDisplayDate(t.date) : "",
-        // Net/sold price and profit reflect the whole booking and are shown once, on the first customer's row
-        "Net price": i === 0 ? parseFloat(t.netPrice) || 0 : "",
-        "Sold price": i === 0 ? parseFloat(t.soldPrice) || 0 : "",
-        "Profit": i === 0 ? profit(t.netPrice, t.soldPrice) : "",
+        // Net/sold price and profit reflect the whole booking (after any refund) and are shown once, on the first customer's row
+        "Net price": i === 0 ? netAfterRefund(t) : "",
+        "Sold price": i === 0 ? soldAfterRefund(t) : "",
+        "Profit": i === 0 ? profitAfterRefund(t) : "",
         "Refund (airline)": "",
         "Refund (customer)": "",
         "Notes": t.notes || "",
@@ -2387,13 +2403,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   // Sums net price / sold price / profit across a raw ticket list (once per booking,
-  // matching how those columns are only populated on each booking's first row above).
+  // matching how those columns are only populated on each booking's first row above),
+  // with any recorded refund deducted so the totals row matches actual accounting.
   const sumTicketPrices = (rows) =>
     rows.reduce(
       (acc, t) => {
-        acc.net += parseFloat(t.netPrice) || 0;
-        acc.sold += parseFloat(t.soldPrice) || 0;
-        acc.profit += profit(t.netPrice, t.soldPrice);
+        acc.net += netAfterRefund(t);
+        acc.sold += soldAfterRefund(t);
+        acc.profit += profitAfterRefund(t);
         return acc;
       },
       { net: 0, sold: 0, profit: 0 }
@@ -3887,7 +3904,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 Reissued
                               </span>
                             )}
-                            {hasRefund(t) && (
+                            {hasRefund(t) && (t.refund.customerIndex || 0) === i && (
                               <span
                                 title={`Refunded — Airline: ${fmt(t.refund.airlineAmount)} · Customer: ${fmt(t.refund.customerAmount)}`}
                                 className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5"
@@ -3915,9 +3932,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
                         </td>
                         <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.date ? formatDisplayDate(t.date) : "-"}</td>
-                        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.netPrice)}</td>
-                        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
-                        <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
+                        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(netAfterRefund(t))}</td>
+                        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(soldAfterRefund(t))}</td>
+                        <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profitAfterRefund(t))}</td>
                         <td className="px-2.5 py-1 text-right whitespace-nowrap">
                           {(currentUser.isAdmin || canEditTickets) ? (
                             <div className="flex gap-0.5 justify-end">
@@ -4821,17 +4838,28 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 md:p-5">
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Net price</p>
-                  <p className="text-sm font-medium text-stone-800">{fmt(viewingTicket.netPrice)}</p>
+                  <p className="text-sm font-medium text-stone-800">{fmt(netAfterRefund(viewingTicket))}</p>
+                  {hasRefund(viewingTicket) && (
+                    <p className="text-[11px] text-stone-400">Before refund: {fmt(viewingTicket.netPrice)}</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Sold price</p>
-                  <p className="text-sm font-medium text-stone-800">{fmt(viewingTicket.soldPrice)}</p>
+                  <p className="text-sm font-medium text-stone-800">{fmt(soldAfterRefund(viewingTicket))}</p>
+                  {hasRefund(viewingTicket) && (
+                    <p className="text-[11px] text-stone-400">Before refund: {fmt(viewingTicket.soldPrice)}</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Profit</p>
                   <p className="text-sm font-semibold text-emerald-700">
-                    {fmt(profit(viewingTicket.netPrice, viewingTicket.soldPrice))}
+                    {fmt(profitAfterRefund(viewingTicket))}
                   </p>
+                  {hasRefund(viewingTicket) && (
+                    <p className="text-[11px] text-stone-400">
+                      Before refund: {fmt(profit(viewingTicket.netPrice, viewingTicket.soldPrice))}
+                    </p>
+                  )}
                 </div>
               </div>
 
