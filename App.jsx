@@ -68,12 +68,55 @@ const formatDateTime = (iso) => {
   return `${dd}-${monthAbbr}-${yyyy} ${hh}:${min}`;
 };
 
-const emptyCustomerRow = () => ({ name: "", ticketNumber: "" });
+const emptyCustomerRow = () => ({ name: "", ticketNumber: "", conjunction: false, ticketNumber2: "" });
 
 // Ticket supplier / booking source options.
 const SUPPLIERS = ["Amadeus", "Sabre", "NDC", "Lowcost"];
 
 const CAR_TYPES = ["Sedan", "Mini Van", "H1", "Coaster", "Bus"];
+
+// Hour/minute option lists for the smooth, pill-shaped transfer time picker below
+// (two plain <select>s fused into one field instead of the clunky native <input type="time">).
+const TIME_HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+const TIME_MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+
+// A single "HH:MM" value rendered as two borderless selects (hour, minute) inside one
+// shared pill, so it reads as one smooth control instead of two separate boxes — used
+// for transfer pickup times in the Transportation section.
+const TimeSelect = ({ value, onChange }) => {
+  const [h = "", m = ""] = (value || "").split(":");
+  const update = (nh, nm) => {
+    if (!nh && !nm) { onChange(""); return; }
+    onChange(`${nh || "00"}:${nm || "00"}`);
+  };
+  return (
+    <div className="w-full flex items-center border border-stone-300 rounded-xl px-3 py-2 text-sm focus-within:outline-none focus-within:ring-2 focus-within:ring-teal-700 bg-white">
+      <select
+        aria-label="Hour"
+        className="flex-1 bg-transparent focus:outline-none appearance-none text-center"
+        value={h}
+        onChange={(e) => update(e.target.value, m)}
+      >
+        <option value="">--</option>
+        {TIME_HOURS.map((v) => (
+          <option key={v} value={v}>{v}</option>
+        ))}
+      </select>
+      <span className="text-stone-400 px-0.5">:</span>
+      <select
+        aria-label="Minute"
+        className="flex-1 bg-transparent focus:outline-none appearance-none text-center"
+        value={m}
+        onChange={(e) => update(h, e.target.value)}
+      >
+        <option value="">--</option>
+        {TIME_MINUTES.map((v) => (
+          <option key={v} value={v}>{v}</option>
+        ))}
+      </select>
+    </div>
+  );
+};
 
 // Saved companies were originally plain strings; this reads the name whether an entry
 // is still a legacy string or the newer { name, taxNumber, commercialReg, phones } record.
@@ -102,12 +145,18 @@ const getEmptyForm = () => ({
   customers: [emptyCustomerRow()],
   from: "",
   to: "",
+  // Return-leg airport, shown only for a round trip — the outbound "to" airport is
+  // usually where the return departs from, but this lets it be entered separately
+  // when it differs (e.g. a different city on the way back).
+  returnAirport: "",
   // Multi-destination (multi-city) route support: when multiDestination is on, the
   // route is described as an ordered list of stops (e.g. ["CAI","DXB","BKK"]) instead
   // of a single from/to pair. "from"/"to" are still kept in sync (first/last stop) so
   // every place that reads a plain origin/destination keeps working unchanged.
   multiDestination: false,
   destinations: ["", ""],
+  // Trip type shown next to the multi-destination toggle: "oneWay" or "roundTrip".
+  tripType: "oneWay",
   airline: "",
   date: todayDateStr(),
   netPrice: "",
@@ -119,6 +168,13 @@ const getEmptyForm = () => ({
   isReissued: false,
   oldTicketNumber: "",
   oldTicketIssueDate: "",
+  // Refund tracking: a list of refund records (each with two amounts — refunded by the
+  // airline, refunded to the customer), entered right in the ticket form next to the
+  // reissue box. Empty while nothing's been refunded. A single booking can have several
+  // customers/tickets, so this is a list — one entry per refunded customerIndex — rather
+  // than a single object, so refunding more than one ticket on the same booking doesn't
+  // overwrite an earlier one.
+  refunds: [],
 });
 
 // Renders a ticket's route as a single "A → B" (or "A → B → C → ..." for a
@@ -272,6 +328,8 @@ const getEmptyCarForm = () => ({
   netPrice: "",
   soldPrice: "",
   bookingDate: todayDateStr(),
+  bookingTime: "",
+  collection: "",
 });
 
 // Given a ticket number like "077-1234567890", returns the same prefix with the numeric
@@ -293,6 +351,40 @@ const nextTicketNumber = (ticketNumber) => {
   const tail = digits.slice(-3);
   const nextTail = ((parseInt(tail, 10) + 1) % 1000).toString().padStart(3, "0");
   return `${prefix}-${head}${nextTail}`;
+};
+
+// Given a ticket number's last three digits, returns the "-XXX" suffix used for a
+// conjunction ticket — the customer's second ticket number issued together with the
+// first, which airlines write as just the incremented tail after a dash (e.g. ticket
+// "077-1234567890" gets a conjunction suffix of "-891"). Wraps 999 back to 000, same as
+// nextTicketNumber above. Returns "" if there aren't at least three digits to work from.
+const conjunctionTicketSuffix = (ticketNumber) => {
+  const digits = (ticketNumber || "").replace(/[^0-9]/g, "");
+  if (digits.length < 3) return "";
+  const tail = digits.slice(-3);
+  const nextTail = ((parseInt(tail, 10) + 1) % 1000).toString().padStart(3, "0");
+  return `-${nextTail}`;
+};
+
+// Given a customer row, returns the ticket number the NEXT customer's auto-sequenced
+// number should be generated from. If this customer has a conjunction (second) ticket,
+// that second number was already issued to them, so the next customer continues after
+// its tail rather than after the first ticket's tail — e.g. first ticket
+// "077-1234567890" with a conjunction suffix of "-891" means the next customer should
+// get "077-1234567892", not "077-1234567891" (which is this customer's own conjunction
+// ticket). Falls back to the plain ticket number when there's no conjunction ticket.
+const lastIssuedTicketNumber = (customer) => {
+  if (!customer) return "";
+  if (customer.conjunction && customer.ticketNumber2) {
+    const match = (customer.ticketNumber || "").match(/^([A-Z0-9]{3})-(\d+)$/);
+    const tailDigits = customer.ticketNumber2.replace(/[^0-9]/g, "");
+    if (match && tailDigits) {
+      const [, prefix, num] = match;
+      const head = num.length > 3 ? num.slice(0, -3) : "";
+      return `${prefix}-${head}${tailDigits.padStart(3, "0")}`;
+    }
+  }
+  return customer.ticketNumber;
 };
 
 // Fills/trims the customers array to match the requested count, keeping existing entries
@@ -855,11 +947,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [viewingTicketId, setViewingTicketId] = useState(null);
   const [notesDraft, setNotesDraft] = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
-  // Refund tracking on the ticket detail view: two amounts (refunded by the airline,
-  // refunded to the customer) plus which customer (when a booking has more than one)
-  // the refund belongs to, recorded/edited per ticket.
-  const [showRefundForm, setShowRefundForm] = useState(false);
-  const [refundDraft, setRefundDraft] = useState({ airlineAmount: "", customerAmount: "", customerIndex: 0 });
+  // Refund box in the main ticket form (next to Reissue): looks up existing tickets by
+  // number and records a refund against each directly, independent of whichever ticket
+  // the form itself is currently adding/editing. Supports refunding several tickets at
+  // once — each row is its own ticket-number lookup plus its own amounts.
+  const [refundBoxOpen, setRefundBoxOpen] = useState(false);
+  const [refundRows, setRefundRows] = useState([{ number: "", airlineAmount: "", customerAmount: "", customerIndex: 0 }]);
   const [refundSaved, setRefundSaved] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
@@ -1793,6 +1886,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       netPrice: c.netPrice,
       soldPrice: c.soldPrice,
       bookingDate: c.bookingDate || todayDateStr(),
+      bookingTime: c.bookingTime || "",
+      collection: c.collection || "",
     });
     setCarSupplierOther(!!c.supplier && !(suggestions.carSuppliers || []).includes(c.supplier));
     setCarError("");
@@ -1865,6 +1960,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             ${row("Waiting", c.hasWaiting ? `${c.waitingHours || 0} h` : "-")}
             ${row("Flight number", c.startsAtAirport ? (c.flightNumber || "-") : "-")}
             ${row("Booking date", c.bookingDate ? formatDisplayDate(c.bookingDate) : "-")}
+            ${row("Booking time", c.bookingTime || "-")}
+            ${row("Collection", c.collection ? `${fmt(parseFloat(c.collection) || 0)} ${c.currency}` : "-")}
           </table>
 
           <div class="footer">
@@ -2306,6 +2403,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         changes.push(`Customer ${i + 1} ticket number: ${b.ticketNumber || "—"} → ${a.ticketNumber || "—"}`);
       }
     }
+
+    const beforeRefunds = getRefunds(before);
+    const afterRefunds = getRefunds(after);
+    if (beforeRefunds.length === 0 && afterRefunds.length > 0) {
+      changes.push(`Refund added (${afterRefunds.length} ticket${afterRefunds.length > 1 ? "s" : ""})`);
+    } else if (beforeRefunds.length > 0 && afterRefunds.length === 0) {
+      changes.push("Refund removed");
+    } else if (JSON.stringify(beforeRefunds) !== JSON.stringify(afterRefunds)) {
+      changes.push("Refund updated");
+    }
     return changes;
   };
 
@@ -2338,6 +2445,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       destinations: form.multiDestination ? cleanDestinations : [],
       from: form.multiDestination ? cleanDestinations[0] || "" : form.from,
       to: form.multiDestination ? cleanDestinations[cleanDestinations.length - 1] || "" : form.to,
+      // Return airport always mirrors the first (From) airport on a round trip — it's
+      // not independently editable, so it's derived here rather than trusted from form state.
+      returnAirport:
+        form.tripType === "roundTrip"
+          ? (form.multiDestination ? cleanDestinations[0] || "" : form.from)
+          : "",
       employee: isEditingExisting ? form.employee : currentUser.name,
       employeeUsername: isEditingExisting ? form.employeeUsername : currentUser.username,
       id: form.id || Date.now().toString(),
@@ -2381,7 +2494,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // Backward compatibility: older records have no multiDestination/destinations fields.
     const destinations =
       Array.isArray(t.destinations) && t.destinations.length >= 2 ? t.destinations : [t.from || "", t.to || ""];
-    setForm({ ...t, customers, customersCount: customers.length, multiDestination: !!t.multiDestination, destinations });
+    setForm({ ...t, customers, customersCount: customers.length, multiDestination: !!t.multiDestination, destinations, tripType: t.tripType || "oneWay", returnAirport: t.returnAirport || "" });
     setSupplierOther(!!t.supplier && !SUPPLIERS.includes(t.supplier));
   };
   const handleDelete = (id) => {
@@ -2399,21 +2512,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setViewingTicketId(t.id);
     setNotesDraft(t.notes || "");
     setNotesSaved(false);
-    setShowRefundForm(false);
-    setRefundDraft({
-      airlineAmount: t.refund ? t.refund.airlineAmount : "",
-      customerAmount: t.refund ? t.refund.customerAmount : "",
-      customerIndex: t.refund && t.refund.customerIndex != null ? t.refund.customerIndex : 0,
-    });
-    setRefundSaved(false);
   };
   const closeTicketDetail = () => {
     setViewingTicketId(null);
     setNotesDraft("");
     setNotesSaved(false);
-    setShowRefundForm(false);
-    setRefundDraft({ airlineAmount: "", customerAmount: "", customerIndex: 0 });
-    setRefundSaved(false);
   };
   // Saves an edit to just the notes field of a ticket, without touching anything else.
   // Every save appends an entry to notesHistory recording who made the change and when,
@@ -2434,63 +2537,36 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setNotesSaved(true);
   };
 
-  // True once a refund (either side) has actually been recorded for a ticket.
-  const hasRefund = (t) => !!(t && t.refund && (t.refund.airlineAmount !== "" || t.refund.customerAmount !== ""));
+  // Normalizes a ticket's refund records into a list. Current tickets store `refunds` as
+  // an array — one entry per refunded customerIndex, since a single booking can have
+  // several customers/tickets refunded independently. Older saved tickets may still have
+  // a single `refund` object from before that change; treated here as a one-item list so
+  // every reader below keeps working for both shapes without a separate migration step.
+  const getRefunds = (t) => {
+    if (!t) return [];
+    if (Array.isArray(t.refunds)) return t.refunds;
+    if (t.refund) return [t.refund];
+    return [];
+  };
 
-  // Accounting-adjusted figures for a ticket: a recorded refund is deducted from both
+  // True once at least one refund (either side) has actually been recorded for a ticket.
+  const hasRefund = (t) => getRefunds(t).some((r) => r && (r.airlineAmount !== "" || r.customerAmount !== ""));
+
+  // The recorded refund entry (if any) for one specific customer/ticket within a booking —
+  // used to show the "Refunded" badge against the right customer row rather than every row.
+  const refundForIndex = (t, i) =>
+    getRefunds(t).find((r) => r && (r.customerIndex || 0) === i && (r.airlineAmount !== "" || r.customerAmount !== ""));
+
+  // Accounting-adjusted figures for a ticket: every recorded refund is deducted from both
   // sides — what the airline paid back reduces our cost (net price), and what we paid
   // back to the customer reduces our revenue (sold price) — so sales/profit totals
   // everywhere (ticket rows, summary cards, monthly/company breakdowns, exports)
   // reflect the refund rather than the original pre-refund booking amounts.
   const netAfterRefund = (t) =>
-    (parseFloat(t.netPrice) || 0) - (hasRefund(t) ? parseFloat(t.refund.airlineAmount) || 0 : 0);
+    (parseFloat(t.netPrice) || 0) - getRefunds(t).reduce((sum, r) => sum + (parseFloat(r.airlineAmount) || 0), 0);
   const soldAfterRefund = (t) =>
-    (parseFloat(t.soldPrice) || 0) - (hasRefund(t) ? parseFloat(t.refund.customerAmount) || 0 : 0);
+    (parseFloat(t.soldPrice) || 0) - getRefunds(t).reduce((sum, r) => sum + (parseFloat(r.customerAmount) || 0), 0);
   const profitAfterRefund = (t) => soldAfterRefund(t) - netAfterRefund(t);
-
-  // Saves the two refund amounts (from the airline, to the customer) onto a ticket. Kept
-  // as its own record — separate from editing the ticket itself — with its own history
-  // trail, and shows up as its own row directly under the original ticket in exports.
-  const saveTicketRefund = (id) => {
-    const now = new Date().toISOString();
-    const refund = {
-      airlineAmount: refundDraft.airlineAmount,
-      customerAmount: refundDraft.customerAmount,
-      customerIndex: refundDraft.customerIndex || 0,
-      date: todayDateStr(),
-    };
-    const next = tickets.map((t) => {
-      if (t.id !== id) return t;
-      const history = Array.isArray(t.refundHistory) ? t.refundHistory : [];
-      return {
-        ...t,
-        refund,
-        refundHistory: [...history, { ...refund, by: currentUser.name, at: now }],
-      };
-    });
-    persistTickets(next);
-    setRefundSaved(true);
-    setShowRefundForm(false);
-  };
-
-  // Removes a previously-recorded refund from a ticket (e.g. entered by mistake), keeping
-  // a "cleared" entry in the history trail for the audit log.
-  const clearTicketRefund = (id) => {
-    const now = new Date().toISOString();
-    const next = tickets.map((t) => {
-      if (t.id !== id) return t;
-      const history = Array.isArray(t.refundHistory) ? t.refundHistory : [];
-      return {
-        ...t,
-        refund: null,
-        refundHistory: [...history, { cleared: true, by: currentUser.name, at: now }],
-      };
-    });
-    persistTickets(next);
-    setRefundDraft({ airlineAmount: "", customerAmount: "", customerIndex: 0 });
-    setRefundSaved(false);
-    setShowRefundForm(false);
-  };
 
   const handleCustomersCountChange = (value) => {
     const count = value === "" ? "" : value;
@@ -2498,7 +2574,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // When more customer rows are added, auto-sequence their ticket numbers by
     // increasing the previous customer's number by one (only if it was filled in).
     for (let i = form.customers.length; i < customers.length; i++) {
-      const generated = nextTicketNumber(customers[i - 1] && customers[i - 1].ticketNumber);
+      const generated = nextTicketNumber(lastIssuedTicketNumber(customers[i - 1]));
       if (generated) customers[i] = { ...customers[i], ticketNumber: generated };
     }
     setForm({ ...form, customersCount: count, customers });
@@ -2550,6 +2626,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       // Keep only letters and digits, then auto-insert a hyphen after the first 3 characters
       const clean = nextValue.replace(/[^A-Z0-9]/g, "").slice(0, 13);
       nextValue = clean.length > 3 ? `${clean.slice(0, 3)}-${clean.slice(3)}` : clean;
+    } else if (field === "ticketNumber2") {
+      // A conjunction ticket number is just the incremented 3-digit tail after a dash
+      // (see conjunctionTicketSuffix) — not a full independent ticket number, so this
+      // keeps only digits and re-applies the leading dash rather than the usual
+      // prefix-then-hyphen formatting.
+      const digits = nextValue.replace(/[^0-9]/g, "").slice(0, 3);
+      nextValue = digits ? `-${digits}` : "";
     }
     const customers = form.customers.map((c, i) => (i === index ? { ...c, [field]: nextValue } : c));
     let airline = form.airline;
@@ -2567,14 +2650,44 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setForm({ ...form, customers, airline });
   };
 
+  // Toggles whether a customer has a conjunction ticket (a second ticket number issued
+  // together with their first). Checking it auto-fills the conjunction suffix from the
+  // customer's first ticket number (still editable by hand afterward); unchecking clears
+  // the second ticket number out.
+  const handleCustomerConjunctionToggle = (index, checked) => {
+    const customers = form.customers.map((c, i) =>
+      i === index ? { ...c, conjunction: checked, ticketNumber2: checked ? conjunctionTicketSuffix(c.ticketNumber) : "" } : { ...c }
+    );
+    // Switching the conjunction on/off shifts where the sequence for later customers
+    // should continue from, so re-run the same cascade as handleTicketNumberBlur below —
+    // still stopping at the first customer whose ticket number is already filled in.
+    let last = lastIssuedTicketNumber(customers[index]);
+    for (let i = index + 1; i < customers.length; i++) {
+      if (customers[i].ticketNumber) break;
+      const generated = nextTicketNumber(last);
+      if (!generated) break;
+      customers[i] = { ...customers[i], ticketNumber: generated };
+      last = generated;
+    }
+    setForm({ ...form, customers });
+  };
+
   // Runs once the person leaves the ticket number field (not on every keystroke), using
   // whatever they finished typing, and auto-fills any following ticket numbers that are
   // still empty — each one increasing the previous by one. Stops at the first one someone
-  // has already typed something into, so manual entries are never overwritten.
+  // has already typed something into, so manual entries are never overwritten. Also keeps
+  // this customer's conjunction suffix (if any) in sync with their first ticket number.
   const handleTicketNumberBlur = (index) => {
     const customers = form.customers.map((c) => ({ ...c }));
     let last = customers[index] && customers[index].ticketNumber;
     if (!last) return;
+    if (customers[index].conjunction) {
+      customers[index].ticketNumber2 = conjunctionTicketSuffix(last);
+    }
+    // If this customer has a conjunction ticket, that second number was already issued
+    // to them — continue the sequence for later customers after ITS tail, not the first
+    // ticket's tail.
+    last = lastIssuedTicketNumber(customers[index]);
     for (let i = index + 1; i < customers.length; i++) {
       if (customers[i].ticketNumber) break;
       const generated = nextTicketNumber(last);
@@ -2596,7 +2709,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         Array.isArray(t.customers) && t.customers.length > 0
           ? t.customers
           : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
-      if (custs.some((c) => (c.ticketNumber || "").trim().toUpperCase() === target)) {
+      if (
+        custs.some(
+          (c) =>
+            (c.ticketNumber || "").trim().toUpperCase() === target ||
+            (c.ticketNumber2 || "").trim().toUpperCase() === target
+        )
+      ) {
         return t;
       }
     }
@@ -2651,6 +2770,122 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       soldPrice: form.soldPrice !== "" ? form.soldPrice : oldTicket.soldPrice ?? "",
       customers,
     });
+  };
+
+  // Cleans up a refund row's ticket number the same way regular ticket numbers and the
+  // reissue lookup are formatted.
+  const handleRefundRowNumberChange = (index, value) => {
+    const clean = (value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 13);
+    const nextValue = clean.length > 3 ? `${clean.slice(0, 3)}-${clean.slice(3)}` : clean;
+    setRefundRows(refundRows.map((r, i) => (i === index ? { ...r, number: nextValue } : r)));
+    setRefundSaved(false);
+  };
+
+  // Once the person finishes typing a row's ticket number, look it up and, if it already
+  // has a refund recorded for the default (first) customer, load those amounts in for
+  // editing; otherwise start blank. Picking a different customer below reloads that
+  // customer's own recorded refund, if any — see the "Refunded ticket" select below.
+  const handleRefundRowNumberBlur = (index) => {
+    const target = findTicketByNumber(refundRows[index].number);
+    const existing = target ? getRefunds(target).find((r) => (r.customerIndex || 0) === 0) : null;
+    setRefundRows(
+      refundRows.map((r, i) =>
+        i === index
+          ? {
+              ...r,
+              airlineAmount: existing ? existing.airlineAmount || "" : "",
+              customerAmount: existing ? existing.customerAmount || "" : "",
+              customerIndex: existing ? existing.customerIndex || 0 : 0,
+            }
+          : r
+      )
+    );
+  };
+
+  const addRefundRow = () => {
+    setRefundRows([...refundRows, { number: "", airlineAmount: "", customerAmount: "", customerIndex: 0 }]);
+  };
+
+  const removeRefundRow = (index) => {
+    setRefundRows(refundRows.length > 1 ? refundRows.filter((_, i) => i !== index) : refundRows);
+  };
+
+  // Saves every row's refund directly onto whichever saved ticket matches its typed
+  // ticket number — independent of whatever ticket the main form is currently
+  // adding/editing. Rows with no matching ticket are skipped. Two or more rows can point
+  // at the same booking (e.g. refunding several customers on one multi-passenger ticket
+  // record) — those are grouped and merged in by customerIndex rather than one row
+  // overwriting another, and any of that booking's other already-recorded refunds (for
+  // customers not touched by this save) are kept untouched. Logged into each affected
+  // ticket's own edit-history trail.
+  const saveAllRefunds = () => {
+    const now = new Date().toISOString();
+    const rowsByTicketId = {};
+    refundRows.forEach((row) => {
+      const target = findTicketByNumber(row.number);
+      if (!target) return;
+      const customerIndex = row.customerIndex || 0;
+      if (!rowsByTicketId[target.id]) rowsByTicketId[target.id] = {};
+      rowsByTicketId[target.id][customerIndex] = {
+        airlineAmount: row.airlineAmount,
+        customerAmount: row.customerAmount,
+        customerIndex,
+        date: todayDateStr(),
+      };
+    });
+    if (Object.keys(rowsByTicketId).length === 0) return;
+    const next = tickets.map((t) => {
+      const newByIndex = rowsByTicketId[t.id];
+      if (!newByIndex) return t;
+      const newEntries = Object.values(newByIndex);
+      const untouched = getRefunds(t).filter((r) => !((r.customerIndex || 0) in newByIndex));
+      const history = Array.isArray(t.notesHistory) ? t.notesHistory : [];
+      const summary = newEntries
+        .map((r) => `airline ${r.airlineAmount || 0}, customer ${r.customerAmount || 0}`)
+        .join("; ");
+      return {
+        ...t,
+        refund: null,
+        refunds: [...untouched, ...newEntries],
+        notesHistory: [
+          ...history,
+          { type: "edit", changes: [`Refund: ${summary}`], by: currentUser.name, at: now },
+        ],
+      };
+    });
+    persistTickets(next);
+    setRefundSaved(true);
+  };
+
+  // Removes only the specific customer/ticket refunds represented by the currently typed
+  // rows (e.g. when switching away from the refund option, or unchecking it) — leaving any
+  // other refund already recorded on the same booking, for a different customer, in place.
+  // Keeps an entry in each affected ticket's edit-history trail.
+  const clearAllRefundRows = () => {
+    const now = new Date().toISOString();
+    const indexesByTicketId = {};
+    refundRows.forEach((row) => {
+      const target = findTicketByNumber(row.number);
+      if (!target) return;
+      if (!indexesByTicketId[target.id]) indexesByTicketId[target.id] = new Set();
+      indexesByTicketId[target.id].add(row.customerIndex || 0);
+    });
+    if (Object.keys(indexesByTicketId).length === 0) return;
+    const next = tickets.map((t) => {
+      const indexesToClear = indexesByTicketId[t.id];
+      if (!indexesToClear) return t;
+      const existing = getRefunds(t);
+      const remaining = existing.filter((r) => !indexesToClear.has(r.customerIndex || 0));
+      if (remaining.length === existing.length) return t;
+      const history = Array.isArray(t.notesHistory) ? t.notesHistory : [];
+      return {
+        ...t,
+        refund: null,
+        refunds: remaining,
+        notesHistory: [...history, { type: "edit", changes: ["Refund removed"], by: currentUser.name, at: now }],
+      };
+    });
+    persistTickets(next);
   };
 
   // The main account always sees everything; employees see only what they entered,
@@ -3176,8 +3411,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     rows.reduce(
       (acc, t) => {
         const n = getCustomers(t).length || 1;
-        const refundCustomerAmt = hasRefund(t) ? parseFloat(t.refund.customerAmount) || 0 : 0;
-        const refundAirlineAmt = hasRefund(t) ? parseFloat(t.refund.airlineAmount) || 0 : 0;
+        const refundCustomerAmt = getRefunds(t).reduce((s, r) => s + (parseFloat(r.customerAmount) || 0), 0);
+        const refundAirlineAmt = getRefunds(t).reduce((s, r) => s + (parseFloat(r.airlineAmount) || 0), 0);
         acc.count += n;
         acc.total += (parseFloat(t.soldPrice) || 0) * n - refundCustomerAmt;
         acc.profit += profit(t.netPrice, t.soldPrice) * n + refundAirlineAmt - refundCustomerAmt;
@@ -3207,8 +3442,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // recorded against, since a multi-customer booking may have just one refunded ticket.
   const ticketStatus = (t, i) => {
     const parts = [];
-    if (i === 0 && t.isReissued) parts.push("Reissued");
-    if (hasRefund(t) && (t.refund.customerIndex || 0) === i) parts.push("Refunded");
+    if (i === 0 && t.isReissued) parts.push("Exchanged");
+    if (refundForIndex(t, i)) parts.push("Refunded");
     return parts.join(" & ");
   };
 
@@ -3258,11 +3493,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         "Profit after refund": "",
         "Notes": t.notes || "",
       }));
-      // A refund, if one's been recorded, gets its own short row directly under the
-      // original ticket's row(s) — just the refund and after-refund figures, so neither
-      // row is cluttered with columns that don't apply to it.
-      if (hasRefund(t)) {
-        const refundedCustomer = customers[t.refund.customerIndex || 0] || customers[0];
+      // Every recorded refund gets its own short row directly under the original
+      // ticket's row(s) — just that refund's figures, so neither row is cluttered with
+      // columns that don't apply to it. A booking with several refunded customers gets
+      // one refund row per customer; the running after-refund totals (which reflect all
+      // of that booking's refunds combined) are only shown once, on the last of them.
+      const bookingRefunds = getRefunds(t).filter((r) => r && (r.airlineAmount !== "" || r.customerAmount !== ""));
+      bookingRefunds.forEach((refund, ri) => {
+        const refundedCustomer = customers[refund.customerIndex || 0] || customers[0];
+        const isLast = ri === bookingRefunds.length - 1;
         rows.push({
           "Type": "Refund",
           "Employee": t.employee || "",
@@ -3279,15 +3518,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           "Net price": "",
           "Sold price": "",
           "Profit": "",
-          "Refund date": t.refund.date ? formatDisplayDate(t.refund.date) : "",
-          "Refund (airline)": parseFloat(t.refund.airlineAmount) || 0,
-          "Refund (customer)": parseFloat(t.refund.customerAmount) || 0,
-          "Net after refund": netAfterRefund(t),
-          "Sold after refund": soldAfterRefund(t),
-          "Profit after refund": profitAfterRefund(t),
+          "Refund date": refund.date ? formatDisplayDate(refund.date) : "",
+          "Refund (airline)": parseFloat(refund.airlineAmount) || 0,
+          "Refund (customer)": parseFloat(refund.customerAmount) || 0,
+          "Net after refund": isLast ? netAfterRefund(t) : "",
+          "Sold after refund": isLast ? soldAfterRefund(t) : "",
+          "Profit after refund": isLast ? profitAfterRefund(t) : "",
           "Notes": "",
         });
-      }
+      });
       return rows;
     });
   };
@@ -3301,8 +3540,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         acc.net += parseFloat(t.netPrice) || 0;
         acc.sold += parseFloat(t.soldPrice) || 0;
         acc.profit += profit(t.netPrice, t.soldPrice);
-        acc.refundAirline += hasRefund(t) ? parseFloat(t.refund.airlineAmount) || 0 : 0;
-        acc.refundCustomer += hasRefund(t) ? parseFloat(t.refund.customerAmount) || 0 : 0;
+        acc.refundAirline += getRefunds(t).reduce((s, r) => s + (parseFloat(r.airlineAmount) || 0), 0);
+        acc.refundCustomer += getRefunds(t).reduce((s, r) => s + (parseFloat(r.customerAmount) || 0), 0);
         acc.netAfter += netAfterRefund(t);
         acc.soldAfter += soldAfterRefund(t);
         acc.profitAfter += profitAfterRefund(t);
@@ -3608,16 +3847,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {c.ticketNumber || "-"}
             {t.isReissued && (
               <span
-                title={`Reissued from ${t.oldTicketNumber || "an older ticket"}`}
+                title={`Exchanged from ${t.oldTicketNumber || "an older ticket"}`}
                 className="inline-flex items-center text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5"
               >
-                Reissued{t.oldTicketNumber ? ` (orig: ${t.oldTicketNumber})` : ""}
+                Exchanged{t.oldTicketNumber ? ` (orig: ${t.oldTicketNumber})` : ""}
               </span>
             )}
-            {hasRefund(t) && (t.refund.customerIndex || 0) === i && (
+            {refundForIndex(t, i) && (
               <span
-                title={`Refunded — Airline: ${fmt(t.refund.airlineAmount)} · Customer: ${fmt(t.refund.customerAmount)}`}
-                className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5"
+                title={`Refunded — Airline: ${fmt(refundForIndex(t, i).airlineAmount)} · Customer: ${fmt(refundForIndex(t, i).customerAmount)}`}
+                className="inline-flex items-center text-[10px] font-semibold text-red-700 bg-red-100 border border-red-300 rounded-full px-1.5 py-0.5"
               >
                 Refunded
               </span>
@@ -3664,43 +3903,45 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         </td>
       </tr>
     ));
-    if (hasRefund(t)) {
-      const refundedCustomer = customers[t.refund.customerIndex || 0];
+    getRefunds(t)
+      .filter((r) => r && (r.airlineAmount !== "" || r.customerAmount !== ""))
+      .forEach((refund, ri) => {
+      const refundedCustomer = customers[refund.customerIndex || 0];
       const refundTicketNumber = (refundedCustomer && refundedCustomer.ticketNumber) || (customers[0] && customers[0].ticketNumber) || "-";
       rows.push(
         <tr
-          key={`${t.id}-refund`}
+          key={`${t.id}-refund-${ri}`}
           onClick={() => openTicketDetail(t)}
-          className="border-t border-dashed border-sky-200 bg-sky-50/60 leading-tight cursor-pointer hover:bg-sky-100/60"
+          className="border-t border-dashed border-red-200 bg-red-50/60 leading-tight cursor-pointer hover:bg-red-100/60"
         >
-          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{t.employee || "-"}</td>
-          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">
-            {t.company && t.company.trim() ? t.company : <span className="text-sky-400 italic">Individual</span>}
+          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{t.employee || "-"}</td>
+          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">
+            {t.company && t.company.trim() ? t.company : <span className="text-red-400 italic">Individual</span>}
           </td>
-          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{t.supplier || "-"}</td>
-          <td className="px-2.5 py-1 text-sky-700 font-mono whitespace-nowrap">
+          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{t.supplier || "-"}</td>
+          <td className="px-2.5 py-1 text-red-700 font-mono whitespace-nowrap">
             <span className="inline-flex items-center gap-1.5">
               {refundTicketNumber}
-              <span className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5">
+              <span className="inline-flex items-center text-[10px] font-semibold text-red-700 bg-red-100 border border-red-300 rounded-full px-1.5 py-0.5">
                 ↳ Refund
               </span>
             </span>
           </td>
-          <td className="px-2.5 py-1 font-medium text-sky-800 whitespace-nowrap">{(refundedCustomer && refundedCustomer.name) || "-"}</td>
-          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{routeLabel(t)}</td>
-          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
+          <td className="px-2.5 py-1 font-medium text-red-800 whitespace-nowrap">{(refundedCustomer && refundedCustomer.name) || "-"}</td>
+          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{routeLabel(t)}</td>
+          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
             {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
           </td>
-          <td className="px-2.5 py-1 text-sky-700 whitespace-nowrap">{t.refund.date ? formatDisplayDate(t.refund.date) : "-"}</td>
-          <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">{fmt(t.refund.airlineAmount)}</td>
-          <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">{fmt(t.refund.customerAmount)}</td>
-          <td className="px-2.5 py-1 font-semibold text-sky-800 text-right whitespace-nowrap">
-            {fmt((parseFloat(t.refund.airlineAmount) || 0) - (parseFloat(t.refund.customerAmount) || 0))}
+          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{refund.date ? formatDisplayDate(refund.date) : "-"}</td>
+          <td className="px-2.5 py-1 text-red-700 text-right whitespace-nowrap">{fmt(refund.airlineAmount)}</td>
+          <td className="px-2.5 py-1 text-red-700 text-right whitespace-nowrap">{fmt(refund.customerAmount)}</td>
+          <td className="px-2.5 py-1 font-semibold text-red-800 text-right whitespace-nowrap">
+            {fmt((parseFloat(refund.airlineAmount) || 0) - (parseFloat(refund.customerAmount) || 0))}
           </td>
-          <td className="px-2.5 py-1 text-right whitespace-nowrap"><span className="text-sky-300 text-[11px] block text-right">—</span></td>
+          <td className="px-2.5 py-1 text-right whitespace-nowrap"><span className="text-red-300 text-[11px] block text-right">—</span></td>
         </tr>
       );
-    }
+    });
     return rows;
   };
 
@@ -3723,8 +3964,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       className="w-full min-h-screen bg-gradient-to-b from-stone-50 via-white to-teal-50/50 text-stone-800"
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');`}</style>
-      <div className="max-w-5xl mx-auto p-4 md:p-6">
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');
+        .price-input::-webkit-outer-spin-button,
+        .price-input::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        .price-input[type=number] {
+          -moz-appearance: textfield;
+        }
+      `}</style>
         {/* Boarding-pass style banner */}
         <div className="relative rounded-2xl bg-gradient-to-r from-teal-800 via-teal-800 to-teal-900 shadow-lg shadow-teal-900/20 overflow-hidden mb-0">
           <Plane size={140} className="pointer-events-none absolute -bottom-8 -right-6 text-white/[0.06] rotate-45" />
@@ -4507,13 +4756,226 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           {error && (
             <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>
           )}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <label className="text-xs text-stone-500 block mb-1">Entered by</label>
-              <div className="w-full border border-stone-200 bg-stone-50 rounded-xl px-3 py-2 text-sm text-stone-600">
-                {currentUser.name}
-              </div>
+          <div className="max-w-xs">
+            <label className="text-xs text-stone-500 block mb-1">Entered by</label>
+            <div className="w-full border border-stone-200 bg-stone-50 rounded-xl px-3 py-2 text-sm text-stone-600">
+              {currentUser.name}
             </div>
+          </div>
+
+          {/* Reissue / Refund: a single box where you pick which one applies to this
+              ticket, instead of two separate checkbox boxes. Picking one clears/closes
+              the other. */}
+          <div className="mt-4 bg-stone-50 border border-stone-200 rounded-xl p-3">
+            <p className="text-xs font-semibold text-stone-500 mb-2">This ticket is...</p>
+            <div className="flex flex-wrap gap-4 text-sm mb-1">
+              <label className="flex items-center gap-1.5 cursor-pointer select-none text-stone-700">
+                <input
+                  type="radio"
+                  name="ticketSpecialType"
+                  className="w-4 h-4 accent-stone-600"
+                  checked={!form.isReissued && !refundBoxOpen}
+                  onChange={() => {
+                    setForm({ ...form, isReissued: false, oldTicketNumber: "", oldTicketIssueDate: "" });
+                    clearAllRefundRows();
+                    setRefundBoxOpen(false);
+                    setRefundRows([{ number: "", airlineAmount: "", customerAmount: "", customerIndex: 0 }]);
+                    setRefundSaved(false);
+                  }}
+                />
+                New ticket
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none text-amber-800">
+                <input
+                  type="radio"
+                  name="ticketSpecialType"
+                  className="w-4 h-4 accent-amber-700"
+                  checked={form.isReissued}
+                  onChange={() => {
+                    setForm({ ...form, isReissued: true });
+                    clearAllRefundRows();
+                    setRefundBoxOpen(false);
+                    setRefundRows([{ number: "", airlineAmount: "", customerAmount: "", customerIndex: 0 }]);
+                    setRefundSaved(false);
+                  }}
+                />
+                Exchange Ticket
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none text-sky-800">
+                <input
+                  type="radio"
+                  name="ticketSpecialType"
+                  className="w-4 h-4 accent-sky-700"
+                  checked={refundBoxOpen}
+                  onChange={() => {
+                    setForm({ ...form, isReissued: false, oldTicketNumber: "", oldTicketIssueDate: "" });
+                    setRefundBoxOpen(true);
+                  }}
+                />
+                Refund Ticket
+              </label>
+            </div>
+
+            {form.isReissued && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="text-xs text-stone-500 block mb-1">Old ticket number</label>
+                  <input
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={form.oldTicketNumber}
+                    onChange={(e) => handleOldTicketNumberChange(e.target.value)}
+                    onBlur={handleOldTicketNumberBlur}
+                    placeholder="e.g. 077-1234567890"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-stone-500 block mb-1">Old ticket issue date</label>
+                  <div className="w-full border border-stone-200 bg-stone-50 rounded-xl px-3 py-2 text-sm text-stone-600">
+                    {form.oldTicketIssueDate
+                      ? formatDisplayDate(form.oldTicketIssueDate)
+                      : form.oldTicketNumber
+                      ? "Not found among saved tickets"
+                      : "Enter the old ticket number above"}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {refundBoxOpen && (
+              <div className="mt-3 space-y-3">
+                {refundRows.map((row, index) => {
+                  const target = findTicketByNumber(row.number);
+                  const targetCustomers = target ? getCustomers(target) : [];
+                  return (
+                    <div key={index} className="bg-white border border-sky-200 rounded-xl p-3">
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1">
+                          <label className="text-xs text-stone-500 block mb-1">
+                            Ticket number to refund {refundRows.length > 1 ? `#${index + 1}` : ""}
+                          </label>
+                          <input
+                            className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                            value={row.number}
+                            onChange={(e) => handleRefundRowNumberChange(index, e.target.value)}
+                            onBlur={() => handleRefundRowNumberBlur(index)}
+                            placeholder="e.g. 077-1234567890"
+                          />
+                        </div>
+                        {refundRows.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeRefundRow(index)}
+                            className="mt-6 text-stone-400 hover:text-red-600"
+                            title="Remove this ticket"
+                          >
+                            <X size={16} />
+                          </button>
+                        )}
+                      </div>
+
+                      {!target ? (
+                        <p className="text-xs text-stone-400 mt-2">
+                          {row.number ? "Not found among saved tickets" : "Enter the ticket number above"}
+                        </p>
+                      ) : (
+                        <div className="mt-3">
+                          <div className="bg-sky-50 border border-sky-200 rounded-xl px-3 py-2 text-sm mb-3">
+                            <p className="text-xs text-sky-500 mb-1">Ticket found</p>
+                            <p className="text-sky-900 font-medium">{routeLabel(target)}</p>
+                            <p className="text-stone-600 text-xs mt-1">
+                              {targetCustomers.map((c) => c.name || "-").join(", ")} · {fmt(target.soldPrice)}
+                            </p>
+                          </div>
+                          {targetCustomers.length > 1 && (
+                            <div className="mb-3">
+                              <label className="text-xs text-stone-500 block mb-1">Refunded ticket</label>
+                              <select
+                                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                                value={row.customerIndex}
+                                onChange={(e) => {
+                                  const newIndex = Number(e.target.value);
+                                  const existing = getRefunds(target).find((r) => (r.customerIndex || 0) === newIndex);
+                                  setRefundRows(
+                                    refundRows.map((r, i) =>
+                                      i === index
+                                        ? {
+                                            ...r,
+                                            customerIndex: newIndex,
+                                            airlineAmount: existing ? existing.airlineAmount || "" : "",
+                                            customerAmount: existing ? existing.customerAmount || "" : "",
+                                          }
+                                        : r
+                                    )
+                                  );
+                                }}
+                              >
+                                {targetCustomers.map((c, i) => (
+                                  <option key={i} value={i}>
+                                    {(c.name || `Customer ${i + 1}`) + (c.ticketNumber ? ` — ${c.ticketNumber}` : "")}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs text-stone-500 block mb-1">Refunded by airline</label>
+                              <input
+                                type="number"
+                                className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                                value={row.airlineAmount}
+                                onChange={(e) =>
+                                  setRefundRows(refundRows.map((r, i) => (i === index ? { ...r, airlineAmount: e.target.value } : r)))
+                                }
+                                placeholder="0"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-stone-500 block mb-1">Refunded to customer</label>
+                              <input
+                                type="number"
+                                className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                                value={row.customerAmount}
+                                onChange={(e) =>
+                                  setRefundRows(refundRows.map((r, i) => (i === index ? { ...r, customerAmount: e.target.value } : r)))
+                                }
+                                placeholder="0"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={addRefundRow}
+                    className="text-xs font-semibold text-sky-700 hover:text-sky-900"
+                  >
+                    + Add another ticket
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={saveAllRefunds}
+                    className="bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 flex items-center gap-1.5 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10"
+                  >
+                    <Check size={15} /> Save refund{refundRows.length > 1 ? "s" : ""}
+                  </button>
+                  {refundSaved && (
+                    <span className="text-xs text-emerald-700 font-medium">Saved</span>
+                  )}
+                </div>
+
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
             <div>
               <label className="text-xs text-stone-500 block mb-1">Company (optional)</label>
               <input
@@ -4583,83 +5045,86 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </div>
 
-          {/* Dynamic customer name + ticket number cells, one row per customer */}
+          {/* Dynamic customer name + ticket number cells, one row per customer. A
+              "Conjunction" checkbox sits between the name and ticket number — check it
+              when that customer has a second ticket number issued together with the
+              first, which reveals a second field for its "-XXX" suffix inside the same
+              ticket number box. */}
           <div className="mt-4">
             <label className="text-xs text-stone-500 block mb-2">
               Customers ({form.customers.length})
             </label>
             <div className="space-y-2">
               {form.customers.map((c, i) => (
-                <div key={i} className="grid grid-cols-2 gap-2 md:gap-3">
+                <div key={i} className="flex flex-col md:flex-row gap-2 md:gap-3 md:items-start">
                   <input
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    className="w-full md:flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                     value={c.name}
                     onChange={(e) => handleCustomerFieldChange(i, "name", e.target.value)}
                     placeholder={`Customer ${i + 1} name`}
                   />
-                  <input
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                    value={c.ticketNumber}
-                    onChange={(e) => handleCustomerFieldChange(i, "ticketNumber", e.target.value)}
-                    onBlur={() => handleTicketNumberBlur(i)}
-                    placeholder={`Ticket number ${i + 1} (e.g. 077-1234567890)`}
-                  />
+                  <label
+                    className="flex items-center gap-1.5 shrink-0 cursor-pointer select-none text-xs text-stone-500 md:py-2"
+                    title="This customer has a second ticket number issued together with the first"
+                  >
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 accent-stone-600"
+                      checked={!!c.conjunction}
+                      onChange={(e) => handleCustomerConjunctionToggle(i, e.target.checked)}
+                    />
+                    Conjunction
+                  </label>
+                  <div className="w-full md:flex-1 flex items-center border border-stone-300 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-teal-700">
+                    <input
+                      className="flex-1 min-w-0 text-sm outline-none bg-transparent"
+                      value={c.ticketNumber}
+                      onChange={(e) => handleCustomerFieldChange(i, "ticketNumber", e.target.value)}
+                      onBlur={() => handleTicketNumberBlur(i)}
+                      placeholder={`Ticket number ${i + 1} (e.g. 077-1234567890)`}
+                    />
+                    {c.conjunction && (
+                      <input
+                        className="w-14 shrink-0 text-sm outline-none bg-transparent text-stone-600"
+                        value={c.ticketNumber2 || ""}
+                        onChange={(e) => handleCustomerFieldChange(i, "ticketNumber2", e.target.value)}
+                        placeholder="-891"
+                      />
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Reissue tracking: mark the ticket being entered as a reissue of an older
-              ticket, then look that old ticket number up to auto-fill its issue date. */}
-          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-3">
-            <label className="flex items-center gap-2 text-sm font-semibold text-amber-800 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                className="w-4 h-4 accent-amber-700"
-                checked={form.isReissued}
-                onChange={(e) => {
-                  const isReissued = e.target.checked;
-                  setForm({
-                    ...form,
-                    isReissued,
-                    oldTicketNumber: isReissued ? form.oldTicketNumber : "",
-                    oldTicketIssueDate: isReissued ? form.oldTicketIssueDate : "",
-                  });
-                }}
-              />
-              This ticket is a reissue of an older ticket
-            </label>
-            {form.isReissued && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                <div>
-                  <label className="text-xs text-stone-500 block mb-1">Old ticket number</label>
-                  <input
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                    value={form.oldTicketNumber}
-                    onChange={(e) => handleOldTicketNumberChange(e.target.value)}
-                    onBlur={handleOldTicketNumberBlur}
-                    placeholder="e.g. 077-1234567890"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-stone-500 block mb-1">Old ticket issue date</label>
-                  <div className="w-full border border-stone-200 bg-stone-50 rounded-xl px-3 py-2 text-sm text-stone-600">
-                    {form.oldTicketIssueDate
-                      ? formatDisplayDate(form.oldTicketIssueDate)
-                      : form.oldTicketNumber
-                      ? "Not found among saved tickets"
-                      : "Enter the old ticket number above"}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+            <div className="flex items-center gap-4 text-xs text-stone-500">
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="tripType"
+                  className="w-4 h-4 accent-teal-700"
+                  checked={(form.tripType || "oneWay") === "oneWay"}
+                  onChange={() => setForm({ ...form, tripType: "oneWay" })}
+                />
+                One way
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="tripType"
+                  className="w-4 h-4 accent-teal-700"
+                  checked={form.tripType === "roundTrip"}
+                  onChange={() => setForm({ ...form, tripType: "roundTrip" })}
+                />
+                Round trip
+              </label>
+            </div>
 
-          <div className="mt-4">
             <label className="flex items-center gap-2 text-xs font-semibold text-stone-500 cursor-pointer select-none">
               <input
                 type="checkbox"
-                className="w-4 h-4 accent-teal-700"
+                className="w-4 h-4 rounded-full border-2 border-stone-300 appearance-none checked:bg-teal-700 checked:border-teal-700 cursor-pointer transition-colors"
                 checked={!!form.multiDestination}
                 onChange={(e) => {
                   const multiDestination = e.target.checked;
@@ -4679,66 +5144,76 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </label>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+          <div className="flex flex-wrap items-end gap-2 mt-2">
             {form.multiDestination ? (
-              <div className="md:col-span-2">
-                <label className="text-xs text-stone-500 block mb-1">Route stops (in order)</label>
-                <div className="space-y-2">
-                  {form.destinations.map((d, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="text-xs text-stone-400 w-14 shrink-0">
+              <>
+                {form.destinations.map((d, i) => (
+                  <div key={i} className="flex items-end gap-1">
+                    <div>
+                      <label className="text-[10px] text-stone-400 block mb-1">
                         {i === 0 ? "From" : i === form.destinations.length - 1 ? "Final" : `Stop ${i}`}
-                      </span>
+                      </label>
                       <input
-                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
                         value={d}
                         onChange={(e) => handleDestinationChange(i, e.target.value)}
-                        placeholder={i === 0 ? "Cairo" : "Dubai"}
+                        placeholder={i === 0 ? "CAI" : "DXB"}
                         list="city-suggestions"
                       />
-                      {form.destinations.length > 2 && (
-                        <button
-                          type="button"
-                          onClick={() => removeDestinationStop(i)}
-                          className="shrink-0 text-stone-400 hover:text-red-600"
-                          title="Remove stop"
-                        >
-                          <X size={16} />
-                        </button>
-                      )}
                     </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={addDestinationStop}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900"
-                  >
-                    <Plus size={14} /> Add stop
-                  </button>
-                </div>
-              </div>
+                    {form.destinations.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => removeDestinationStop(i)}
+                        className="shrink-0 text-stone-400 hover:text-red-600 mb-1.5"
+                        title="Remove stop"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addDestinationStop}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 mb-1.5"
+                >
+                  <Plus size={14} /> Add stop
+                </button>
+              </>
             ) : (
               <>
                 <div>
                   <label className="text-xs text-stone-500 block mb-1">From</label>
                   <input
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
                     value={form.from}
                     onChange={(e) => handleCityChange("from", e.target.value)}
-                    placeholder="Cairo"
+                    placeholder="CAI"
                     list="city-suggestions"
                   />
                 </div>
                 <div>
                   <label className="text-xs text-stone-500 block mb-1">To</label>
                   <input
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
                     value={form.to}
                     onChange={(e) => handleCityChange("to", e.target.value)}
-                    placeholder="Dubai"
+                    placeholder="DXB"
                     list="city-suggestions"
                   />
                 </div>
+                {form.tripType === "roundTrip" && (
+                  <div>
+                    <label className="text-xs text-stone-500 block mb-1">Return airport</label>
+                    <div
+                      className="w-16 border border-stone-200 bg-stone-50 rounded-lg px-2 py-1.5 text-xs text-stone-600 uppercase truncate"
+                      title="Automatically matches the first (From) airport"
+                    >
+                      {form.from || "-"}
+                    </div>
+                  </div>
+                )}
               </>
             )}
             <div>
@@ -4751,13 +5226,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 )}
               </label>
               <input
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={form.airline}
                 onChange={(e) => handleAirlineChange(e.target.value)}
                 placeholder="MS"
                 list="airline-suggestions"
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
             <div>
               <label className="text-xs text-stone-500 block mb-1">Ticket issue date</label>
               <input
@@ -4778,7 +5256,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <label className="text-xs text-stone-500 block mb-1">Net price</label>
               <input
                 type="number"
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                 value={form.netPrice}
                 onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
                 placeholder="0"
@@ -4788,7 +5266,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <label className="text-xs text-stone-500 block mb-1">Sold price</label>
               <input
                 type="number"
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                 value={form.soldPrice}
                 onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
                 placeholder="0"
@@ -5406,7 +5884,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <label className="text-[11px] text-stone-500 block mb-1">Net (per room/night)</label>
                       <input
                         type="number"
-                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        className="w-full border border-stone-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                         value={line.netPrice}
                         onChange={(e) => updateHotelRoomLine(line.id, { netPrice: e.target.value })}
                         placeholder="0"
@@ -5416,7 +5894,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <label className="text-[11px] text-stone-500 block mb-1">Sold (per room/night)</label>
                       <input
                         type="number"
-                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        className="w-full border border-stone-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                         value={line.soldPrice}
                         onChange={(e) => updateHotelRoomLine(line.id, { soldPrice: e.target.value })}
                         placeholder="0"
@@ -5924,7 +6402,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Price net (per person)</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={visaForm.netPrice}
                   onChange={(e) => setVisaForm({ ...visaForm, netPrice: e.target.value })}
                   placeholder="0"
@@ -5934,7 +6412,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Sold (per person)</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={visaForm.soldPrice}
                   onChange={(e) => setVisaForm({ ...visaForm, soldPrice: e.target.value })}
                   placeholder="0"
@@ -6184,6 +6662,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
 
+            {/* Pickup date & time — placed right after the route so the run's "where" and "when" read together */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Date</label>
+                <input
+                  type="date"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={carForm.bookingDate}
+                  onChange={(e) => setCarForm({ ...carForm, bookingDate: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Time</label>
+                <TimeSelect
+                  value={carForm.bookingTime}
+                  onChange={(v) => setCarForm({ ...carForm, bookingTime: v })}
+                />
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Car type</label>
@@ -6280,7 +6778,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Driver tip</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={carForm.driverTip}
                   onChange={(e) => setCarForm({ ...carForm, driverTip: e.target.value })}
                   placeholder="0"
@@ -6311,7 +6809,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            {/* Currency, amount to collect from the customer, and net/sold prices */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Currency</label>
                 <select
@@ -6325,10 +6824,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </select>
               </div>
               <div>
+                <label className="text-xs text-stone-500 block mb-1">Collection</label>
+                <input
+                  type="number"
+                  className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  value={carForm.collection}
+                  onChange={(e) => setCarForm({ ...carForm, collection: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+              <div>
                 <label className="text-xs text-stone-500 block mb-1">Price net</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={carForm.netPrice}
                   onChange={(e) => setCarForm({ ...carForm, netPrice: e.target.value })}
                   placeholder="0"
@@ -6338,7 +6847,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <label className="text-xs text-stone-500 block mb-1">Sold</label>
                 <input
                   type="number"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-full border border-stone-300 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={carForm.soldPrice}
                   onChange={(e) => setCarForm({ ...carForm, soldPrice: e.target.value })}
                   placeholder="0"
@@ -6377,19 +6886,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
-                    <th className="text-left px-4 py-3 font-semibold">Customer</th>
-                    <th className="text-left px-4 py-3 font-semibold">Phone</th>
-                    <th className="text-left px-4 py-3 font-semibold">Route</th>
-                    <th className="text-left px-4 py-3 font-semibold">Car type</th>
-                    <th className="text-left px-4 py-3 font-semibold">Supplier</th>
-                    <th className="text-left px-4 py-3 font-semibold">Trip</th>
-                    <th className="text-left px-4 py-3 font-semibold">Waiting</th>
-                    <th className="text-left px-4 py-3 font-semibold">Flight #</th>
-                    <th className="text-right px-4 py-3 font-semibold">Driver tip</th>
-                    <th className="text-right px-4 py-3 font-semibold">Net</th>
-                    <th className="text-right px-4 py-3 font-semibold">Sold</th>
-                    <th className="text-right px-4 py-3 font-semibold">Profit</th>
-                    <th className="text-right px-4 py-3 font-semibold">Actions</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Customer</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Phone</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Route</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Car type</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Supplier</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Trip</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Waiting</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Flight #</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Date &amp; time</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Collection</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Driver tip</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Sold</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Profit</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -6398,50 +6909,57 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     const sold = parseFloat(c.soldPrice) || 0;
                     const profit = sold - net;
                     return (
-                      <tr key={c.id} className="hover:bg-stone-50">
-                        <td className="px-4 py-3 text-stone-700">{c.customerName}</td>
-                        <td className="px-4 py-3 text-stone-700">{c.phone || "-"}</td>
-                        <td className="px-4 py-3 text-stone-700">{c.routeFrom} → {c.routeTo}</td>
-                        <td className="px-4 py-3 text-stone-700">{c.carType}</td>
-                        <td className="px-4 py-3 text-stone-700">{c.supplier}</td>
-                        <td className="px-4 py-3 text-stone-700">{c.isRoundTrip ? "Round trip" : "One way"}</td>
-                        <td className="px-4 py-3 text-stone-700">
+                      <tr key={c.id} className="leading-tight hover:bg-stone-50">
+                        <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">{c.customerName}</td>
+                        <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">{c.phone || "-"}</td>
+                        <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">{c.routeFrom} → {c.routeTo}</td>
+                        <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">{c.carType}</td>
+                        <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">{c.supplier}</td>
+                        <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">{c.isRoundTrip ? "Round trip" : "One way"}</td>
+                        <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">
                           {c.hasWaiting ? `${c.waitingHours || 0} h` : "-"}
                         </td>
-                        <td className="px-4 py-3 text-stone-700">
+                        <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">
                           {c.startsAtAirport ? (c.flightNumber || "-") : "-"}
                         </td>
-                        <td className="px-4 py-3 text-right text-stone-700">
+                        <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">
+                          {c.bookingDate ? formatDisplayDate(c.bookingDate) : "-"}
+                          {c.bookingTime ? ` · ${c.bookingTime}` : ""}
+                        </td>
+                        <td className="px-2.5 py-1 text-right text-stone-700 whitespace-nowrap">
+                          {c.collection ? `${fmt(parseFloat(c.collection) || 0)} ${c.currency}` : "-"}
+                        </td>
+                        <td className="px-2.5 py-1 text-right text-stone-700 whitespace-nowrap">
                           {c.driverTip ? `${fmt(parseFloat(c.driverTip) || 0)} ${c.currency}` : "-"}
                         </td>
-                        <td className="px-4 py-3 text-right text-stone-700">{fmt(net)} {c.currency}</td>
-                        <td className="px-4 py-3 text-right text-stone-700">{fmt(sold)} {c.currency}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-emerald-700">{fmt(profit)} {c.currency}</td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="px-2.5 py-1 text-right text-stone-700 whitespace-nowrap">{fmt(net)} {c.currency}</td>
+                        <td className="px-2.5 py-1 text-right text-stone-700 whitespace-nowrap">{fmt(sold)} {c.currency}</td>
+                        <td className="px-2.5 py-1 text-right font-semibold text-emerald-700 whitespace-nowrap">{fmt(profit)} {c.currency}</td>
+                        <td className="px-2.5 py-1 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-0.5">
                             <button
                               onClick={() => handlePrintCar(c)}
-                              className="text-stone-500 hover:text-teal-800"
+                              className="text-stone-400 hover:text-teal-800 p-0.5"
                               title="Print"
                             >
-                              <Printer size={16} />
+                              <Printer size={13} />
                             </button>
                             {canEditTickets && (
                               <button
                                 onClick={() => handleEditCarClick(c)}
-                                className="text-teal-800 hover:text-teal-900"
+                                className="text-teal-800 hover:text-teal-900 p-0.5"
                                 title="Edit"
                               >
-                                <Pencil size={16} />
+                                <Pencil size={13} />
                               </button>
                             )}
                             {canDeleteTickets && (
                               <button
                                 onClick={() => handleDeleteCar(c.id)}
-                                className="text-red-500 hover:text-red-700"
+                                className="text-red-500 hover:text-red-700 p-0.5"
                                 title="Delete"
                               >
-                                <Trash2 size={16} />
+                                <Trash2 size={13} />
                               </button>
                             )}
                           </div>
@@ -6982,7 +7500,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
                 {viewingTicket.isReissued && (
                   <div className="sm:col-span-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                    <p className="text-xs font-semibold text-amber-800 mb-1">Reissued ticket</p>
+                    <p className="text-xs font-semibold text-amber-800 mb-1">Exchanged ticket</p>
                     <p className="text-sm text-amber-900">
                       Old ticket number: {viewingTicket.oldTicketNumber || "-"}
                       {" · "}
@@ -7012,13 +7530,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <tr key={i} className="border-t border-stone-100">
                           <td className="px-3 py-2 text-stone-700">
                             {c.name || "-"}
-                            {hasRefund(viewingTicket) && (viewingTicket.refund.customerIndex || 0) === i && (
+                            {refundForIndex(viewingTicket, i) && (
                               <span className="ml-2 inline-block text-[10px] font-semibold text-sky-700 bg-sky-100 rounded-full px-2 py-0.5 align-middle">
                                 Refunded
                               </span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-stone-700 font-mono">{c.ticketNumber || "-"}</td>
+                          <td className="px-3 py-2 text-stone-700 font-mono">
+                            {c.ticketNumber || "-"}
+                            {c.conjunction && c.ticketNumber2 && (
+                              <span className="text-stone-400">{c.ticketNumber2}</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -7054,133 +7577,46 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
               </div>
 
-              {/* Refund: two amounts (refunded by the airline, refunded to the customer),
-                  recorded separately from the ticket itself and shown as its own row
-                  directly under this ticket in the exported report. */}
-              <div className="p-4 md:p-5">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-stone-400">Refund</p>
-                  {!showRefundForm && (
-                    <button
-                      type="button"
-                      onClick={() => setShowRefundForm(true)}
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900"
-                    >
-                      <Wallet size={13} /> {hasRefund(viewingTicket) ? "Edit refund" : "Add refund"}
-                    </button>
-                  )}
-                </div>
-
-                {!showRefundForm && (
-                  hasRefund(viewingTicket) ? (
-                    <div className="bg-sky-50 border border-sky-200 rounded-xl px-3 py-2 flex flex-wrap gap-4 text-sm">
-                      {getCustomers(viewingTicket).length > 1 && (
-                        <span className="w-full">
-                          <span className="text-xs text-sky-500 block">Refunded ticket</span>
-                          <span className="text-sky-900 font-medium">
-                            {(() => {
-                              const idx = viewingTicket.refund.customerIndex || 0;
-                              const c = getCustomers(viewingTicket)[idx];
-                              return c ? (c.name || `Customer ${idx + 1}`) + (c.ticketNumber ? ` — ${c.ticketNumber}` : "") : `Customer ${idx + 1}`;
-                            })()}
+              {/* Refund(s): entered via the checkbox box in the main ticket form (next to
+                  Reissue), so this is a read-only summary — edit it by editing the
+                  ticket itself. A booking with several refunded customers gets one box
+                  per refund, each labeled with the customer it applies to. */}
+              {hasRefund(viewingTicket) && (
+                <div className="p-4 md:p-5 space-y-2">
+                  {getRefunds(viewingTicket)
+                    .filter((r) => r && (r.airlineAmount !== "" || r.customerAmount !== ""))
+                    .map((refund, ri) => (
+                      <div key={ri} className="bg-sky-50 border border-sky-200 rounded-xl px-3 py-2 flex flex-wrap gap-4 text-sm">
+                        {getCustomers(viewingTicket).length > 1 && (
+                          <span className="w-full">
+                            <span className="text-xs text-sky-500 block">Refunded ticket</span>
+                            <span className="text-sky-900 font-medium">
+                              {(() => {
+                                const idx = refund.customerIndex || 0;
+                                const c = getCustomers(viewingTicket)[idx];
+                                return c ? (c.name || `Customer ${idx + 1}`) + (c.ticketNumber ? ` — ${c.ticketNumber}` : "") : `Customer ${idx + 1}`;
+                              })()}
+                            </span>
                           </span>
-                        </span>
-                      )}
-                      <span>
-                        <span className="text-xs text-sky-500 block">Refunded by airline</span>
-                        <span className="text-sky-900 font-medium">{fmt(viewingTicket.refund.airlineAmount)}</span>
-                      </span>
-                      <span>
-                        <span className="text-xs text-sky-500 block">Refunded to customer</span>
-                        <span className="text-sky-900 font-medium">{fmt(viewingTicket.refund.customerAmount)}</span>
-                      </span>
-                      {viewingTicket.refund.date && (
+                        )}
                         <span>
-                          <span className="text-xs text-sky-500 block">Refund date</span>
-                          <span className="text-sky-900 font-medium">{formatDisplayDate(viewingTicket.refund.date)}</span>
+                          <span className="text-xs text-sky-500 block">Refunded by airline</span>
+                          <span className="text-sky-900 font-medium">{fmt(refund.airlineAmount)}</span>
                         </span>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-stone-400 italic">No refund recorded</p>
-                  )
-                )}
-
-                {showRefundForm && (
-                  <div className="bg-sky-50 border border-sky-200 rounded-xl p-3">
-                    {getCustomers(viewingTicket).length > 1 && (
-                      <div className="mb-3">
-                        <label className="text-xs text-stone-500 block mb-1">Refunded ticket</label>
-                        <select
-                          className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
-                          value={refundDraft.customerIndex}
-                          onChange={(e) => setRefundDraft({ ...refundDraft, customerIndex: Number(e.target.value) })}
-                        >
-                          {getCustomers(viewingTicket).map((c, i) => (
-                            <option key={i} value={i}>
-                              {(c.name || `Customer ${i + 1}`) + (c.ticketNumber ? ` — ${c.ticketNumber}` : "")}
-                            </option>
-                          ))}
-                        </select>
+                        <span>
+                          <span className="text-xs text-sky-500 block">Refunded to customer</span>
+                          <span className="text-sky-900 font-medium">{fmt(refund.customerAmount)}</span>
+                        </span>
+                        {refund.date && (
+                          <span>
+                            <span className="text-xs text-sky-500 block">Refund date</span>
+                            <span className="text-sky-900 font-medium">{formatDisplayDate(refund.date)}</span>
+                          </span>
+                        )}
                       </div>
-                    )}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs text-stone-500 block mb-1">Refunded by airline</label>
-                        <input
-                          type="number"
-                          className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                          value={refundDraft.airlineAmount}
-                          onChange={(e) => setRefundDraft({ ...refundDraft, airlineAmount: e.target.value })}
-                          placeholder="0"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-stone-500 block mb-1">Refunded to customer</label>
-                        <input
-                          type="number"
-                          className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                          value={refundDraft.customerAmount}
-                          onChange={(e) => setRefundDraft({ ...refundDraft, customerAmount: e.target.value })}
-                          placeholder="0"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 mt-3">
-                      <button
-                        onClick={() => saveTicketRefund(viewingTicket.id)}
-                        className="bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 flex items-center gap-1.5 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10"
-                      >
-                        <Check size={15} /> Save refund
-                      </button>
-                      <button
-                        onClick={() => {
-                          setShowRefundForm(false);
-                          setRefundDraft({
-                            airlineAmount: viewingTicket.refund ? viewingTicket.refund.airlineAmount : "",
-                            customerAmount: viewingTicket.refund ? viewingTicket.refund.customerAmount : "",
-                            customerIndex: viewingTicket.refund && viewingTicket.refund.customerIndex != null ? viewingTicket.refund.customerIndex : 0,
-                          });
-                        }}
-                        className="border border-stone-300 text-stone-600 text-sm rounded-xl px-4 py-2"
-                      >
-                        Cancel
-                      </button>
-                      {hasRefund(viewingTicket) && (
-                        <button
-                          onClick={() => clearTicketRefund(viewingTicket.id)}
-                          className="text-xs text-red-600 hover:text-red-800 font-semibold ml-auto"
-                        >
-                          Remove refund
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {refundSaved && !showRefundForm && (
-                  <span className="text-xs text-emerald-700 font-medium block mt-2">Saved</span>
-                )}
-              </div>
+                    ))}
+                </div>
+              )}
 
               <div className="p-4 md:p-5">
                 <p className="text-xs text-stone-400 mb-2">Notes</p>
