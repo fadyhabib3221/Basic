@@ -2597,9 +2597,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           f.employeeUsername ? f.employeeUsername === currentUser.username : f.createdBy === currentUser.name
         )
   )
-    // Ordered by the file's own date (newest first), with the serial as a tie-breaker,
-    // so the list always follows the dates rather than raw creation/array order — matches
-    // the trailing running number in the serial, which is likewise assigned per date.
+    // Ordered by the file's own date (newest first), with the serial as a tie-breaker
+    // for same-day files — the list always follows the dates rather than raw creation/
+    // array order.
     .slice()
     .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "") || (b.serial || "").localeCompare(a.serial || ""));
 
@@ -2607,22 +2607,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Auto-generates a starting serial number for a file, based on the file's own date
   // (defaults to today, but the date is user-editable — see updateFileDate below):
-  // F-YYYYMMDD-00001, F-YYYYMMDD-00002, ... The running number at the end restarts at
-  // 00001 for each new date, and is always computed against files sharing that SAME date
-  // — so if a file's date is changed later, its running number re-lines-up with whatever
-  // date it now belongs to, keeping the trailing sequence ordered by date rather than by
-  // creation order. This is only a suggested starting value: the serial is a plain text
-  // field the user can freely retype per file afterwards (see the "Serial" input on the
-  // open file panel), so it isn't locked to this pattern.
+  // F-YYYYMMDD-00001, F-YYYYMMDD-00002, ... The trailing 5-digit running number is
+  // GLOBAL across every file ever created (not per-date): it always continues from
+  // one more than the highest running number found anywhere in the file list, so it
+  // keeps climbing steadily no matter what date a file is given. This is only a
+  // suggested starting value: the serial is a plain text field the user can freely
+  // retype per file afterwards (see the "Serial" input on the open file panel), so
+  // it isn't locked to this pattern.
   // Computed off the full (unfiltered) files list so numbering stays globally consistent
   // no matter who's creating/editing the file.
   const nextFileSerial = (list, dateStr) => {
     const datePart = (dateStr || todayDateStr()).replace(/-/g, "");
     const prefix = `F-${datePart}-`;
     const maxN = (list || []).reduce((max, f) => {
-      if (!(f.serial || "").startsWith(prefix)) return max;
-      const tail = (f.serial || "").slice(prefix.length);
-      const n = parseInt(tail.slice(-5), 10) || 0; // last 5 digits are the running number
+      const match = (f.serial || "").match(/(\d{5})$/); // last 5 digits, wherever in the serial
+      const n = match ? parseInt(match[1], 10) : 0;
       return Math.max(max, n);
     }, 0);
     return `${prefix}${String(maxN + 1).padStart(5, "0")}`;
@@ -2698,9 +2697,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Lets the user control a file's date directly (it isn't locked to the day the file was
   // created). Changing the date also re-generates the serial: the date part is updated to
-  // match, the running number is recomputed against the other files that now share that
-  // same date (so the trailing sequence stays ordered by date), and the time part reflects
-  // the moment the change was made.
+  // match, and the trailing running number is recomputed as one more than the current
+  // global maximum across every other file (so it keeps climbing steadily regardless of
+  // date), and the time part reflects the moment the change was made.
   const updateFileDate = async (id, newDate) => {
     const others = files.filter((f) => f.id !== id);
     const newSerial = nextFileSerial(others, newDate);
