@@ -78,17 +78,32 @@ const getEmptyForm = () => ({
   customers: [emptyCustomerRow()],
   from: "",
   to: "",
+  // Multi-destination (multi-city) route support: when multiDestination is on, the
+  // route is described as an ordered list of stops (e.g. ["CAI","DXB","BKK"]) instead
+  // of a single from/to pair. "from"/"to" are still kept in sync (first/last stop) so
+  // every place that reads a plain origin/destination keeps working unchanged.
+  multiDestination: false,
+  destinations: ["", ""],
   airline: "",
   date: todayDateStr(),
   netPrice: "",
   soldPrice: "",
   notes: "",
   // Reissue tracking: when isReissued is on, oldTicketNumber is looked up against
-  // existing tickets to auto-fill oldTicketIssueDate.
+  // existing tickets to auto-fill oldTicketIssueDate and every other field below
+  // (company, supplier, route, airline, prices, customer names) from that old ticket.
   isReissued: false,
   oldTicketNumber: "",
   oldTicketIssueDate: "",
 });
+
+// Renders a ticket's route as a single "A → B" (or "A → B → C → ..." for a
+// multi-destination/multi-city booking) string for lists, detail views, and exports.
+const routeLabel = (t) => {
+  const stops = Array.isArray(t.destinations) ? t.destinations.map((d) => (d || "").trim()).filter(Boolean) : [];
+  if (t.multiDestination && stops.length >= 2) return stops.join(" → ");
+  return `${t.from || "-"} → ${t.to || "-"}`;
+};
 
 // Room types offered on a hotel booking's room line.
 const ROOM_TYPES = [
@@ -644,6 +659,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [restoreError, setRestoreError] = useState("");
   const [restoreSuccess, setRestoreSuccess] = useState("");
   const fileInputRef = useRef(null);
+  // Timestamp of when the current session started (login or restored on page load).
+  // A remote force-sign-out (see handleForceSignOut) is only honored if it happened
+  // AFTER this moment, so it can't retroactively sign someone out of a brand new session.
+  const sessionStartedAtRef = useRef(0);
   // window.confirm doesn't work in this sandboxed preview, so confirmations use this
   // in-app dialog instead: { message, onConfirm } while open, null while hidden.
   const [confirmDialog, setConfirmDialog] = useState(null);
@@ -772,7 +791,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         if (sessionRes && sessionRes.value) {
           const savedUsername = sessionRes.value;
           const match = employeesData.find((e) => e.username === savedUsername);
-          if (match) setCurrentUser({ username: match.username, name: match.name, isAdmin: !!match.isAdmin });
+          if (match) {
+            sessionStartedAtRef.current = Date.now();
+            setCurrentUser({ username: match.username, name: match.name, isAdmin: !!match.isAdmin });
+          }
         }
       } catch (e) {
         setEmployees([]);
@@ -922,6 +944,54 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
   const onlineUsernames = Object.keys(presenceMap).filter((u) => isOnline(u));
 
+  // Detects a remote "force sign-out": when the main account signs someone out from the
+  // "online now" panel, a shared flag is written with a timestamp (see handleForceSignOut
+  // below). Every signed-in client — including this one — checks its own flag on each
+  // heartbeat and signs itself out automatically if the flag is newer than when this
+  // particular session started (so it can never retroactively kill a brand-new login).
+  useEffect(() => {
+    if (!currentUser) return;
+    let cancelled = false;
+    const checkForceLogout = async () => {
+      try {
+        const res = await window.storage.get(`tickets:forceLogout:${currentUser.username}`, true).catch(() => null);
+        if (cancelled || !res || !res.value) return;
+        const ts = parseInt(res.value, 10);
+        if (ts && ts > sessionStartedAtRef.current) {
+          await handleLogout();
+        }
+      } catch (e) {
+        // Best-effort; a missed check just retries on the next heartbeat
+      }
+    };
+    const interval = setInterval(() => {
+      if (!cancelled) checkForceLogout();
+    }, HEARTBEAT_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [currentUser]);
+
+  // Best-effort sign-out when the page/tab is closed or navigated away from. Storage
+  // writes triggered here are fire-and-forget (a closing tab gives no guarantee an async
+  // call finishes), so this can't be 100% reliable in every browser, but it covers the
+  // normal case of someone closing the tab or browser window.
+  useEffect(() => {
+    if (!currentUser) return;
+    const username = currentUser.username;
+    const handleUnload = () => {
+      try { window.storage.delete("session:user", false); } catch (e) {}
+      try { window.storage.delete(`tickets:presence:${username}`, true); } catch (e) {}
+    };
+    window.addEventListener("pagehide", handleUnload);
+    window.addEventListener("beforeunload", handleUnload);
+    return () => {
+      window.removeEventListener("pagehide", handleUnload);
+      window.removeEventListener("beforeunload", handleUnload);
+    };
+  }, [currentUser]);
+
   const persistTickets = async (next) => {
     setTickets(next);
     try {
@@ -1010,6 +1080,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     next.airlines = addUnique(next.airlines, record.airline);
     next.cities = addUnique(next.cities, record.from);
     next.cities = addUnique(next.cities, record.to);
+    if (Array.isArray(record.destinations)) {
+      record.destinations.forEach((d) => { next.cities = addUnique(next.cities, d); });
+    }
     persistSuggestions(next);
   };
 
@@ -1286,6 +1359,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     await window.storage.set("tickets:setupComplete", "true", true).catch(() => {});
     setSetupComplete(true);
     await window.storage.set("session:user", admin.username, false);
+    sessionStartedAtRef.current = Date.now();
     setCurrentUser({ username: admin.username, name: admin.name, isAdmin: true });
     setSetupName(""); setSetupUsername(""); setSetupPassword("");
   };
@@ -1300,6 +1374,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return;
     }
     await window.storage.set("session:user", match.username, false);
+    sessionStartedAtRef.current = Date.now();
     setCurrentUser({ username: match.username, name: match.name, isAdmin: !!match.isAdmin });
     setLoginUsername(""); setLoginPassword("");
   };
@@ -1310,6 +1385,25 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setShowManage(false);
     setEditingUsername(null);
     setVisiblePasswords({});
+  };
+
+  // Lets the main account remotely sign out any currently-online employee (or itself)
+  // from the "online now" panel. This account has no way to reach into another browser's
+  // own local session storage, so instead it writes a shared timestamped flag; that
+  // employee's own client picks it up on its next heartbeat (every few seconds) and signs
+  // itself out. Their presence is cleared immediately here so they show as offline right away.
+  const handleForceSignOut = async (username) => {
+    try {
+      await window.storage.set(`tickets:forceLogout:${username}`, String(Date.now()), true);
+      await window.storage.delete(`tickets:presence:${username}`, true).catch(() => {});
+      setPresenceMap((prev) => {
+        const next = { ...prev };
+        delete next[username];
+        return next;
+      });
+    } catch (e) {
+      // Best-effort; the admin can just try again
+    }
   };
 
   const handleAddEmployee = async () => {
@@ -1633,7 +1727,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const customers = form.customers || [];
     const customersValid =
       customers.length > 0 && customers.every((c) => c.name.trim() && c.ticketNumber.trim());
-    if (!customersValid || !form.from.trim() || !form.to.trim() || form.netPrice === "" || form.soldPrice === "") {
+    // A multi-destination route needs at least two filled-in stops; a regular route
+    // needs both From and To.
+    const cleanDestinations = (form.destinations || []).map((d) => (d || "").trim()).filter(Boolean);
+    const routeValid = form.multiDestination
+      ? cleanDestinations.length >= 2
+      : form.from.trim() && form.to.trim();
+    if (!customersValid || !routeValid || form.netPrice === "" || form.soldPrice === "") {
       setError("Please enter at least the customer name(s), ticket number(s), destinations, and prices");
       return;
     }
@@ -1645,6 +1745,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       ...form,
       customers,
       customersCount: customers.length,
+      // For a multi-destination route, from/to are kept in sync as the first/last stop so
+      // every place that reads a plain origin/destination (search, exports, older code)
+      // keeps working; a regular route just keeps its own from/to untouched.
+      destinations: form.multiDestination ? cleanDestinations : [],
+      from: form.multiDestination ? cleanDestinations[0] || "" : form.from,
+      to: form.multiDestination ? cleanDestinations[cleanDestinations.length - 1] || "" : form.to,
       employee: isEditingExisting ? form.employee : currentUser.name,
       employeeUsername: isEditingExisting ? form.employeeUsername : currentUser.username,
       id: form.id || Date.now().toString(),
@@ -1685,7 +1791,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       Array.isArray(t.customers) && t.customers.length > 0
         ? t.customers
         : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
-    setForm({ ...t, customers, customersCount: customers.length });
+    // Backward compatibility: older records have no multiDestination/destinations fields.
+    const destinations =
+      Array.isArray(t.destinations) && t.destinations.length >= 2 ? t.destinations : [t.from || "", t.to || ""];
+    setForm({ ...t, customers, customersCount: customers.length, multiDestination: !!t.multiDestination, destinations });
     setSupplierOther(!!t.supplier && !SUPPLIERS.includes(t.supplier));
   };
   const handleDelete = (id) => {
@@ -1749,6 +1858,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setForm({ ...form, [field]: match ? match[1] : raw });
   };
 
+  // Same "CODE - City, Country" → CODE cleanup as handleCityChange, but for one stop
+  // in a multi-destination (multi-city) route.
+  const handleDestinationChange = (index, value) => {
+    const raw = (value || "").toUpperCase();
+    const match = raw.match(/^([A-Z]{3})\s*-\s*.+$/);
+    const clean = match ? match[1] : raw;
+    const destinations = form.destinations.map((d, i) => (i === index ? clean : d));
+    setForm({ ...form, destinations });
+  };
+
+  const addDestinationStop = () => {
+    setForm({ ...form, destinations: [...form.destinations, ""] });
+  };
+
+  // Always keeps at least two stops (a route needs a start and an end).
+  const removeDestinationStop = (index) => {
+    const destinations = form.destinations.filter((_, i) => i !== index);
+    setForm({ ...form, destinations: destinations.length >= 2 ? destinations : ["", ""] });
+  };
+
   const handleAirlineChange = (value) => {
     const airline = value.toUpperCase();
     const code = getAirlineCodeByIata(airline);
@@ -1801,22 +1930,22 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setForm({ ...form, customers });
   };
 
-  // Finds the issue date of an existing ticket by ticket number, searching every
-  // customer row across all saved tickets (old or current schema). Used to auto-fill
-  // the old ticket's issue date when a reissued ticket references it.
-  const findTicketIssueDateByNumber = (ticketNumber) => {
+  // Finds a saved ticket by ticket number, searching every customer row across all
+  // saved tickets (old or current schema). Used when a reissued ticket references an
+  // older one, both to auto-fill its issue date and to import the rest of its data.
+  const findTicketByNumber = (ticketNumber) => {
     const target = (ticketNumber || "").trim().toUpperCase();
-    if (!target) return "";
+    if (!target) return null;
     for (const t of tickets) {
       const custs =
         Array.isArray(t.customers) && t.customers.length > 0
           ? t.customers
           : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
       if (custs.some((c) => (c.ticketNumber || "").trim().toUpperCase() === target)) {
-        return t.date || "";
+        return t;
       }
     }
-    return "";
+    return null;
   };
 
   // Cleans up the old ticket number the same way regular ticket numbers are formatted.
@@ -1827,10 +1956,46 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   // Once the person finishes typing the old ticket number, look it up against saved
-  // tickets and auto-fill its original issue date.
+  // tickets and import that old ticket's data into the reissue form: issue date, company,
+  // supplier, route (including a multi-destination route), airline, prices, and any
+  // customer name not already typed. Anything the person already entered by hand is left
+  // untouched — this only fills in fields that are still empty.
   const handleOldTicketNumberBlur = () => {
-    const found = findTicketIssueDateByNumber(form.oldTicketNumber);
-    setForm({ ...form, oldTicketIssueDate: found });
+    const oldTicket = findTicketByNumber(form.oldTicketNumber);
+    if (!oldTicket) {
+      setForm({ ...form, oldTicketIssueDate: "" });
+      return;
+    }
+    const oldCustomers =
+      Array.isArray(oldTicket.customers) && oldTicket.customers.length > 0
+        ? oldTicket.customers
+        : [{ name: oldTicket.customer || "", ticketNumber: oldTicket.ticketNumber || "" }];
+    // Fill in any customer row that doesn't have a name yet with the matching old
+    // customer's name (by position); new ticket numbers are always left exactly as typed.
+    const customers = form.customers.map((c, i) =>
+      c.name.trim() ? c : { ...c, name: (oldCustomers[i] && oldCustomers[i].name) || c.name }
+    );
+    const hasOwnDestinations = (form.destinations || []).some((d) => (d || "").trim());
+    const oldSupplier = oldTicket.supplier || "";
+    if (!form.supplier && oldSupplier && !SUPPLIERS.includes(oldSupplier)) setSupplierOther(true);
+    setForm({
+      ...form,
+      oldTicketIssueDate: oldTicket.date || "",
+      company: form.company || oldTicket.company || "",
+      supplier: form.supplier || oldSupplier,
+      from: form.from || oldTicket.from || "",
+      to: form.to || oldTicket.to || "",
+      multiDestination: form.multiDestination || !!oldTicket.multiDestination,
+      destinations: hasOwnDestinations
+        ? form.destinations
+        : Array.isArray(oldTicket.destinations) && oldTicket.destinations.length >= 2
+        ? oldTicket.destinations
+        : form.destinations,
+      airline: form.airline || oldTicket.airline || "",
+      netPrice: form.netPrice !== "" ? form.netPrice : oldTicket.netPrice ?? "",
+      soldPrice: form.soldPrice !== "" ? form.soldPrice : oldTicket.soldPrice ?? "",
+      customers,
+    });
   };
 
   // The main account always sees everything; employees see only what they entered,
@@ -2023,8 +2188,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return (
       (t.employee || "").toLowerCase().includes(q) ||
       (t.company || "").toLowerCase().includes(q) ||
-      t.from.toLowerCase().includes(q) ||
-      t.to.toLowerCase().includes(q) ||
+      (t.from || "").toLowerCase().includes(q) ||
+      (t.to || "").toLowerCase().includes(q) ||
+      (Array.isArray(t.destinations) ? t.destinations.join(" ") : "").toLowerCase().includes(q) ||
       (t.airline || "").toLowerCase().includes(q) ||
       customers.some(
         (c) =>
@@ -2104,6 +2270,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         "Ticket number": c.ticketNumber || "",
         "From": t.from,
         "To": t.to,
+        "Route": routeLabel(t),
         "Airline": t.airline || "",
         "Issue date": t.date ? formatDisplayDate(t.date) : "",
         // Net/sold price and profit reflect the whole booking and are shown once, on the first customer's row
@@ -2441,20 +2608,34 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         {onlineUsernames.length} online now
                       </button>
                       {showOnlineList && (
-                        <div className="absolute z-20 top-full mt-1 left-0 w-52 bg-white border border-stone-300 rounded-2xl shadow-lg p-2">
+                        <div className="absolute z-20 top-full mt-1 left-0 w-64 bg-white border border-stone-300 rounded-2xl shadow-lg p-2">
                           {onlineUsernames.length === 0 ? (
                             <p className="text-xs text-stone-400 px-1 py-1">No one online right now</p>
                           ) : (
-                            <ul className="space-y-1 max-h-48 overflow-y-auto">
+                            <ul className="space-y-1 max-h-56 overflow-y-auto">
                               {onlineUsernames.map((u) => {
                                 const emp = (employees || []).find((e) => e.username === u);
                                 return (
                                   <li key={u} className="flex items-center gap-1.5 text-xs text-stone-700 px-1 py-0.5">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                                    {emp ? emp.name : u}
-                                    {emp && emp.isAdmin && (
-                                      <span className="text-[9px] text-teal-700 font-semibold">(main)</span>
-                                    )}
+                                    <span className="flex-1 truncate">
+                                      {emp ? emp.name : u}
+                                      {emp && emp.isAdmin && (
+                                        <span className="text-[9px] text-teal-700 font-semibold"> (main)</span>
+                                      )}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (window.confirm(`Sign out ${emp ? emp.name : u} now?`)) {
+                                          handleForceSignOut(u);
+                                        }
+                                      }}
+                                      title="Sign out this employee"
+                                      className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 hover:text-red-800 border border-red-200 hover:border-red-300 bg-red-50 rounded-full px-1.5 py-0.5"
+                                    >
+                                      <LogOut size={10} /> Sign out
+                                    </button>
                                   </li>
                                 );
                               })}
@@ -3272,27 +3453,92 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-            <div>
-              <label className="text-xs text-stone-500 block mb-1">From</label>
+          <div className="mt-4">
+            <label className="flex items-center gap-2 text-xs font-semibold text-stone-500 cursor-pointer select-none">
               <input
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                value={form.from}
-                onChange={(e) => handleCityChange("from", e.target.value)}
-                placeholder="Cairo"
-                list="city-suggestions"
+                type="checkbox"
+                className="w-4 h-4 accent-teal-700"
+                checked={!!form.multiDestination}
+                onChange={(e) => {
+                  const multiDestination = e.target.checked;
+                  setForm({
+                    ...form,
+                    multiDestination,
+                    // Seed the stop list from the current From/To the first time this is
+                    // switched on, so nothing already typed gets lost.
+                    destinations:
+                      multiDestination && !(form.destinations || []).some((d) => (d || "").trim())
+                        ? [form.from || "", form.to || ""]
+                        : form.destinations,
+                  });
+                }}
               />
-            </div>
-            <div>
-              <label className="text-xs text-stone-500 block mb-1">To</label>
-              <input
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                value={form.to}
-                onChange={(e) => handleCityChange("to", e.target.value)}
-                placeholder="Dubai"
-                list="city-suggestions"
-              />
-            </div>
+              Multi-destination route (multi-city)
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+            {form.multiDestination ? (
+              <div className="md:col-span-2">
+                <label className="text-xs text-stone-500 block mb-1">Route stops (in order)</label>
+                <div className="space-y-2">
+                  {form.destinations.map((d, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-xs text-stone-400 w-14 shrink-0">
+                        {i === 0 ? "From" : i === form.destinations.length - 1 ? "Final" : `Stop ${i}`}
+                      </span>
+                      <input
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={d}
+                        onChange={(e) => handleDestinationChange(i, e.target.value)}
+                        placeholder={i === 0 ? "Cairo" : "Dubai"}
+                        list="city-suggestions"
+                      />
+                      {form.destinations.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => removeDestinationStop(i)}
+                          className="shrink-0 text-stone-400 hover:text-red-600"
+                          title="Remove stop"
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addDestinationStop}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900"
+                  >
+                    <Plus size={14} /> Add stop
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label className="text-xs text-stone-500 block mb-1">From</label>
+                  <input
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={form.from}
+                    onChange={(e) => handleCityChange("from", e.target.value)}
+                    placeholder="Cairo"
+                    list="city-suggestions"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-stone-500 block mb-1">To</label>
+                  <input
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={form.to}
+                    onChange={(e) => handleCityChange("to", e.target.value)}
+                    placeholder="Dubai"
+                    list="city-suggestions"
+                  />
+                </div>
+              </>
+            )}
             <div>
               <label className="text-xs text-stone-500 mb-1 flex items-center gap-1.5">
                 <span>Airline</span>
@@ -3552,7 +3798,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             )}
                           </span>
                         </td>
-                        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.from} → {t.to}</td>
+                        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{routeLabel(t)}</td>
                         <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
                           {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
                         </td>
@@ -4400,7 +4646,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Route</p>
-                  <p className="text-sm font-medium text-stone-800">{viewingTicket.from} → {viewingTicket.to}</p>
+                  <p className="text-sm font-medium text-stone-800">{routeLabel(viewingTicket)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Airline</p>
