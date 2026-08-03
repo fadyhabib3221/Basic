@@ -750,6 +750,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // "hotels" and "cars" are placeholders for future sections.
   const [activeSection, setActiveSection] = useState("flights");
 
+  // Remembers which section (flights/hotels/cars/files) this account was on, so a page
+  // refresh returns to the same place instead of resetting to Flights. Skipped on the
+  // very first render for a session, since that value was just restored from storage
+  // above (or is the deliberate default) rather than a change the user made.
+  const sectionHydratedRef = useRef(false);
+  useEffect(() => {
+    if (!currentUser) return;
+    if (!sectionHydratedRef.current) {
+      sectionHydratedRef.current = true;
+      return;
+    }
+    window.storage.set(`tickets:lastSection:${currentUser.username}`, activeSection, false).catch(() => {});
+  }, [activeSection, currentUser]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -792,6 +806,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           if (match) {
             sessionStartedAtRef.current = Date.now();
             setCurrentUser({ username: match.username, name: match.name, isAdmin: !!match.isAdmin });
+            try {
+              const lastSectionRes = await window.storage.get(`tickets:lastSection:${match.username}`, false).catch(() => null);
+              const lastSection = lastSectionRes && lastSectionRes.value;
+              if (["flights", "hotels", "cars", "files"].includes(lastSection)) {
+                setActiveSection(lastSection);
+              }
+            } catch (e) {
+              // Best-effort; falls back to the default "flights" section
+            }
           }
         }
       } catch (e) {
@@ -1448,6 +1471,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     sessionStartedAtRef.current = Date.now();
     setCurrentUser({ username: match.username, name: match.name, isAdmin: !!match.isAdmin });
     setLoginUsername(""); setLoginPassword("");
+    try {
+      const lastSectionRes = await window.storage.get(`tickets:lastSection:${match.username}`, false).catch(() => null);
+      const lastSection = lastSectionRes && lastSectionRes.value;
+      if (["flights", "hotels", "cars", "files"].includes(lastSection)) {
+        setActiveSection(lastSection);
+      }
+    } catch (e) {
+      // Best-effort; falls back to the default "flights" section
+    }
   };
 
   const handleLogout = async () => {
@@ -3961,8 +3993,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net price</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Sold price</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Profit</th>
-                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap text-sky-700">Refund (airline)</th>
-                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap text-sky-700">Refund (customer)</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap"></th>
                   </tr>
                 </thead>
@@ -3970,7 +4000,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   {sortedFiltered.flatMap((t) => {
                     const customers = getCustomers(t);
                     const isMulti = customers.length > 1;
-                    return customers.map((c, i) => (
+                    const rows = customers.map((c, i) => (
                       <tr
                         key={`${t.id}-${i}`}
                         onClick={() => openTicketDetail(t)}
@@ -4027,12 +4057,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.netPrice)}</td>
                         <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
                         <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
-                        <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">
-                          {hasRefund(t) && (t.refund.customerIndex || 0) === i ? fmt(t.refund.airlineAmount) : ""}
-                        </td>
-                        <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">
-                          {hasRefund(t) && (t.refund.customerIndex || 0) === i ? fmt(t.refund.customerAmount) : ""}
-                        </td>
                         <td className="px-2.5 py-1 text-right whitespace-nowrap">
                           {(currentUser.isAdmin || canEditTickets) ? (
                             <div className="flex gap-0.5 justify-end">
@@ -4051,6 +4075,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         </td>
                       </tr>
                     ));
+                    if (hasRefund(t)) {
+                      const refundedCustomer = customers[t.refund.customerIndex || 0];
+                      rows.push(
+                        <tr
+                          key={`${t.id}-refund`}
+                          onClick={() => openTicketDetail(t)}
+                          className="border-t border-dashed border-sky-200 bg-sky-50/60 text-[11px] cursor-pointer hover:bg-sky-100/60"
+                        >
+                          <td colSpan={8} className="px-2.5 py-1 text-sky-700 italic whitespace-nowrap">
+                            ↳ Refund{refundedCustomer && refundedCustomer.name ? ` — ${refundedCustomer.name}` : ""}
+                            {t.refund.date ? ` · ${formatDisplayDate(t.refund.date)}` : ""}
+                          </td>
+                          <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">{fmt(t.refund.airlineAmount)}</td>
+                          <td className="px-2.5 py-1 text-sky-700 text-right whitespace-nowrap">{fmt(t.refund.customerAmount)}</td>
+                          <td className="px-2.5 py-1 text-right whitespace-nowrap"></td>
+                          <td className="px-2.5 py-1 text-right whitespace-nowrap"></td>
+                        </tr>
+                      );
+                    }
+                    return rows;
                   })}
                 </tbody>
               </table>
