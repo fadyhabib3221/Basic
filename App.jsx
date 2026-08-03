@@ -732,6 +732,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [viewingTicketId, setViewingTicketId] = useState(null);
   const [notesDraft, setNotesDraft] = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
+  // Refund tracking on the ticket detail view: two amounts (refunded by the airline,
+  // refunded to the customer) that can be recorded/edited per ticket.
+  const [showRefundForm, setShowRefundForm] = useState(false);
+  const [refundDraft, setRefundDraft] = useState({ airlineAmount: "", customerAmount: "" });
+  const [refundSaved, setRefundSaved] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
   const [selectedCompany, setSelectedCompany] = useState("");
@@ -1812,11 +1817,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setViewingTicketId(t.id);
     setNotesDraft(t.notes || "");
     setNotesSaved(false);
+    setShowRefundForm(false);
+    setRefundDraft({
+      airlineAmount: t.refund ? t.refund.airlineAmount : "",
+      customerAmount: t.refund ? t.refund.customerAmount : "",
+    });
+    setRefundSaved(false);
   };
   const closeTicketDetail = () => {
     setViewingTicketId(null);
     setNotesDraft("");
     setNotesSaved(false);
+    setShowRefundForm(false);
+    setRefundDraft({ airlineAmount: "", customerAmount: "" });
+    setRefundSaved(false);
   };
   // Saves an edit to just the notes field of a ticket, without touching anything else.
   // Every save appends an entry to notesHistory recording who made the change and when,
@@ -1835,6 +1849,52 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     });
     persistTickets(next);
     setNotesSaved(true);
+  };
+
+  // True once a refund (either side) has actually been recorded for a ticket.
+  const hasRefund = (t) => !!(t && t.refund && (t.refund.airlineAmount !== "" || t.refund.customerAmount !== ""));
+
+  // Saves the two refund amounts (from the airline, to the customer) onto a ticket. Kept
+  // as its own record — separate from editing the ticket itself — with its own history
+  // trail, and shows up as its own row directly under the original ticket in exports.
+  const saveTicketRefund = (id) => {
+    const now = new Date().toISOString();
+    const refund = {
+      airlineAmount: refundDraft.airlineAmount,
+      customerAmount: refundDraft.customerAmount,
+      date: todayDateStr(),
+    };
+    const next = tickets.map((t) => {
+      if (t.id !== id) return t;
+      const history = Array.isArray(t.refundHistory) ? t.refundHistory : [];
+      return {
+        ...t,
+        refund,
+        refundHistory: [...history, { ...refund, by: currentUser.name, at: now }],
+      };
+    });
+    persistTickets(next);
+    setRefundSaved(true);
+    setShowRefundForm(false);
+  };
+
+  // Removes a previously-recorded refund from a ticket (e.g. entered by mistake), keeping
+  // a "cleared" entry in the history trail for the audit log.
+  const clearTicketRefund = (id) => {
+    const now = new Date().toISOString();
+    const next = tickets.map((t) => {
+      if (t.id !== id) return t;
+      const history = Array.isArray(t.refundHistory) ? t.refundHistory : [];
+      return {
+        ...t,
+        refund: null,
+        refundHistory: [...history, { cleared: true, by: currentUser.name, at: now }],
+      };
+    });
+    persistTickets(next);
+    setRefundDraft({ airlineAmount: "", customerAmount: "" });
+    setRefundSaved(false);
+    setShowRefundForm(false);
   };
 
   const handleCustomersCountChange = (value) => {
@@ -2243,6 +2303,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return { name, customers, ...countAndSum(rows) };
   });
 
+  // Ticket-level status text used in the exported "Status" column, replacing the old
+  // per-customer numbering. A ticket can be reissued, refunded, both, or neither.
+  const ticketStatus = (t) => {
+    const parts = [];
+    if (t.isReissued) parts.push("Reissued");
+    if (hasRefund(t)) parts.push("Refunded");
+    return parts.join(" & ");
+  };
+
   // Builds the per-customer row list for one ticket set, sorted by issue date
   // (earliest first; undated tickets pushed to the end). Tickets issued on the
   // SAME date are then ordered by ticket number ascending (numeric-aware, so
@@ -2261,11 +2330,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     });
     return sorted.flatMap((t) => {
       const customers = getCustomers(t);
-      return customers.map((c, i) => ({
+      const rows = customers.map((c, i) => ({
+        "Type": "Ticket",
         "Employee": t.employee || "",
         "Company": t.company || "",
         "Supplier": t.supplier || "",
-        "Customer #": i + 1,
+        "Status": i === 0 ? ticketStatus(t) : "",
         "Customer": c.name || "",
         "Ticket number": c.ticketNumber || "",
         "From": t.from,
@@ -2277,8 +2347,35 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         "Net price": i === 0 ? parseFloat(t.netPrice) || 0 : "",
         "Sold price": i === 0 ? parseFloat(t.soldPrice) || 0 : "",
         "Profit": i === 0 ? profit(t.netPrice, t.soldPrice) : "",
+        "Refund (airline)": "",
+        "Refund (customer)": "",
         "Notes": t.notes || "",
       }));
+      // A refund, if one's been recorded, gets its own row directly under the original
+      // ticket's row(s) — its own "Type", with the two refund amounts in their own columns.
+      if (hasRefund(t)) {
+        rows.push({
+          "Type": "Refund",
+          "Employee": t.employee || "",
+          "Company": t.company || "",
+          "Supplier": "",
+          "Status": "Refunded",
+          "Customer": "",
+          "Ticket number": `Refund — ${firstTicketNumber(t) || "ticket"}`,
+          "From": "",
+          "To": "",
+          "Route": "",
+          "Airline": "",
+          "Issue date": t.refund.date ? formatDisplayDate(t.refund.date) : "",
+          "Net price": "",
+          "Sold price": "",
+          "Profit": "",
+          "Refund (airline)": parseFloat(t.refund.airlineAmount) || 0,
+          "Refund (customer)": parseFloat(t.refund.customerAmount) || 0,
+          "Notes": "",
+        });
+      }
+      return rows;
     });
   };
 
@@ -2301,7 +2398,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return [
       ...ticketRows(rows),
       {
-        "Employee": "", "Company": "", "Supplier": "", "Customer #": "", "Customer": "",
+        "Employee": "", "Company": "", "Supplier": "", "Status": "", "Customer": "",
         "Ticket number": "", "From": "", "To": "", "Airline": "", "Issue date": "TOTAL",
         "Net price": Math.round(sums.net * 100) / 100,
         "Sold price": Math.round(sums.sold * 100) / 100,
@@ -3783,6 +3880,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 Reissued
                               </span>
                             )}
+                            {hasRefund(t) && (
+                              <span
+                                title={`Refunded — Airline: ${fmt(t.refund.airlineAmount)} · Customer: ${fmt(t.refund.customerAmount)}`}
+                                className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5"
+                              >
+                                Refunded
+                              </span>
+                            )}
                           </span>
                         </td>
                         <td className="px-2.5 py-1 font-medium text-stone-800 whitespace-nowrap">
@@ -4714,6 +4819,105 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     {fmt(profit(viewingTicket.netPrice, viewingTicket.soldPrice))}
                   </p>
                 </div>
+              </div>
+
+              {/* Refund: two amounts (refunded by the airline, refunded to the customer),
+                  recorded separately from the ticket itself and shown as its own row
+                  directly under this ticket in the exported report. */}
+              <div className="p-4 md:p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-stone-400">Refund</p>
+                  {!showRefundForm && (
+                    <button
+                      type="button"
+                      onClick={() => setShowRefundForm(true)}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900"
+                    >
+                      <Wallet size={13} /> {hasRefund(viewingTicket) ? "Edit refund" : "Add refund"}
+                    </button>
+                  )}
+                </div>
+
+                {!showRefundForm && (
+                  hasRefund(viewingTicket) ? (
+                    <div className="bg-sky-50 border border-sky-200 rounded-xl px-3 py-2 flex flex-wrap gap-4 text-sm">
+                      <span>
+                        <span className="text-xs text-sky-500 block">Refunded by airline</span>
+                        <span className="text-sky-900 font-medium">{fmt(viewingTicket.refund.airlineAmount)}</span>
+                      </span>
+                      <span>
+                        <span className="text-xs text-sky-500 block">Refunded to customer</span>
+                        <span className="text-sky-900 font-medium">{fmt(viewingTicket.refund.customerAmount)}</span>
+                      </span>
+                      {viewingTicket.refund.date && (
+                        <span>
+                          <span className="text-xs text-sky-500 block">Refund date</span>
+                          <span className="text-sky-900 font-medium">{formatDisplayDate(viewingTicket.refund.date)}</span>
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-stone-400 italic">No refund recorded</p>
+                  )
+                )}
+
+                {showRefundForm && (
+                  <div className="bg-sky-50 border border-sky-200 rounded-xl p-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-stone-500 block mb-1">Refunded by airline</label>
+                        <input
+                          type="number"
+                          className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                          value={refundDraft.airlineAmount}
+                          onChange={(e) => setRefundDraft({ ...refundDraft, airlineAmount: e.target.value })}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-stone-500 block mb-1">Refunded to customer</label>
+                        <input
+                          type="number"
+                          className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                          value={refundDraft.customerAmount}
+                          onChange={(e) => setRefundDraft({ ...refundDraft, customerAmount: e.target.value })}
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-3">
+                      <button
+                        onClick={() => saveTicketRefund(viewingTicket.id)}
+                        className="bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 flex items-center gap-1.5 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10"
+                      >
+                        <Check size={15} /> Save refund
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowRefundForm(false);
+                          setRefundDraft({
+                            airlineAmount: viewingTicket.refund ? viewingTicket.refund.airlineAmount : "",
+                            customerAmount: viewingTicket.refund ? viewingTicket.refund.customerAmount : "",
+                          });
+                        }}
+                        className="border border-stone-300 text-stone-600 text-sm rounded-xl px-4 py-2"
+                      >
+                        Cancel
+                      </button>
+                      {hasRefund(viewingTicket) && (
+                        <button
+                          onClick={() => clearTicketRefund(viewingTicket.id)}
+                          className="text-xs text-red-600 hover:text-red-800 font-semibold ml-auto"
+                        >
+                          Remove refund
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {refundSaved && !showRefundForm && (
+                  <span className="text-xs text-emerald-700 font-medium block mt-2">Saved</span>
+                )}
               </div>
 
               <div className="p-4 md:p-5">
