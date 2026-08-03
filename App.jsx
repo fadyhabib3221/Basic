@@ -979,15 +979,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     };
   }, [currentUser]);
 
-  // Best-effort sign-out when the page/tab is closed or navigated away from. Storage
-  // writes triggered here are fire-and-forget (a closing tab gives no guarantee an async
-  // call finishes), so this can't be 100% reliable in every browser, but it covers the
-  // normal case of someone closing the tab or browser window.
+  // Clears the "online now" presence flag when the page/tab is closed or navigated away
+  // from, so this employee stops showing as online right away. Deliberately does NOT
+  // touch the saved session here — "beforeunload"/"pagehide" also fire on a normal page
+  // refresh, and clearing the session there was signing people out just from reloading
+  // the page. Signing out now only happens via the explicit Sign out button, a remote
+  // force-sign-out, or the inactivity timeout below.
   useEffect(() => {
     if (!currentUser) return;
     const username = currentUser.username;
     const handleUnload = () => {
-      try { window.storage.delete("session:user", false); } catch (e) {}
       try { window.storage.delete(`tickets:presence:${username}`, true); } catch (e) {}
     };
     window.addEventListener("pagehide", handleUnload);
@@ -995,6 +996,28 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return () => {
       window.removeEventListener("pagehide", handleUnload);
       window.removeEventListener("beforeunload", handleUnload);
+    };
+  }, [currentUser]);
+
+  // Auto sign-out after 30 minutes of inactivity. Any mouse, keyboard, scroll, or touch
+  // activity resets the timer; if it ever fires, the session is ended the same way the
+  // Sign out button does it.
+  const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
+  useEffect(() => {
+    if (!currentUser) return;
+    let timeoutId;
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        handleLogout();
+      }, INACTIVITY_TIMEOUT_MS);
+    };
+    const activityEvents = ["mousedown", "mousemove", "keydown", "wheel", "touchstart", "scroll"];
+    activityEvents.forEach((evt) => window.addEventListener(evt, resetTimer, { passive: true }));
+    resetTimer();
+    return () => {
+      clearTimeout(timeoutId);
+      activityEvents.forEach((evt) => window.removeEventListener(evt, resetTimer));
     };
   }, [currentUser]);
 
