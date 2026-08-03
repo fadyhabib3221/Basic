@@ -88,6 +88,15 @@ const todayDateStr = () => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
+// Current local time as HHMM (no separator), used to fold the time-of-day into file
+// serial numbers.
+const nowTimeStr = () => {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}${mm}`;
+};
+
 // A function (not a static object) so every new/reset ticket picks up TODAY'S date
 // at the moment it's created, rather than whatever date happened to be "today" when
 // the app first loaded. The user can still change it manually afterward.
@@ -2547,29 +2556,43 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Files reuse the exact same view/add/edit/delete permission axis as every other
   // section, so an employee's access here always matches whatever the main account
   // has granted them elsewhere in the app.
-  const visibleFiles = !currentUser
-    ? []
-    : canViewAllTickets
-    ? files
-    : files.filter((f) =>
-        f.employeeUsername ? f.employeeUsername === currentUser.username : f.createdBy === currentUser.name
-      );
+  const visibleFiles = (
+    !currentUser
+      ? []
+      : canViewAllTickets
+      ? files
+      : files.filter((f) =>
+          f.employeeUsername ? f.employeeUsername === currentUser.username : f.createdBy === currentUser.name
+        )
+  )
+    // Ordered by the file's own date (newest first), with the serial as a tie-breaker,
+    // so the list always follows the dates rather than raw creation/array order — matches
+    // the trailing running number in the serial, which is likewise assigned per date.
+    .slice()
+    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "") || (b.serial || "").localeCompare(a.serial || ""));
 
   const FILE_SOURCE_LABELS = { flights: "Flight", hotels: "Hotel", visa: "Visa", cars: "Transportation" };
 
-  // Auto-generates the next serial number for a new file, based on today's date:
-  // F-YYYYMMDD-001, F-YYYYMMDD-002, ... restarting at 001 each new day. Computed off the
-  // full (unfiltered) files list so numbering stays globally consistent no matter who's
-  // creating the file.
-  const nextFileSerial = (list) => {
-    const datePart = todayDateStr().replace(/-/g, "");
+  // Auto-generates the next serial number for a file, based on the file's own date
+  // (defaults to today, but the date is user-editable — see updateFileDate below):
+  // F-YYYYMMDD-HHMM-001, F-YYYYMMDD-HHMM-002, ... The running number at the end restarts
+  // at 001 for each new date, and is always computed against files sharing that SAME date
+  // — so if a file's date is changed later, its running number re-lines-up with whatever
+  // date it now belongs to, keeping the trailing sequence ordered by date rather than by
+  // creation order. HHMM is the time the serial was (re)generated, folded in so serials
+  // created on the same date/day are also distinguishable by time.
+  // Computed off the full (unfiltered) files list so numbering stays globally consistent
+  // no matter who's creating/editing the file.
+  const nextFileSerial = (list, dateStr) => {
+    const datePart = (dateStr || todayDateStr()).replace(/-/g, "");
     const prefix = `F-${datePart}-`;
     const maxN = (list || []).reduce((max, f) => {
       if (!(f.serial || "").startsWith(prefix)) return max;
-      const n = parseInt((f.serial || "").slice(prefix.length), 10) || 0;
+      const tail = (f.serial || "").slice(prefix.length);
+      const n = parseInt(tail.slice(-3), 10) || 0; // last 3 digits are the running number
       return Math.max(max, n);
     }, 0);
-    return `${prefix}${String(maxN + 1).padStart(3, "0")}`;
+    return `${prefix}${nowTimeStr()}-${String(maxN + 1).padStart(3, "0")}`;
   };
 
   // Builds a read-only price snapshot of a ticket/hotel/visa record to drop into a
@@ -2656,6 +2679,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const updateFileField = async (id, field, value) => {
     await persistFiles(files.map((f) => (f.id === id ? { ...f, [field]: value } : f)));
+  };
+
+  // Lets the user control a file's date directly (it isn't locked to the day the file was
+  // created). Changing the date also re-generates the serial: the date part is updated to
+  // match, the running number is recomputed against the other files that now share that
+  // same date (so the trailing sequence stays ordered by date), and the time part reflects
+  // the moment the change was made.
+  const updateFileDate = async (id, newDate) => {
+    const others = files.filter((f) => f.id !== id);
+    const newSerial = nextFileSerial(others, newDate);
+    await persistFiles(
+      files.map((f) => (f.id === id ? { ...f, createdAt: newDate, serial: newSerial } : f))
+    );
   };
 
   const addItemToFile = async (fileId, sourceType, record) => {
@@ -5007,7 +5043,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       />
                       <div className="flex items-center justify-between gap-2 mt-3">
                         <div className="text-xs text-emerald-700 font-semibold">
-                          {roomLineNights(line, hotelForm)}n · {fmt(hotelLineSoldTotal(line, roomLineNights(line, hotelForm)) - hotelLineNetTotal(line, roomLineNights(line, hotelForm)))} {line.currency}
+                          {roomLineNights(line, hotelForm)} night{roomLineNights(line, hotelForm) === 1 ? "" : "s"} · {fmt(hotelLineSoldTotal(line, roomLineNights(line, hotelForm)) - hotelLineNetTotal(line, roomLineNights(line, hotelForm)))} {line.currency}
                         </div>
                         <button
                           onClick={() => removeHotelRoomLine(line.id)}
@@ -5289,7 +5325,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           {l.count}× {type} — {meal}
                         </span>
                         <span className="text-xs text-stone-500">
-                          {l.checkIn ? formatDisplayDate(l.checkIn) : "-"} → {l.checkOut ? formatDisplayDate(l.checkOut) : "-"} ({nights}n)
+                          {l.checkIn ? formatDisplayDate(l.checkIn) : "-"} → {l.checkOut ? formatDisplayDate(l.checkOut) : "-"} ({nights} night{nights === 1 ? "" : "s"})
                         </span>
                       </div>
                       <div className="text-xs text-stone-600 mb-2">
@@ -5723,6 +5759,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                     <div>
+                      <label className="text-xs text-stone-500 block mb-1">File date</label>
+                      <input
+                        type="date"
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={openFile.createdAt || ""}
+                        onChange={(e) => e.target.value && updateFileDate(openFile.id, e.target.value)}
+                      />
+                    </div>
+                    <div>
                       <label className="text-xs text-stone-500 block mb-1">Company</label>
                       <input
                         type="text"
@@ -5737,7 +5782,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         ))}
                       </datalist>
                     </div>
-                    <div>
+                    <div className="md:col-span-2">
                       <label className="text-xs text-stone-500 block mb-1">Notes</label>
                       <input
                         type="text"
