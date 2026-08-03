@@ -1075,6 +1075,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   }, []);
 
   const persistUsdRate = async (rate) => {
+    if (!currentUser || !(currentUser.isAdmin || canManageCompanies)) return;
     const date = todayDateStr();
     setUsdToEgpRate(rate);
     setUsdToEgpRateDate(date);
@@ -1359,7 +1360,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Registers a new supplier name so it's always available to pick from the Hotels
   // page's Supplier field, via the "+ Add supplier" button at the top of the page.
+  // Gated the same as adding a hotel booking, since it's part of the same workflow.
   const handleAddSupplierName = () => {
+    if (!canAddTickets) return;
     const name = newSupplierDraft.trim();
     if (!name) return;
     const duplicate = (suggestions.suppliers || []).some((s) => s.toLowerCase() === name.toLowerCase());
@@ -1373,12 +1376,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleDeleteSupplierName = (name) => {
+    if (!canAddTickets) return;
     persistSuggestions({ ...suggestions, suppliers: (suggestions.suppliers || []).filter((s) => s !== name) });
   };
 
   // Registers a new hotel name so it's always available to pick from the Hotels
   // page's Hotel name field, via the "+ Add hotel name" button at the top of the page.
   const handleAddHotelName = () => {
+    if (!canAddTickets) return;
     const name = newHotelNameDraft.trim();
     if (!name) return;
     const duplicate = (suggestions.hotelNames || []).some((h) => h.toLowerCase() === name.toLowerCase());
@@ -1392,6 +1397,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleDeleteHotelName = (name) => {
+    if (!canAddTickets) return;
     persistSuggestions({ ...suggestions, hotelNames: (suggestions.hotelNames || []).filter((h) => h !== name) });
   };
 
@@ -4104,7 +4110,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         {activeSection === "hotels" && (
         <>
         {/* Buttons to register new supplier names and hotel names, so they're always
-            available to pick from the Supplier / Hotel name fields below. */}
+            available to pick from the Supplier / Hotel name fields below. Same
+            permission as adding a hotel booking, since it's part of that workflow. */}
+        {canAddTickets && (
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <button
             onClick={() => { setShowAddSupplierPanel(!showAddSupplierPanel); setShowAddHotelNamePanel(false); }}
@@ -4119,8 +4127,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <Plus size={14} /> Add hotel name
           </button>
         </div>
+        )}
 
-        {showAddSupplierPanel && (
+        {canAddTickets && showAddSupplierPanel && (
           <div className="bg-white border border-stone-200 rounded-2xl p-4 mb-4">
             <h3 className="text-sm font-bold text-stone-700 mb-3">Suppliers</h3>
             <div className="flex gap-2 mb-3">
@@ -4158,7 +4167,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         )}
 
-        {showAddHotelNamePanel && (
+        {canAddTickets && showAddHotelNamePanel && (
           <div className="bg-white border border-stone-200 rounded-2xl p-4 mb-4">
             <h3 className="text-sm font-bold text-stone-700 mb-3">Hotel names</h3>
             <div className="flex gap-2 mb-3">
@@ -4197,26 +4206,34 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         )}
 
         {/* USD -> EGP exchange rate bar — entered by hand each day (e.g. from the CBE's
-            published rate), saved to shared storage so every employee sees the same value. */}
+            published rate), saved to shared storage so every employee sees the same value.
+            Editing it is gated behind the same shared-data permission as managing
+            companies; employees without it see the current rate read-only. */}
         <div className="bg-white border border-stone-200 rounded-2xl px-4 py-3 mb-4 flex flex-wrap items-center gap-3">
           <span className="text-xs font-semibold text-stone-500">USD → EGP rate today:</span>
-          <input
-            type="number"
-            step="0.01"
-            className="w-28 border border-stone-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-            value={usdToEgpRate ?? ""}
-            onChange={(e) => setUsdToEgpRate(e.target.value === "" ? null : parseFloat(e.target.value))}
-            onBlur={() => {
-              if (usdToEgpRate !== null && !Number.isNaN(usdToEgpRate)) persistUsdRate(usdToEgpRate);
-            }}
-            placeholder="e.g. 51.20"
-          />
-          <button
-            onClick={() => usdToEgpRate !== null && !Number.isNaN(usdToEgpRate) && persistUsdRate(usdToEgpRate)}
-            className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-lg px-3 py-1.5 hover:bg-teal-50"
-          >
-            Save rate
-          </button>
+          {(currentUser.isAdmin || canManageCompanies) ? (
+            <>
+              <input
+                type="number"
+                step="0.01"
+                className="w-28 border border-stone-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                value={usdToEgpRate ?? ""}
+                onChange={(e) => setUsdToEgpRate(e.target.value === "" ? null : parseFloat(e.target.value))}
+                onBlur={() => {
+                  if (usdToEgpRate !== null && !Number.isNaN(usdToEgpRate)) persistUsdRate(usdToEgpRate);
+                }}
+                placeholder="e.g. 51.20"
+              />
+              <button
+                onClick={() => usdToEgpRate !== null && !Number.isNaN(usdToEgpRate) && persistUsdRate(usdToEgpRate)}
+                className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-lg px-3 py-1.5 hover:bg-teal-50"
+              >
+                Save rate
+              </button>
+            </>
+          ) : (
+            <span className="text-sm font-medium text-stone-700">{usdToEgpRate ?? "-"}</span>
+          )}
           {usdToEgpRateDate && (
             <span className="text-xs text-stone-400">Last updated: {formatDisplayDate(usdToEgpRateDate)}</span>
           )}
