@@ -874,21 +874,45 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // A short, human-readable description of what this signed-in account appears to be
   // doing right now, broadcast alongside the presence heartbeat below so the main
-  // account's "online now" list can show it next to each employee.
+  // account's "online now" list can show it next to each employee. Includes concrete
+  // details (customer name, company, hotel, ...) rather than just the section name, so
+  // the main account can tell at a glance what someone is actually working on.
   const myActivity = (() => {
     if (showManage) return "Managing employees";
     if (showManageCompanies) return "Managing companies";
     if (activeSection === "hotels") {
-      if (viewingHotelBooking) return "Viewing a hotel booking";
-      if (hotelEditingId) return "Editing a hotel booking";
-      return "Hotels";
+      if (viewingHotelBooking) {
+        return `Viewing hotel booking — ${viewingHotelBooking.hotel || "hotel"}${
+          viewingHotelBooking.customer ? ` (${viewingHotelBooking.customer})` : ""
+        }`;
+      }
+      if (hotelEditingId) {
+        const hb = hotelBookings.find((h) => h.id === hotelEditingId);
+        return `Editing hotel booking — ${(hb && hb.hotel) || "hotel"}`;
+      }
+      return "Browsing hotel bookings";
     }
     if (activeSection === "cars") return "Cars";
     if (activeSection === "files") return "Files";
     // Flights (the default section)
-    if (viewingTicketId) return "Viewing a ticket";
-    if (form.id) return "Editing a ticket";
-    return "Flights";
+    if (viewingTicketId) {
+      const vt = tickets.find((x) => x.id === viewingTicketId);
+      const vtCustomers = vt && Array.isArray(vt.customers) && vt.customers.length > 0
+        ? vt.customers
+        : [{ name: (vt && vt.customer) || "" }];
+      const name = vtCustomers[0] && vtCustomers[0].name;
+      return `Viewing ticket${name ? ` — ${name}` : ""}${vt && vt.company ? ` (${vt.company})` : ""}`;
+    }
+    if (form.id) {
+      const name = form.customers && form.customers[0] && form.customers[0].name;
+      return `Editing ticket${name ? ` — ${name}` : ""}${form.company ? ` (${form.company})` : ""}`;
+    }
+    // Someone with a non-empty new-ticket draft counts as actively adding one
+    const draftName = form.customers && form.customers[0] && form.customers[0].name;
+    if (draftName || form.company) {
+      return `Adding a new ticket${draftName ? ` — ${draftName}` : ""}${form.company ? ` (${form.company})` : ""}`;
+    }
+    return "Browsing flights list";
   })();
   // Kept in a ref (rather than read directly) so the heartbeat interval below — which
   // only re-subscribes when currentUser changes — always sends the latest activity
@@ -2392,8 +2416,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     });
     return sorted.flatMap((t) => {
       const customers = getCustomers(t);
-      const refundedIdx = hasRefund(t) ? t.refund.customerIndex || 0 : -1;
-      return customers.map((c, i) => ({
+      const rows = customers.map((c, i) => ({
         "Type": "Ticket",
         "Employee": t.employee || "",
         "Company": t.company || "",
@@ -2407,20 +2430,51 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         "Airline": t.airline || "",
         "Issue date": t.date ? formatDisplayDate(t.date) : "",
         // Net/sold price and profit are the ORIGINAL booking amounts, shown once on the
-        // first customer's row. Any recorded refund gets its own columns on that SAME
-        // row — kept visually/accounting-wise separate from the original price columns
-        // rather than netted into them — plus the resulting after-refund figures.
+        // first customer's row. A recorded refund gets its own row directly underneath
+        // (see below) instead of adding more columns here — keeps this row short and
+        // keeps the refund's figures clearly separate from the original price.
         "Net price": i === 0 ? parseFloat(t.netPrice) || 0 : "",
         "Sold price": i === 0 ? parseFloat(t.soldPrice) || 0 : "",
         "Profit": i === 0 ? profit(t.netPrice, t.soldPrice) : "",
-        "Refund date": i === refundedIdx && t.refund.date ? formatDisplayDate(t.refund.date) : "",
-        "Refund (airline)": i === refundedIdx ? parseFloat(t.refund.airlineAmount) || 0 : "",
-        "Refund (customer)": i === refundedIdx ? parseFloat(t.refund.customerAmount) || 0 : "",
-        "Net after refund": i === 0 ? netAfterRefund(t) : "",
-        "Sold after refund": i === 0 ? soldAfterRefund(t) : "",
-        "Profit after refund": i === 0 ? profitAfterRefund(t) : "",
+        "Refund date": "",
+        "Refund (airline)": "",
+        "Refund (customer)": "",
+        "Net after refund": "",
+        "Sold after refund": "",
+        "Profit after refund": "",
         "Notes": t.notes || "",
       }));
+      // A refund, if one's been recorded, gets its own short row directly under the
+      // original ticket's row(s) — just the refund and after-refund figures, so neither
+      // row is cluttered with columns that don't apply to it.
+      if (hasRefund(t)) {
+        const refundedCustomer = customers[t.refund.customerIndex || 0] || customers[0];
+        rows.push({
+          "Type": "Refund",
+          "Employee": t.employee || "",
+          "Company": t.company || "",
+          "Supplier": "",
+          "Status": "Refunded",
+          "Customer": refundedCustomer ? refundedCustomer.name || "" : "",
+          "Ticket number": `Refund — ${(refundedCustomer && refundedCustomer.ticketNumber) || firstTicketNumber(t) || "ticket"}`,
+          "From": "",
+          "To": "",
+          "Route": "",
+          "Airline": "",
+          "Issue date": "",
+          "Net price": "",
+          "Sold price": "",
+          "Profit": "",
+          "Refund date": t.refund.date ? formatDisplayDate(t.refund.date) : "",
+          "Refund (airline)": parseFloat(t.refund.airlineAmount) || 0,
+          "Refund (customer)": parseFloat(t.refund.customerAmount) || 0,
+          "Net after refund": netAfterRefund(t),
+          "Sold after refund": soldAfterRefund(t),
+          "Profit after refund": profitAfterRefund(t),
+          "Notes": "",
+        });
+      }
+      return rows;
     });
   };
 
