@@ -777,6 +777,23 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // are independent lists.
   const [showAddVisaSupplierPanel, setShowAddVisaSupplierPanel] = useState(false);
   const [newVisaSupplierDraft, setNewVisaSupplierDraft] = useState("");
+
+  // ---------- Files ----------
+  // A "file" bundles together copies (snapshots) of records already entered under
+  // Flights/Hotels/Visa/Transportation, so their prices can be gathered and reviewed
+  // together without touching the original records — nothing here feeds back into the
+  // totals shown in those other sections.
+  const [files, setFiles] = useState([]);
+  const [fileError, setFileError] = useState("");
+  // Which file (by id) is currently open in the detail view; null = showing the list.
+  const [openFileId, setOpenFileId] = useState(null);
+  // Whether the "add a copy from a service" picker is open, and which service tab it's on.
+  const [showFilePicker, setShowFilePicker] = useState(false);
+  const [filePickerTab, setFilePickerTab] = useState("flights");
+  // Set when "copy to a file" is clicked from the Flights/Hotels/Visa tables directly —
+  // { type: 'flights'|'hotels'|'visa', record } — opens a modal asking which file (by
+  // its serial number) to drop the copy into.
+  const [copyPickerSource, setCopyPickerSource] = useState(null);
   // USD -> EGP exchange rate, used to also show a USD booking's value in EGP.
   // Entered by hand (no CBE API is publicly reachable from the browser), and saved so
   // everyone signed in sees today's rate without re-typing it.
@@ -831,10 +848,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   useEffect(() => {
     (async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, employeesRes, sessionRes, suggestionsRes, setupRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, filesRes, employeesRes, sessionRes, suggestionsRes, setupRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:visas", true).catch(() => null),
+          window.storage.get("tickets:files", true).catch(() => null),
           window.storage.get("tickets:employees", true).catch(() => null),
           window.storage.get("session:user", false).catch(() => null),
           window.storage.get("tickets:suggestions", true).catch(() => null),
@@ -843,10 +861,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         const ticketsData = ticketsRes && ticketsRes.value ? JSON.parse(ticketsRes.value) : [];
         const hotelsData = hotelsRes && hotelsRes.value ? JSON.parse(hotelsRes.value) : [];
         const visasData = visasRes && visasRes.value ? JSON.parse(visasRes.value) : [];
+        const filesData = filesRes && filesRes.value ? JSON.parse(filesRes.value) : [];
         const employeesData = employeesRes && employeesRes.value ? JSON.parse(employeesRes.value) : [];
         setTickets(ticketsData);
         setHotelBookings(hotelsData);
         setVisaBookings(visasData);
+        setFiles(filesData);
         setEmployees(employeesData);
         // If accounts already exist, the setup step has clearly already happened even if the
         // flag itself is missing (e.g. app used before this flag existed).
@@ -905,10 +925,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     let cancelled = false;
     const loadCoreData = async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, employeesRes, suggestionsRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, filesRes, employeesRes, suggestionsRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:visas", true).catch(() => null),
+          window.storage.get("tickets:files", true).catch(() => null),
           window.storage.get("tickets:employees", true).catch(() => null),
           window.storage.get("tickets:suggestions", true).catch(() => null),
         ]);
@@ -930,6 +951,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         if (visasRes && visasRes.value) {
           try {
             setVisaBookings(JSON.parse(visasRes.value));
+          } catch (e) {
+            // ignore malformed data for this cycle, try again next poll
+          }
+        }
+        if (filesRes && filesRes.value) {
+          try {
+            setFiles(JSON.parse(filesRes.value));
           } catch (e) {
             // ignore malformed data for this cycle, try again next poll
           }
@@ -1223,6 +1251,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       await window.storage.set("tickets:visas", JSON.stringify(next), true);
     } catch (e) {
       setVisaError("Could not save data, please try again");
+    }
+  };
+
+  const persistFiles = async (next) => {
+    setFiles(next);
+    try {
+      await window.storage.set("tickets:files", JSON.stringify(next), true);
+    } catch (e) {
+      setFileError("Could not save data, please try again");
     }
   };
 
@@ -2496,6 +2533,176 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       ? t.customers
       : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
 
+  // Visa bookings filtered by the same view permission as everywhere else — used by the
+  // Files picker so an employee can only pull a copy of visa bookings they can already see.
+  const visibleVisaBookingsForFiles = !currentUser
+    ? []
+    : canViewAllTickets
+    ? visaBookings
+    : visaBookings.filter((v) =>
+        v.employeeUsername ? v.employeeUsername === currentUser.username : v.employee === currentUser.name
+      );
+
+  // ---------- Files ----------
+  // Files reuse the exact same view/add/edit/delete permission axis as every other
+  // section, so an employee's access here always matches whatever the main account
+  // has granted them elsewhere in the app.
+  const visibleFiles = !currentUser
+    ? []
+    : canViewAllTickets
+    ? files
+    : files.filter((f) =>
+        f.employeeUsername ? f.employeeUsername === currentUser.username : f.createdBy === currentUser.name
+      );
+
+  const FILE_SOURCE_LABELS = { flights: "Flight", hotels: "Hotel", visa: "Visa", cars: "Transportation" };
+
+  // Auto-generates the next serial number for a new file, based on today's date:
+  // F-YYYYMMDD-001, F-YYYYMMDD-002, ... restarting at 001 each new day. Computed off the
+  // full (unfiltered) files list so numbering stays globally consistent no matter who's
+  // creating the file.
+  const nextFileSerial = (list) => {
+    const datePart = todayDateStr().replace(/-/g, "");
+    const prefix = `F-${datePart}-`;
+    const maxN = (list || []).reduce((max, f) => {
+      if (!(f.serial || "").startsWith(prefix)) return max;
+      const n = parseInt((f.serial || "").slice(prefix.length), 10) || 0;
+      return Math.max(max, n);
+    }, 0);
+    return `${prefix}${String(maxN + 1).padStart(3, "0")}`;
+  };
+
+  // Builds a read-only price snapshot of a ticket/hotel/visa record to drop into a
+  // file. This is a COPY only — it never references or mutates the original record, so
+  // adding it to a file has no effect whatsoever on the Flights/Hotels/Visa totals.
+  const buildFileItem = (sourceType, record) => {
+    const base = { id: `FI-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sourceType, sourceId: record.id };
+    if (sourceType === "flights") {
+      const names = getCustomers(record).map((c) => c.name).filter(Boolean).join(", ");
+      return {
+        ...base,
+        label: `${routeLabel(record)}${names ? " · " + names : ""}`,
+        date: record.date,
+        currency: "EGP",
+        netPrice: parseFloat(record.netPrice) || 0,
+        soldPrice: parseFloat(record.soldPrice) || 0,
+      };
+    }
+    if (sourceType === "hotels") {
+      return {
+        ...base,
+        label: `${record.hotel || "Hotel"}${record.customer ? " · " + record.customer : ""}`,
+        date: record.bookingDate,
+        currency: "EGP",
+        netPrice: hotelNetTotal(record),
+        soldPrice: hotelSoldTotal(record),
+      };
+    }
+    if (sourceType === "visa") {
+      const names = (record.customers || []).map((c) => c.name).filter(Boolean).join(", ");
+      return {
+        ...base,
+        label: `${record.visaType || "Visa"}${names ? " · " + names : ""}`,
+        date: record.bookingDate,
+        currency: record.currency || "EGP",
+        netPrice: parseFloat(record.netPrice) || 0,
+        soldPrice: parseFloat(record.soldPrice) || 0,
+      };
+    }
+    return { ...base, label: "-", date: "", currency: "EGP", netPrice: 0, soldPrice: 0 };
+  };
+
+  // Every item's amount converted into EGP (same conversion hotels already use), so a
+  // file mixing EGP and USD items still totals correctly.
+  const fileTotals = (f) =>
+    (f.items || []).reduce(
+      (acc, it) => {
+        acc.net += hotelInEgp(it.netPrice, it.currency);
+        acc.sold += hotelInEgp(it.soldPrice, it.currency);
+        acc.profit = acc.sold - acc.net;
+        return acc;
+      },
+      { net: 0, sold: 0, profit: 0 }
+    );
+
+  const filesGrandTotals = visibleFiles.reduce(
+    (acc, f) => {
+      const t = fileTotals(f);
+      acc.net += t.net;
+      acc.sold += t.sold;
+      acc.profit += t.profit;
+      return acc;
+    },
+    { net: 0, sold: 0, profit: 0 }
+  );
+
+  const createFile = async () => {
+    if (!canAddTickets) return;
+    const record = {
+      id: `FL-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      serial: nextFileSerial(files),
+      createdAt: todayDateStr(),
+      createdBy: currentUser.name,
+      employeeUsername: currentUser.username,
+      company: "",
+      notes: "",
+      items: [],
+    };
+    await persistFiles([record, ...files]);
+    setOpenFileId(record.id);
+  };
+
+  const updateFileField = async (id, field, value) => {
+    await persistFiles(files.map((f) => (f.id === id ? { ...f, [field]: value } : f)));
+  };
+
+  const addItemToFile = async (fileId, sourceType, record) => {
+    if (!canAddTickets) return;
+    const item = buildFileItem(sourceType, record);
+    await persistFiles(files.map((f) => (f.id === fileId ? { ...f, items: [...(f.items || []), item] } : f)));
+  };
+
+  const removeItemFromFile = async (fileId, itemId) => {
+    if (!canEditTickets) return;
+    await persistFiles(
+      files.map((f) => (f.id === fileId ? { ...f, items: (f.items || []).filter((i) => i.id !== itemId) } : f))
+    );
+  };
+
+  const deleteFile = async (id) => {
+    if (!canDeleteTickets) return;
+    await persistFiles(files.filter((f) => f.id !== id));
+    if (openFileId === id) setOpenFileId(null);
+  };
+
+  const openFile = openFileId ? files.find((f) => f.id === openFileId) : null;
+
+  // Used by the "copy to a file" button on the Flights/Hotels/Visa tables: drops a
+  // snapshot of that one record into the chosen file, without touching the record itself.
+  const copySourceToFile = async (fileId) => {
+    if (!copyPickerSource) return;
+    await addItemToFile(fileId, copyPickerSource.type, copyPickerSource.record);
+    setCopyPickerSource(null);
+  };
+
+  // "New file" shortcut inside the copy picker: creates the file, then immediately
+  // drops the pending copy into it.
+  const createFileAndCopySource = async () => {
+    if (!canAddTickets || !copyPickerSource) return;
+    const record = {
+      id: `FL-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      serial: nextFileSerial(files),
+      createdAt: todayDateStr(),
+      createdBy: currentUser.name,
+      employeeUsername: currentUser.username,
+      company: "",
+      notes: "",
+      items: [buildFileItem(copyPickerSource.type, copyPickerSource.record)],
+    };
+    await persistFiles([record, ...files]);
+    setCopyPickerSource(null);
+  };
+
   const monthsAvailable = Array.from(new Set(visibleTickets.map((t) => monthKey(t.date)))).sort((a, b) =>
     b.localeCompare(a)
   );
@@ -3069,14 +3276,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.netPrice)}</td>
         <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
         <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
-        <td className="px-2.5 py-1 text-right whitespace-nowrap">
-          {(currentUser.isAdmin || canEditTickets) ? (
+        <td className="px-2.5 py-1 text-right whitespace-nowrap" onClick={(ev) => ev.stopPropagation()}>
+          {(canAddTickets || currentUser.isAdmin || canEditTickets || canDeleteTickets) ? (
             <div className="flex gap-0.5 justify-end">
-              <button onClick={(ev) => { ev.stopPropagation(); handleEdit(t); }} className="text-stone-400 hover:text-teal-800 p-0.5">
-                <Pencil size={13} />
-              </button>
+              {canAddTickets && (
+                <button onClick={() => setCopyPickerSource({ type: "flights", record: t })} className="text-stone-400 hover:text-amber-600 p-0.5" title="Copy to a file">
+                  <FileText size={13} />
+                </button>
+              )}
+              {(currentUser.isAdmin || canEditTickets) && (
+                <button onClick={() => handleEdit(t)} className="text-stone-400 hover:text-teal-800 p-0.5">
+                  <Pencil size={13} />
+                </button>
+              )}
               {(currentUser.isAdmin || canDeleteTickets) && (
-                <button onClick={(ev) => { ev.stopPropagation(); handleDelete(t.id); }} className="text-stone-400 hover:text-red-600 p-0.5">
+                <button onClick={() => handleDelete(t.id)} className="text-stone-400 hover:text-red-600 p-0.5">
                   <Trash2 size={13} />
                 </button>
               )}
@@ -4957,7 +5171,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net total (EGP)</th>
                 <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Sold total (EGP)</th>
                 <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Profit (EGP)</th>
-                {(canEditTickets || canDeleteTickets) && (
+                {(canAddTickets || canEditTickets || canDeleteTickets) && (
                   <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Actions</th>
                 )}
               </tr>
@@ -5000,8 +5214,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">
                     {fmt(hotelProfitTotal(h))}
                   </td>
-                  {(canEditTickets || canDeleteTickets) && (
+                  {(canAddTickets || canEditTickets || canDeleteTickets) && (
                     <td className="px-2.5 py-1 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      {canAddTickets && (
+                        <button
+                          onClick={() => setCopyPickerSource({ type: "hotels", record: h })}
+                          className="text-amber-600 hover:text-amber-800 mr-2"
+                          title="Copy to a file"
+                        >
+                          <FileText size={14} />
+                        </button>
+                      )}
                       {canEditTickets && (
                         <button
                           onClick={() => handleEditHotelClick(h)}
@@ -5363,6 +5586,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-4 py-3 text-right font-semibold text-emerald-700">{fmt(profit)} {v.currency}</td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            {canAddTickets && (
+                              <button
+                                onClick={() => setCopyPickerSource({ type: "visa", record: v })}
+                                className="text-amber-600 hover:text-amber-800"
+                                title="Copy to a file"
+                              >
+                                <FileText size={16} />
+                              </button>
+                            )}
                             {canEditTickets && (
                               <button
                                 onClick={() => handleEditVisaClick(v)}
@@ -5402,10 +5634,291 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         )}
 
         {activeSection === "files" && (
-          <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
-            <FileText size={40} className="mx-auto mb-3 text-stone-300" />
-            <p className="text-sm">Files section — nothing here yet.</p>
-          </div>
+          <>
+            {fileError && (
+              <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-4">{fileError}</div>
+            )}
+
+            {!openFile && (
+              <>
+                {/* Summary cards, same style as the Flights section */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                  <div className="bg-white rounded-2xl border border-stone-200 p-4 flex items-center gap-3">
+                    <div className="bg-stone-100 rounded-xl p-2 text-stone-600"><FileText size={20} /></div>
+                    <div>
+                      <p className="text-xs text-stone-500">Files</p>
+                      <p className="text-lg font-bold">{visibleFiles.length}</p>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-2xl border border-stone-200 p-4 flex items-center gap-3">
+                    <div className="bg-teal-50 rounded-xl p-2 text-teal-900"><Wallet size={20} /></div>
+                    <div>
+                      <p className="text-xs text-stone-500">Total sales</p>
+                      <p className="text-lg font-bold">{fmt(filesGrandTotals.sold)}</p>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-2xl border border-stone-200 p-4 flex items-center gap-3">
+                    <div className="bg-emerald-50 rounded-xl p-2 text-emerald-700"><TrendingUp size={20} /></div>
+                    <div>
+                      <p className="text-xs text-stone-500">Total profit</p>
+                      <p className="text-lg font-bold text-emerald-700">{fmt(filesGrandTotals.profit)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {canAddTickets && (
+                  <button
+                    onClick={createFile}
+                    className="mb-6 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2.5 shadow-sm shadow-teal-800/30 flex items-center gap-2"
+                  >
+                    <Plus size={16} /> New file
+                  </button>
+                )}
+
+                {visibleFiles.length === 0 ? (
+                  <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
+                    <FileText size={40} className="mx-auto mb-3 text-stone-300" />
+                    <p className="text-sm">No files yet — create one and pull in copies from Flights, Hotels, or Visa.</p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100 overflow-hidden">
+                    {visibleFiles.map((f) => {
+                      const t = fileTotals(f);
+                      return (
+                        <button
+                          key={f.id}
+                          onClick={() => setOpenFileId(f.id)}
+                          className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-teal-50/50 text-left"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-semibold text-stone-900 text-sm truncate">
+                              {f.serial} {f.company ? `· ${f.company}` : ""}
+                            </p>
+                            <p className="text-xs text-stone-400">
+                              {formatDisplayDate(f.createdAt)} · {f.createdBy} · {(f.items || []).length} item{(f.items || []).length === 1 ? "" : "s"}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-bold">{fmt(t.sold)}</p>
+                            <p className="text-xs text-emerald-700 font-semibold">+{fmt(t.profit)}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            {openFile && (
+              <div>
+                <button
+                  onClick={() => setOpenFileId(null)}
+                  className="mb-4 text-stone-500 hover:text-teal-800 text-sm font-semibold flex items-center gap-1.5"
+                >
+                  <ArrowLeft size={15} /> Back to files
+                </button>
+
+                <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                      <h2 className="font-semibold text-stone-900">{openFile.serial}</h2>
+                      <p className="text-xs text-stone-400">{formatDisplayDate(openFile.createdAt)} · Created by {openFile.createdBy}</p>
+                    </div>
+                    {canDeleteTickets && (
+                      <button
+                        onClick={() => deleteFile(openFile.id)}
+                        className="text-red-600 border border-red-200 hover:bg-red-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
+                      >
+                        <Trash2 size={13} /> Delete file
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="text-xs text-stone-500 block mb-1">Company</label>
+                      <input
+                        type="text"
+                        disabled={!canEditTickets && !canAddTickets}
+                        list="file-company-list"
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={openFile.company || ""}
+                        onChange={(e) => updateFileField(openFile.id, "company", e.target.value)}
+                      />
+                      <datalist id="file-company-list">
+                        {suggestions.companies.map((c, i) => (
+                          <option key={i} value={companyName(c)} />
+                        ))}
+                      </datalist>
+                    </div>
+                    <div>
+                      <label className="text-xs text-stone-500 block mb-1">Notes</label>
+                      <input
+                        type="text"
+                        disabled={!canEditTickets && !canAddTickets}
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={openFile.notes || ""}
+                        onChange={(e) => updateFileField(openFile.id, "notes", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Totals for this file only — separate from every other section's totals */}
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="bg-stone-50 rounded-xl p-3 text-center">
+                      <p className="text-[11px] text-stone-500">Net</p>
+                      <p className="font-bold text-sm">{fmt(fileTotals(openFile).net)}</p>
+                    </div>
+                    <div className="bg-stone-50 rounded-xl p-3 text-center">
+                      <p className="text-[11px] text-stone-500">Sold</p>
+                      <p className="font-bold text-sm">{fmt(fileTotals(openFile).sold)}</p>
+                    </div>
+                    <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                      <p className="text-[11px] text-emerald-700">Profit</p>
+                      <p className="font-bold text-sm text-emerald-700">{fmt(fileTotals(openFile).profit)}</p>
+                    </div>
+                  </div>
+
+                  {canAddTickets && (
+                    <button
+                      onClick={() => setShowFilePicker(true)}
+                      className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
+                    >
+                      <Plus size={14} /> Add a copy from a service
+                    </button>
+                  )}
+                </div>
+
+                <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100 overflow-hidden">
+                  {(openFile.items || []).length === 0 ? (
+                    <p className="text-sm text-stone-400 text-center py-10">No items added to this file yet.</p>
+                  ) : (
+                    (openFile.items || []).map((it) => (
+                      <div key={it.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="text-xs text-teal-800 font-semibold">{FILE_SOURCE_LABELS[it.sourceType] || it.sourceType}</p>
+                          <p className="text-sm text-stone-900 truncate">{it.label}</p>
+                          <p className="text-xs text-stone-400">{formatDisplayDate(it.date)}</p>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-right">
+                            <p className="text-sm font-bold">{fmt(it.soldPrice)} {it.currency}</p>
+                            <p className="text-xs text-emerald-700">net {fmt(it.netPrice)} {it.currency}</p>
+                          </div>
+                          {canEditTickets && (
+                            <button
+                              onClick={() => removeItemFromFile(openFile.id, it.id)}
+                              className="text-red-500 hover:text-red-700 p-1"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Picker: pull a read-only copy of an existing Flights/Hotels/Visa record into
+                the currently open file. Selecting a record only ever ADDS a snapshot here —
+                it never edits, deletes, or otherwise affects the original record or that
+                section's own totals. */}
+            {showFilePicker && openFile && (
+              <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50" onClick={() => setShowFilePicker(false)}>
+                <div
+                  className="bg-white rounded-2xl border border-stone-200 w-full max-w-lg max-h-[85vh] flex flex-col"
+                  onClick={(ev) => ev.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between p-4 border-b border-stone-100">
+                    <h3 className="font-semibold text-stone-900">Add a copy to {openFile.serial}</h3>
+                    <button onClick={() => setShowFilePicker(false)} className="text-stone-400 hover:text-stone-700 p-1">
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  <div className="flex gap-2 px-4 pt-3">
+                    {[
+                      { key: "flights", label: "Flights", icon: Plane },
+                      { key: "hotels", label: "Hotels", icon: Building2 },
+                      { key: "visa", label: "Visa", icon: PassportIcon },
+                    ].map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setFilePickerTab(tab.key)}
+                        className={`flex items-center gap-1.5 text-xs font-semibold rounded-xl px-3 py-1.5 border ${
+                          filePickerTab === tab.key
+                            ? "bg-teal-800 text-white border-teal-800"
+                            : "bg-white text-stone-600 border-stone-300 hover:bg-stone-50"
+                        }`}
+                      >
+                        <tab.icon size={14} className={tab.key === "flights" ? "rotate-45" : ""} /> {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="overflow-y-auto p-4 space-y-2">
+                    {filePickerTab === "flights" && (
+                      visibleTickets.length === 0 ? (
+                        <p className="text-sm text-stone-400 text-center py-6">No tickets to add yet.</p>
+                      ) : (
+                        visibleTickets.map((t) => (
+                          <button
+                            key={t.id}
+                            onClick={async () => { await addItemToFile(openFile.id, "flights", t); setShowFilePicker(false); }}
+                            className="w-full text-left border border-stone-200 rounded-xl px-3 py-2 hover:bg-teal-50 hover:border-teal-300 flex items-center justify-between gap-2"
+                          >
+                            <span className="text-sm text-stone-800 truncate">
+                              {routeLabel(t)} · {getCustomers(t).map((c) => c.name).filter(Boolean).join(", ") || "-"}
+                            </span>
+                            <span className="text-xs text-stone-400 shrink-0">{fmt(t.soldPrice)}</span>
+                          </button>
+                        ))
+                      )
+                    )}
+                    {filePickerTab === "hotels" && (
+                      visibleHotelBookings.length === 0 ? (
+                        <p className="text-sm text-stone-400 text-center py-6">No hotel bookings to add yet.</p>
+                      ) : (
+                        visibleHotelBookings.map((h) => (
+                          <button
+                            key={h.id}
+                            onClick={async () => { await addItemToFile(openFile.id, "hotels", h); setShowFilePicker(false); }}
+                            className="w-full text-left border border-stone-200 rounded-xl px-3 py-2 hover:bg-teal-50 hover:border-teal-300 flex items-center justify-between gap-2"
+                          >
+                            <span className="text-sm text-stone-800 truncate">
+                              {h.hotel || "Hotel"}{h.customer ? ` · ${h.customer}` : ""}
+                            </span>
+                            <span className="text-xs text-stone-400 shrink-0">{fmt(hotelSoldTotal(h))}</span>
+                          </button>
+                        ))
+                      )
+                    )}
+                    {filePickerTab === "visa" && (
+                      visibleVisaBookingsForFiles.length === 0 ? (
+                        <p className="text-sm text-stone-400 text-center py-6">No visa bookings to add yet.</p>
+                      ) : (
+                        visibleVisaBookingsForFiles.map((v) => (
+                          <button
+                            key={v.id}
+                            onClick={async () => { await addItemToFile(openFile.id, "visa", v); setShowFilePicker(false); }}
+                            className="w-full text-left border border-stone-200 rounded-xl px-3 py-2 hover:bg-teal-50 hover:border-teal-300 flex items-center justify-between gap-2"
+                          >
+                            <span className="text-sm text-stone-800 truncate">
+                              {v.visaType || "Visa"} · {(v.customers || []).map((c) => c.name).filter(Boolean).join(", ") || "-"}
+                            </span>
+                            <span className="text-xs text-stone-400 shrink-0">{fmt(v.soldPrice)} {v.currency}</span>
+                          </button>
+                        ))
+                      )
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
         </>
         )}
@@ -5752,6 +6265,52 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           onSetRole={(role) => handleRoleChange(openPermissionsFor, role)}
           onSetPermission={(field, value) => handleTogglePermission(openPermissionsFor, field, value)}
         />
+      )}
+
+      {copyPickerSource && (
+        <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50" onClick={() => setCopyPickerSource(null)}>
+          <div
+            className="bg-white rounded-2xl border border-stone-200 p-5 w-full max-w-sm max-h-[80vh] flex flex-col"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-semibold text-stone-900">Copy to which file?</h3>
+              <button onClick={() => setCopyPickerSource(null)} className="text-stone-400 hover:text-stone-700 p-1">
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-xs text-stone-400 mb-3">
+              Adds a copy of this {FILE_SOURCE_LABELS[copyPickerSource.type] || copyPickerSource.type} record's price — the original stays untouched.
+            </p>
+
+            <button
+              onClick={createFileAndCopySource}
+              className="mb-3 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 flex items-center justify-center gap-2"
+            >
+              <Plus size={15} /> New file (auto serial number)
+            </button>
+
+            <p className="text-xs text-stone-500 mb-1.5">Or an existing file</p>
+            <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 overflow-y-auto">
+              {visibleFiles.length === 0 ? (
+                <p className="text-xs text-stone-400 text-center py-4">No existing files yet.</p>
+              ) : (
+                visibleFiles.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => copySourceToFile(f.id)}
+                    className="w-full text-left px-3 py-2 hover:bg-teal-50 text-sm flex items-center justify-between gap-2"
+                  >
+                    <span className="truncate">
+                      {f.serial} {f.company ? `· ${f.company}` : ""}
+                    </span>
+                    <span className="text-xs text-stone-400 shrink-0">{(f.items || []).length} item{(f.items || []).length === 1 ? "" : "s"}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
