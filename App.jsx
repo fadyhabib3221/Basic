@@ -250,6 +250,28 @@ const getEmptyVisaForm = () => ({
   bookingDate: todayDateStr(),
 });
 
+// A function (not a static object) so every new/reset transfer booking picks up TODAY'S
+// date at the moment it's created, same rationale as getEmptyVisaForm() above.
+const getEmptyCarForm = () => ({
+  id: null,
+  customerName: "",
+  phone: "",
+  routeFrom: "",
+  routeTo: "",
+  carType: "",
+  supplier: "",
+  hasWaiting: false,
+  waitingHours: "",
+  isRoundTrip: false,
+  driverTip: "",
+  startsAtAirport: false,
+  flightNumber: "",
+  currency: "EGP",
+  netPrice: "",
+  soldPrice: "",
+  bookingDate: todayDateStr(),
+});
+
 // Given a ticket number like "077-1234567890", returns the same prefix with the numeric
 // part increased by one, keeping the same digit width (e.g. "077-1234567891").
 // Returns "" if the ticket number doesn't match the expected PREFIX-DIGITS shape.
@@ -784,6 +806,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [showAddVisaSupplierPanel, setShowAddVisaSupplierPanel] = useState(false);
   const [newVisaSupplierDraft, setNewVisaSupplierDraft] = useState("");
 
+  // ---------- Transfers (Cars) ----------
+  const [carBookings, setCarBookings] = useState([]);
+  const [carForm, setCarForm] = useState(getEmptyCarForm);
+  const [carError, setCarError] = useState("");
+  const [carEditingId, setCarEditingId] = useState(null);
+  // Whether the "other" free-text supplier field is shown instead of the dropdown list —
+  // same pattern as visaSupplierOther above.
+  const [carSupplierOther, setCarSupplierOther] = useState(false);
+  const [showAddCarSupplierPanel, setShowAddCarSupplierPanel] = useState(false);
+  const [newCarSupplierDraft, setNewCarSupplierDraft] = useState("");
+
   // ---------- Files ----------
   // A "file" bundles together copies (snapshots) of records already entered under
   // Flights/Hotels/Visa/Transportation, so their prices can be gathered and reviewed
@@ -834,7 +867,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Every value ever entered (companies, customers, airlines, cities) is kept here so it
   // can be offered as an autocomplete suggestion later, even if the original ticket is deleted.
-  const [suggestions, setSuggestions] = useState({ companies: [], customers: [], airlines: [], cities: [], suppliers: [], hotelNames: [], visaSuppliers: [] });
+  const [suggestions, setSuggestions] = useState({ companies: [], customers: [], airlines: [], cities: [], suppliers: [], hotelNames: [], visaSuppliers: [], carSuppliers: [] });
 
   // Tracks whether the one-time "create the main account" step has ever been completed.
   // Once true, the first-run setup screen must never be shown again — even if the employee
@@ -863,10 +896,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   useEffect(() => {
     (async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, filesRes, employeesRes, sessionRes, suggestionsRes, setupRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, sessionRes, suggestionsRes, setupRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:visas", true).catch(() => null),
+          window.storage.get("tickets:cars", true).catch(() => null),
           window.storage.get("tickets:files", true).catch(() => null),
           window.storage.get("tickets:employees", true).catch(() => null),
           window.storage.get("session:user", false).catch(() => null),
@@ -876,11 +910,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         const ticketsData = ticketsRes && ticketsRes.value ? JSON.parse(ticketsRes.value) : [];
         const hotelsData = hotelsRes && hotelsRes.value ? JSON.parse(hotelsRes.value) : [];
         const visasData = visasRes && visasRes.value ? JSON.parse(visasRes.value) : [];
+        const carsData = carsRes && carsRes.value ? JSON.parse(carsRes.value) : [];
         const filesData = filesRes && filesRes.value ? JSON.parse(filesRes.value) : [];
         const employeesData = employeesRes && employeesRes.value ? JSON.parse(employeesRes.value) : [];
         setTickets(ticketsData);
         setHotelBookings(hotelsData);
         setVisaBookings(visasData);
+        setCarBookings(carsData);
         setFiles(filesData);
         setEmployees(employeesData);
         // If accounts already exist, the setup step has clearly already happened even if the
@@ -897,6 +933,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               suppliers: parsed.suppliers || [],
               hotelNames: parsed.hotelNames || [],
               visaSuppliers: parsed.visaSuppliers || [],
+              carSuppliers: parsed.carSuppliers || [],
             });
           } catch (e) {
             // ignore malformed suggestions data
@@ -940,10 +977,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     let cancelled = false;
     const loadCoreData = async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, filesRes, employeesRes, suggestionsRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, suggestionsRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:visas", true).catch(() => null),
+          window.storage.get("tickets:cars", true).catch(() => null),
           window.storage.get("tickets:files", true).catch(() => null),
           window.storage.get("tickets:employees", true).catch(() => null),
           window.storage.get("tickets:suggestions", true).catch(() => null),
@@ -966,6 +1004,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         if (visasRes && visasRes.value) {
           try {
             setVisaBookings(JSON.parse(visasRes.value));
+          } catch (e) {
+            // ignore malformed data for this cycle, try again next poll
+          }
+        }
+        if (carsRes && carsRes.value) {
+          try {
+            setCarBookings(JSON.parse(carsRes.value));
           } catch (e) {
             // ignore malformed data for this cycle, try again next poll
           }
@@ -995,6 +1040,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               suppliers: parsed.suppliers || [],
               hotelNames: parsed.hotelNames || [],
               visaSuppliers: parsed.visaSuppliers || [],
+              carSuppliers: parsed.carSuppliers || [],
             });
           } catch (e) {
             // ignore malformed data for this cycle, try again next poll
@@ -1266,6 +1312,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       await window.storage.set("tickets:visas", JSON.stringify(next), true);
     } catch (e) {
       setVisaError("Could not save data, please try again");
+    }
+  };
+
+  const persistCarBookings = async (next) => {
+    setCarBookings(next);
+    try {
+      await window.storage.set("tickets:cars", JSON.stringify(next), true);
+    } catch (e) {
+      setCarError("Could not save data, please try again");
     }
   };
 
@@ -1672,6 +1727,105 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleDeleteVisaSupplierName = (name) => {
     persistSuggestions({ ...suggestions, visaSuppliers: (suggestions.visaSuppliers || []).filter((s) => s !== name) });
+  };
+
+  const resetCarForm = () => {
+    setCarForm(getEmptyCarForm());
+    setCarEditingId(null);
+    setCarError("");
+    setCarSupplierOther(false);
+  };
+
+  const handleSaveCar = async () => {
+    setCarError("");
+    if (!carForm.customerName.trim()) {
+      setCarError("Please enter the customer name");
+      return;
+    }
+    if (!carForm.routeFrom.trim() || !carForm.routeTo.trim()) {
+      setCarError("Please fill in the route (from and to)");
+      return;
+    }
+    if (!carForm.carType.trim()) {
+      setCarError("Please fill in the car type");
+      return;
+    }
+    if (!carForm.supplier.trim()) {
+      setCarError("Please fill in the supplier field");
+      return;
+    }
+    if (carForm.startsAtAirport && !carForm.flightNumber.trim()) {
+      setCarError("Please enter the flight number");
+      return;
+    }
+    if (carForm.netPrice === "" || carForm.soldPrice === "") {
+      setCarError("Please fill in the net and sold prices");
+      return;
+    }
+    if (carEditingId) {
+      const next = carBookings.map((c) => (c.id === carEditingId ? { ...c, ...carForm, id: carEditingId } : c));
+      await persistCarBookings(next);
+    } else {
+      const record = {
+        ...carForm,
+        id: `C-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      };
+      await persistCarBookings([record, ...carBookings]);
+    }
+    resetCarForm();
+  };
+
+  const handleEditCarClick = (c) => {
+    setCarEditingId(c.id);
+    setCarForm({
+      id: c.id,
+      customerName: c.customerName || "",
+      phone: c.phone || "",
+      routeFrom: c.routeFrom || "",
+      routeTo: c.routeTo || "",
+      carType: c.carType || "",
+      supplier: c.supplier || "",
+      hasWaiting: !!c.hasWaiting,
+      waitingHours: c.waitingHours || "",
+      isRoundTrip: !!c.isRoundTrip,
+      driverTip: c.driverTip || "",
+      startsAtAirport: !!c.startsAtAirport,
+      flightNumber: c.flightNumber || "",
+      currency: c.currency || "EGP",
+      netPrice: c.netPrice,
+      soldPrice: c.soldPrice,
+      bookingDate: c.bookingDate || todayDateStr(),
+    });
+    setCarSupplierOther(!!c.supplier && !(suggestions.carSuppliers || []).includes(c.supplier));
+    setCarError("");
+  };
+
+  const handleDeleteCar = (id) => {
+    requestConfirm("Delete this transfer booking? This cannot be undone.", async () => {
+      await persistCarBookings(carBookings.filter((c) => c.id !== id));
+      if (carEditingId === id) resetCarForm();
+      setConfirmDialog(null);
+    });
+  };
+
+  // Registers a new supplier name in the Transfers page's OWN supplier list — kept
+  // separate from the Hotels/Flights/Visa supplier lists, via the "+ Add supplier"
+  // button at the top of the Transfers page.
+  const handleAddCarSupplierName = () => {
+    const name = newCarSupplierDraft.trim();
+    if (!name) return;
+    const duplicate = (suggestions.carSuppliers || []).some((s) => s.toLowerCase() === name.toLowerCase());
+    if (duplicate) {
+      setCarError("This supplier already exists");
+      return;
+    }
+    persistSuggestions({ ...suggestions, carSuppliers: [...(suggestions.carSuppliers || []), name] });
+    setNewCarSupplierDraft("");
+    setCarError("");
+  };
+
+  const handleDeleteCarSupplierName = (name) => {
+    persistSuggestions({ ...suggestions, carSuppliers: (suggestions.carSuppliers || []).filter((s) => s !== name) });
   };
 
   // ---------- Auth ----------
@@ -5737,10 +5891,368 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         )}
 
         {activeSection === "cars" && (
+        <>
+        {/* Button to register new supplier names for the Transfers page's own supplier
+            list — kept separate from the Hotels/Flights/Visa supplier lists. */}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <button
+            onClick={() => setShowAddCarSupplierPanel(!showAddCarSupplierPanel)}
+            className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-xl px-3 py-2 hover:bg-teal-50 flex items-center gap-1.5"
+          >
+            <Plus size={14} /> Add supplier
+          </button>
+        </div>
+
+        {showAddCarSupplierPanel && (
+          <div className="bg-white border border-stone-200 rounded-2xl p-4 mb-4">
+            <h3 className="text-sm font-bold text-stone-700 mb-3">Transfer suppliers</h3>
+            <div className="flex gap-2 mb-3">
+              <input
+                className="w-full max-w-xs border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                value={newCarSupplierDraft}
+                onChange={(e) => setNewCarSupplierDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddCarSupplierName()}
+                placeholder="Supplier name"
+              />
+              <button
+                onClick={handleAddCarSupplierName}
+                className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110"
+              >
+                Add
+              </button>
+            </div>
+            {(suggestions.carSuppliers || []).length === 0 ? (
+              <p className="text-xs text-stone-400">No suppliers saved yet</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {(suggestions.carSuppliers || []).map((s) => (
+                  <span
+                    key={s}
+                    className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700"
+                  >
+                    {s}
+                    <button onClick={() => handleDeleteCarSupplierName(s)} className="text-red-500 hover:text-red-700">
+                      <Trash2 size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {carError && (
+          <div className="text-sm rounded-xl px-3 py-2 mb-4 bg-red-50 text-red-700">{carError}</div>
+        )}
+
+        {canAddTickets && (
+          <div className="bg-white border border-stone-200 rounded-2xl p-5 mb-6">
+            <h3 className="text-sm font-bold text-stone-700 mb-4">
+              {carEditingId ? "Edit transfer booking" : "New transfer booking"}
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Customer name</label>
+                <input
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={carForm.customerName}
+                  onChange={(e) => setCarForm({ ...carForm, customerName: e.target.value })}
+                  placeholder="Customer name"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Phone number</label>
+                <input
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={carForm.phone}
+                  onChange={(e) => setCarForm({ ...carForm, phone: e.target.value })}
+                  placeholder="Phone number"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Route — from</label>
+                <input
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={carForm.routeFrom}
+                  onChange={(e) => setCarForm({ ...carForm, routeFrom: e.target.value })}
+                  placeholder="e.g. Cairo Airport"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Route — to</label>
+                <input
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={carForm.routeTo}
+                  onChange={(e) => setCarForm({ ...carForm, routeTo: e.target.value })}
+                  placeholder="e.g. Downtown Hotel"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Car type</label>
+                <input
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={carForm.carType}
+                  onChange={(e) => setCarForm({ ...carForm, carType: e.target.value })}
+                  placeholder="e.g. Sedan, Van, Coaster"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Supplier</label>
+                {carSupplierOther ? (
+                  <div className="flex gap-2">
+                    <input
+                      className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={carForm.supplier}
+                      onChange={(e) => setCarForm({ ...carForm, supplier: e.target.value })}
+                      placeholder="Enter supplier name"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setCarSupplierOther(false); setCarForm({ ...carForm, supplier: "" }); }}
+                      className="shrink-0 text-xs text-stone-500 hover:text-teal-800 border border-stone-300 rounded-xl px-2"
+                    >
+                      List
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                    value={carForm.supplier}
+                    onChange={(e) => {
+                      if (e.target.value === "__other__") {
+                        setCarSupplierOther(true);
+                        setCarForm({ ...carForm, supplier: "" });
+                      } else {
+                        setCarForm({ ...carForm, supplier: e.target.value });
+                      }
+                    }}
+                  >
+                    <option value="">Select supplier</option>
+                    {(suggestions.carSuppliers || []).map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                    <option value="__other__">Other</option>
+                  </select>
+                )}
+              </div>
+            </div>
+
+            {/* Waiting hours / round trip / driver tip */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="flex items-center gap-2 text-xs text-stone-500 mb-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={carForm.hasWaiting}
+                    onChange={(e) => setCarForm({ ...carForm, hasWaiting: e.target.checked, waitingHours: e.target.checked ? carForm.waitingHours : "" })}
+                    className="rounded border-stone-300"
+                  />
+                  Waiting hours
+                </label>
+                {carForm.hasWaiting && (
+                  <input
+                    type="number"
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={carForm.waitingHours}
+                    onChange={(e) => setCarForm({ ...carForm, waitingHours: e.target.value })}
+                    placeholder="Number of hours"
+                  />
+                )}
+              </div>
+              <div>
+                <label className="flex items-center gap-2 text-xs text-stone-500 mb-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={carForm.isRoundTrip}
+                    onChange={(e) => setCarForm({ ...carForm, isRoundTrip: e.target.checked })}
+                    className="rounded border-stone-300"
+                  />
+                  Round trip (go &amp; return)
+                </label>
+                <p className="text-xs text-stone-400 mt-2">
+                  {carForm.isRoundTrip ? "Round trip" : "One way"}
+                </p>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Driver tip</label>
+                <input
+                  type="number"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={carForm.driverTip}
+                  onChange={(e) => setCarForm({ ...carForm, driverTip: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            {/* Flight number — only relevant when the run starts at the airport */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="flex items-center gap-2 text-xs text-stone-500 mb-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={carForm.startsAtAirport}
+                    onChange={(e) => setCarForm({ ...carForm, startsAtAirport: e.target.checked, flightNumber: e.target.checked ? carForm.flightNumber : "" })}
+                    className="rounded border-stone-300"
+                  />
+                  Starts at the airport
+                </label>
+                {carForm.startsAtAirport && (
+                  <input
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={carForm.flightNumber}
+                    onChange={(e) => setCarForm({ ...carForm, flightNumber: e.target.value })}
+                    placeholder="Flight number"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Currency</label>
+                <select
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                  value={carForm.currency}
+                  onChange={(e) => setCarForm({ ...carForm, currency: e.target.value })}
+                >
+                  {HOTEL_CURRENCIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Price net</label>
+                <input
+                  type="number"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={carForm.netPrice}
+                  onChange={(e) => setCarForm({ ...carForm, netPrice: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Sold</label>
+                <input
+                  type="number"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={carForm.soldPrice}
+                  onChange={(e) => setCarForm({ ...carForm, soldPrice: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSaveCar}
+                className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110"
+              >
+                {carEditingId ? "Save changes" : "Add transfer booking"}
+              </button>
+              {carEditingId && (
+                <button
+                  onClick={resetCarForm}
+                  className="text-sm text-stone-500 hover:text-stone-700 border border-stone-300 rounded-xl px-4 py-2"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Transfer bookings list */}
+        {carBookings.length === 0 ? (
           <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
             <Car size={40} className="mx-auto mb-3 text-stone-300" />
-            <p className="text-sm">Transportation section — nothing here yet.</p>
+            <p className="text-sm">No transfer bookings yet.</p>
           </div>
+        ) : (
+          <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-stone-50 text-stone-500 text-xs">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-semibold">Customer</th>
+                    <th className="text-left px-4 py-3 font-semibold">Phone</th>
+                    <th className="text-left px-4 py-3 font-semibold">Route</th>
+                    <th className="text-left px-4 py-3 font-semibold">Car type</th>
+                    <th className="text-left px-4 py-3 font-semibold">Supplier</th>
+                    <th className="text-left px-4 py-3 font-semibold">Trip</th>
+                    <th className="text-left px-4 py-3 font-semibold">Waiting</th>
+                    <th className="text-left px-4 py-3 font-semibold">Flight #</th>
+                    <th className="text-right px-4 py-3 font-semibold">Driver tip</th>
+                    <th className="text-right px-4 py-3 font-semibold">Net</th>
+                    <th className="text-right px-4 py-3 font-semibold">Sold</th>
+                    <th className="text-right px-4 py-3 font-semibold">Profit</th>
+                    <th className="text-right px-4 py-3 font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {carBookings.map((c) => {
+                    const net = parseFloat(c.netPrice) || 0;
+                    const sold = parseFloat(c.soldPrice) || 0;
+                    const profit = sold - net;
+                    return (
+                      <tr key={c.id} className="hover:bg-stone-50">
+                        <td className="px-4 py-3 text-stone-700">{c.customerName}</td>
+                        <td className="px-4 py-3 text-stone-700">{c.phone || "-"}</td>
+                        <td className="px-4 py-3 text-stone-700">{c.routeFrom} → {c.routeTo}</td>
+                        <td className="px-4 py-3 text-stone-700">{c.carType}</td>
+                        <td className="px-4 py-3 text-stone-700">{c.supplier}</td>
+                        <td className="px-4 py-3 text-stone-700">{c.isRoundTrip ? "Round trip" : "One way"}</td>
+                        <td className="px-4 py-3 text-stone-700">
+                          {c.hasWaiting ? `${c.waitingHours || 0} h` : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-stone-700">
+                          {c.startsAtAirport ? (c.flightNumber || "-") : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-right text-stone-700">
+                          {c.driverTip ? `${fmt(parseFloat(c.driverTip) || 0)} ${c.currency}` : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-right text-stone-700">{fmt(net)} {c.currency}</td>
+                        <td className="px-4 py-3 text-right text-stone-700">{fmt(sold)} {c.currency}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-emerald-700">{fmt(profit)} {c.currency}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {canEditTickets && (
+                              <button
+                                onClick={() => handleEditCarClick(c)}
+                                className="text-teal-800 hover:text-teal-900"
+                                title="Edit"
+                              >
+                                <Pencil size={16} />
+                              </button>
+                            )}
+                            {canDeleteTickets && (
+                              <button
+                                onClick={() => handleDeleteCar(c.id)}
+                                className="text-red-500 hover:text-red-700"
+                                title="Delete"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        </>
         )}
 
         {activeSection === "files" && (
