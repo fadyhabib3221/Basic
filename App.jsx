@@ -733,9 +733,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [notesDraft, setNotesDraft] = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
   // Refund tracking on the ticket detail view: two amounts (refunded by the airline,
-  // refunded to the customer) that can be recorded/edited per ticket.
+  // refunded to the customer) plus which customer (when a booking has more than one)
+  // the refund belongs to, recorded/edited per ticket.
   const [showRefundForm, setShowRefundForm] = useState(false);
-  const [refundDraft, setRefundDraft] = useState({ airlineAmount: "", customerAmount: "" });
+  const [refundDraft, setRefundDraft] = useState({ airlineAmount: "", customerAmount: "", customerIndex: 0 });
   const [refundSaved, setRefundSaved] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
@@ -1821,6 +1822,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setRefundDraft({
       airlineAmount: t.refund ? t.refund.airlineAmount : "",
       customerAmount: t.refund ? t.refund.customerAmount : "",
+      customerIndex: t.refund && t.refund.customerIndex != null ? t.refund.customerIndex : 0,
     });
     setRefundSaved(false);
   };
@@ -1829,7 +1831,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setNotesDraft("");
     setNotesSaved(false);
     setShowRefundForm(false);
-    setRefundDraft({ airlineAmount: "", customerAmount: "" });
+    setRefundDraft({ airlineAmount: "", customerAmount: "", customerIndex: 0 });
     setRefundSaved(false);
   };
   // Saves an edit to just the notes field of a ticket, without touching anything else.
@@ -1862,6 +1864,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const refund = {
       airlineAmount: refundDraft.airlineAmount,
       customerAmount: refundDraft.customerAmount,
+      customerIndex: refundDraft.customerIndex || 0,
       date: todayDateStr(),
     };
     const next = tickets.map((t) => {
@@ -1892,7 +1895,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       };
     });
     persistTickets(next);
-    setRefundDraft({ airlineAmount: "", customerAmount: "" });
+    setRefundDraft({ airlineAmount: "", customerAmount: "", customerIndex: 0 });
     setRefundSaved(false);
     setShowRefundForm(false);
   };
@@ -2304,11 +2307,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   });
 
   // Ticket-level status text used in the exported "Status" column, replacing the old
-  // per-customer numbering. A ticket can be reissued, refunded, both, or neither.
-  const ticketStatus = (t) => {
+  // per-customer numbering. "Reissued" applies to the whole booking (shown on the first
+  // customer's row); "Refunded" applies only to the specific customer the refund was
+  // recorded against, since a multi-customer booking may have just one refunded ticket.
+  const ticketStatus = (t, i) => {
     const parts = [];
-    if (t.isReissued) parts.push("Reissued");
-    if (hasRefund(t)) parts.push("Refunded");
+    if (i === 0 && t.isReissued) parts.push("Reissued");
+    if (hasRefund(t) && (t.refund.customerIndex || 0) === i) parts.push("Refunded");
     return parts.join(" & ");
   };
 
@@ -2335,7 +2340,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         "Employee": t.employee || "",
         "Company": t.company || "",
         "Supplier": t.supplier || "",
-        "Status": i === 0 ? ticketStatus(t) : "",
+        "Status": ticketStatus(t, i),
         "Customer": c.name || "",
         "Ticket number": c.ticketNumber || "",
         "From": t.from,
@@ -2352,16 +2357,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         "Notes": t.notes || "",
       }));
       // A refund, if one's been recorded, gets its own row directly under the original
-      // ticket's row(s) — its own "Type", with the two refund amounts in their own columns.
+      // ticket's row(s) — its own "Type", with the two refund amounts in their own columns,
+      // and the specific customer/ticket number it was recorded against.
       if (hasRefund(t)) {
+        const refundedCustomer = customers[t.refund.customerIndex || 0] || customers[0];
         rows.push({
           "Type": "Refund",
           "Employee": t.employee || "",
           "Company": t.company || "",
           "Supplier": "",
           "Status": "Refunded",
-          "Customer": "",
-          "Ticket number": `Refund — ${firstTicketNumber(t) || "ticket"}`,
+          "Customer": refundedCustomer ? refundedCustomer.name || "" : "",
+          "Ticket number": `Refund — ${(refundedCustomer && refundedCustomer.ticketNumber) || firstTicketNumber(t) || "ticket"}`,
           "From": "",
           "To": "",
           "Route": "",
@@ -4795,7 +4802,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <tbody>
                       {getCustomers(viewingTicket).map((c, i) => (
                         <tr key={i} className="border-t border-stone-100">
-                          <td className="px-3 py-2 text-stone-700">{c.name || "-"}</td>
+                          <td className="px-3 py-2 text-stone-700">
+                            {c.name || "-"}
+                            {hasRefund(viewingTicket) && (viewingTicket.refund.customerIndex || 0) === i && (
+                              <span className="ml-2 inline-block text-[10px] font-semibold text-sky-700 bg-sky-100 rounded-full px-2 py-0.5 align-middle">
+                                Refunded
+                              </span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-stone-700 font-mono">{c.ticketNumber || "-"}</td>
                         </tr>
                       ))}
@@ -4841,6 +4855,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 {!showRefundForm && (
                   hasRefund(viewingTicket) ? (
                     <div className="bg-sky-50 border border-sky-200 rounded-xl px-3 py-2 flex flex-wrap gap-4 text-sm">
+                      {getCustomers(viewingTicket).length > 1 && (
+                        <span className="w-full">
+                          <span className="text-xs text-sky-500 block">Refunded ticket</span>
+                          <span className="text-sky-900 font-medium">
+                            {(() => {
+                              const idx = viewingTicket.refund.customerIndex || 0;
+                              const c = getCustomers(viewingTicket)[idx];
+                              return c ? (c.name || `Customer ${idx + 1}`) + (c.ticketNumber ? ` — ${c.ticketNumber}` : "") : `Customer ${idx + 1}`;
+                            })()}
+                          </span>
+                        </span>
+                      )}
                       <span>
                         <span className="text-xs text-sky-500 block">Refunded by airline</span>
                         <span className="text-sky-900 font-medium">{fmt(viewingTicket.refund.airlineAmount)}</span>
@@ -4863,6 +4889,22 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
                 {showRefundForm && (
                   <div className="bg-sky-50 border border-sky-200 rounded-xl p-3">
+                    {getCustomers(viewingTicket).length > 1 && (
+                      <div className="mb-3">
+                        <label className="text-xs text-stone-500 block mb-1">Refunded ticket</label>
+                        <select
+                          className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                          value={refundDraft.customerIndex}
+                          onChange={(e) => setRefundDraft({ ...refundDraft, customerIndex: Number(e.target.value) })}
+                        >
+                          {getCustomers(viewingTicket).map((c, i) => (
+                            <option key={i} value={i}>
+                              {(c.name || `Customer ${i + 1}`) + (c.ticketNumber ? ` — ${c.ticketNumber}` : "")}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs text-stone-500 block mb-1">Refunded by airline</label>
@@ -4898,6 +4940,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           setRefundDraft({
                             airlineAmount: viewingTicket.refund ? viewingTicket.refund.airlineAmount : "",
                             customerAmount: viewingTicket.refund ? viewingTicket.refund.customerAmount : "",
+                            customerIndex: viewingTicket.refund && viewingTicket.refund.customerIndex != null ? viewingTicket.refund.customerIndex : 0,
                           });
                         }}
                         className="border border-stone-300 text-stone-600 text-sm rounded-xl px-4 py-2"
