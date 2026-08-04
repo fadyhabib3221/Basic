@@ -2060,10 +2060,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleSaveHotel = async () => {
     setHotelError("");
-    // Company name is optional — a blank company means an Individual booking, so it's
-    // no longer part of the required-fields check below.
-    if (!hotelForm.hotel.trim() || !hotelForm.supplier.trim()) {
-      setHotelError("Please fill in the hotel and supplier fields");
+    // Company name and supplier are both optional — a blank company means an Individual
+    // booking, and a blank supplier just means none was specified, so neither is part of
+    // the required-fields check below.
+    if (!hotelForm.hotel.trim()) {
+      setHotelError("Please fill in the hotel field");
       return;
     }
     const lines = hotelForm.roomLines || [];
@@ -2213,10 +2214,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setVisaError("");
     if (!visaForm.visaType.trim()) {
       setVisaError("Please fill in the visa field");
-      return;
-    }
-    if (!visaForm.supplier.trim()) {
-      setVisaError("Please fill in the supplier field");
       return;
     }
     if (!visaForm.customers[0] || !visaForm.customers[0].name.trim()) {
@@ -3461,13 +3458,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       c.name.trim() ? c : { ...c, name: (oldCustomers[i] && oldCustomers[i].name) || c.name }
     );
     const hasOwnDestinations = (form.destinations || []).some((d) => (d || "").trim());
-    const oldSupplier = oldTicket.supplier || "";
-    if (!form.supplier && oldSupplier && !SUPPLIERS.includes(oldSupplier)) setSupplierOther(true);
     setForm({
       ...form,
       oldTicketIssueDate: oldTicket.date || "",
       company: form.company || oldTicket.company || "",
-      supplier: form.supplier || oldSupplier,
       from: form.from || oldTicket.from || "",
       to: form.to || oldTicket.to || "",
       multiDestination: form.multiDestination || !!oldTicket.multiDestination,
@@ -5980,7 +5974,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               {supplierOther ? (
                 <div className="flex gap-2">
                   <input
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 ${form.supplier.trim() ? "border-blue-400 text-blue-700 font-medium bg-blue-50" : "border-stone-300"}`}
                     value={form.supplier}
                     onChange={(e) => setForm({ ...form, supplier: e.target.value })}
                     placeholder="Enter supplier name"
@@ -5996,7 +5990,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
               ) : (
                 <select
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                  className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 ${form.supplier ? "border-blue-400 text-blue-700 font-medium bg-blue-50" : "border-stone-300 bg-white"}`}
                   value={form.supplier}
                   onChange={(e) => {
                     if (e.target.value === "__other__") {
@@ -6893,7 +6887,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 {hotelSupplierOther ? (
                   <div className="flex gap-2">
                     <input
-                      className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 ${hotelForm.supplier.trim() ? "border-blue-400 text-blue-700 font-medium bg-blue-50" : "border-stone-300"}`}
                       value={hotelForm.supplier}
                       onChange={(e) => setHotelForm({ ...hotelForm, supplier: e.target.value })}
                       placeholder="Enter supplier name"
@@ -6909,7 +6903,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </div>
                 ) : (
                   <select
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                    className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 ${hotelForm.supplier ? "border-blue-400 text-blue-700 font-medium bg-blue-50" : "border-stone-300 bg-white"}`}
                     value={hotelForm.supplier}
                     onChange={(e) => {
                       if (e.target.value === "__other__") {
@@ -7663,7 +7657,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 {visaSupplierOther ? (
                   <div className="flex gap-2">
                     <input
-                      className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 ${visaForm.supplier.trim() ? "border-blue-400 text-blue-700 font-medium bg-blue-50" : "border-stone-300"}`}
                       value={visaForm.supplier}
                       onChange={(e) => setVisaForm({ ...visaForm, supplier: e.target.value })}
                       placeholder="Enter supplier name"
@@ -7679,7 +7673,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </div>
                 ) : (
                   <select
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                    className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 ${visaForm.supplier ? "border-blue-400 text-blue-700 font-medium bg-blue-50" : "border-stone-300 bg-white"}`}
                     value={visaForm.supplier}
                     onChange={(e) => {
                       if (e.target.value === "__other__") {
@@ -8247,7 +8241,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 {carSupplierOther ? (
                   <div className="flex gap-2">
                     <input
-                      className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 ${carForm.supplier.trim() ? "border-blue-400 text-blue-700 font-medium bg-blue-50" : "border-stone-300"}`}
                       value={carForm.supplier}
                       onChange={(e) => setCarForm({ ...carForm, supplier: e.target.value })}
                       placeholder="Enter supplier name"
@@ -8263,7 +8257,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </div>
                 ) : (
                   <select
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                    className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 ${carForm.supplier ? "border-blue-400 text-blue-700 font-medium bg-blue-50" : "border-stone-300 bg-white"}`}
                     value={carForm.supplier}
                     onChange={(e) => {
                       if (e.target.value === "__other__") {
