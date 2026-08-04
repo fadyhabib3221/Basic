@@ -38,6 +38,31 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+// ---------- Password hashing ----------
+// Employee passwords are stored as a SHA-256 hash (prefixed "sha256:") rather than
+// plain text, so anyone who ends up reading the raw stored employee data can't see
+// the actual password. Hashing happens client-side with the browser's built-in
+// Web Crypto API — no server involved.
+const HASH_PREFIX = "sha256:";
+
+const hashPassword = async (plain) => {
+  const data = new TextEncoder().encode(plain);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  const hex = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return HASH_PREFIX + hex;
+};
+
+// Compares a plain-text password the user just typed against a stored value. Supports
+// both the new hashed format and legacy plain-text entries (e.g. from an older backup),
+// so nothing breaks for accounts created before this change.
+const verifyPassword = async (storedValue, plainAttempt) => {
+  if (typeof storedValue !== "string") return false;
+  if (storedValue.startsWith(HASH_PREFIX)) {
+    return (await hashPassword(plainAttempt)) === storedValue;
+  }
+  return storedValue === plainAttempt; // legacy plain-text account
+};
+
 const monthKey = (dateStr) => (dateStr ? dateStr.slice(0, 7) : "No date");
 // Storage stays in the native YYYY-MM-DD format (required by <input type="date">),
 // but everywhere we display the date to the user we show it as DD-MMM-YYYY, with the
@@ -1143,7 +1168,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [newEmployeeGradeOpen, setNewEmployeeGradeOpen] = useState(null); // which of the three Grade dropdowns is open on the Add employee page: "manager" | "supervisor" | "employee" | null
   const [openPermissionsFor, setOpenPermissionsFor] = useState(null); // username, or null if closed
   const [manageError, setManageError] = useState("");
-  const [visiblePasswords, setVisiblePasswords] = useState({});
   const [editingUsername, setEditingUsername] = useState(null);
   const [editDraft, setEditDraft] = useState({ name: "", username: "", password: "" });
   const [editShowPassword, setEditShowPassword] = useState(false);
@@ -2640,7 +2664,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const admin = {
       name: setupName.trim(),
       username: setupUsername.trim(),
-      password: setupPassword,
+      password: await hashPassword(setupPassword),
       isAdmin: true,
     };
     await persistEmployees([admin]);
@@ -2659,9 +2683,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       setLoginError(`Too many failed attempts. Try again in ${secondsLeft}s.`);
       return;
     }
-    const match = (employees || []).find(
-      (e) => e.username === loginUsername.trim() && e.password === loginPassword
-    );
+    const candidate = (employees || []).find((e) => e.username === loginUsername.trim());
+    const match = candidate && (await verifyPassword(candidate.password, loginPassword)) ? candidate : null;
     if (!match) {
       const nextCount = loginFailCount + 1;
       setLoginFailCount(nextCount);
@@ -2696,7 +2719,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setCurrentUser(null);
     setShowManage(false);
     setEditingUsername(null);
-    setVisiblePasswords({});
   };
 
   // Lets the main account remotely sign out any currently-online employee (or itself)
@@ -2737,6 +2759,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       {
         ...newEmployee,
         username: newEmployee.username.trim(),
+        password: await hashPassword(newEmployee.password),
         isAdmin: false,
         ...reconcilePermissions(newEmployee),
       },
@@ -2866,10 +2889,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     await persistEmployees((employees || []).filter((e) => e.username !== username));
   };
 
-  const togglePasswordVisible = (username) => {
-    setVisiblePasswords((prev) => ({ ...prev, [username]: !prev[username] }));
-  };
-
   const startEditEmployee = (emp) => {
     setManageError("");
     setEditShowPassword(false);
@@ -2908,9 +2927,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       setManageError("That username is already taken by another account");
       return;
     }
+    const targetPassword =
+      editDraft.password === targetBeingEdited.password
+        ? targetBeingEdited.password
+        : await hashPassword(editDraft.password);
     const next = (employees || []).map((e) =>
       e.username === editingUsername
-        ? { ...e, name: trimmedName, username: trimmedUsername, password: editDraft.password }
+        ? { ...e, name: trimmedName, username: trimmedUsername, password: targetPassword }
         : e
     );
     await persistEmployees(next);
@@ -2945,9 +2968,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (clash) {
       return "That username is already taken by another account";
     }
+    const targetPassword =
+      draft.password === target.password ? target.password : await hashPassword(draft.password);
     const next = (employees || []).map((e) =>
       e.username === username
-        ? { ...e, name: trimmedName, username: trimmedUsername, password: draft.password }
+        ? { ...e, name: trimmedName, username: trimmedUsername, password: targetPassword }
         : e
     );
     await persistEmployees(next);
@@ -2968,7 +2993,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return;
     }
     const me = (employees || []).find((e) => e.username === currentUser.username);
-    if (!me || me.password !== currentPasswordInput) {
+    if (!me || !(await verifyPassword(me.password, currentPasswordInput))) {
       setPasswordError("Current password is incorrect");
       return;
     }
@@ -2980,8 +3005,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       setPasswordError("New password should be at least 4 characters");
       return;
     }
+    const hashedNew = await hashPassword(newPasswordInput);
     const next = (employees || []).map((e) =>
-      e.username === currentUser.username ? { ...e, password: newPasswordInput } : e
+      e.username === currentUser.username ? { ...e, password: hashedNew } : e
     );
     await persistEmployees(next);
     setPasswordSuccess("Password updated successfully");
@@ -5284,14 +5310,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         </td>
                         <td className="px-3 py-2 text-stone-500">{e.username}</td>
                         <td className="px-3 py-2 text-stone-500">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono">
-                              {visiblePasswords[e.username] ? e.password : "••••••••"}
-                            </span>
-                            <button onClick={() => togglePasswordVisible(e.username)} className="text-stone-400 hover:text-teal-800">
-                              {visiblePasswords[e.username] ? <EyeOff size={14} /> : <Eye size={14} />}
-                            </button>
-                          </div>
+                          <span className="font-mono" title="Passwords are stored securely and can't be viewed — click the employee's name to set a new one">••••••••</span>
                         </td>
                         <td className="px-3 py-2 text-stone-500">
                           {e.isAdmin ? (
