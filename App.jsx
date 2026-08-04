@@ -478,6 +478,31 @@ const DEFAULT_SECTIONS = { flights: true, hotels: true, visa: true, cars: true, 
 // resolves to full access rather than blocking every section.
 const employeeSections = (emp) => ({ ...DEFAULT_SECTIONS, ...((emp && emp.sections) || {}) });
 
+// Fine-grained permissions — view all / edit / delete — set independently for each of
+// the five sections, on top of the on/off "section access" toggle above. Flights, Hotels,
+// and Files track which employee created each record, so "view all" has real meaning
+// there (off = only your own records); Visa and Transportation bookings were never tagged
+// with an owning employee, so those two sections have no "view all" toggle and are always
+// fully visible to anyone who has access to the section at all — only Edit/Delete apply.
+const SECTIONS_WITH_OWNERSHIP = ["flights", "hotels", "files"];
+// Every existing employee predates this feature, so a section with nothing stored in
+// sectionPerms falls back to that employee's old, single account-wide
+// canViewAll/canEdit/canDelete values — permissions stay exactly as they were until the
+// main account deliberately customizes a specific section.
+const employeeSectionPerm = (emp, section) => {
+  const legacy = {
+    canViewAll: !!(emp && (emp.canViewAll || emp.canEdit || emp.canDelete)),
+    canEdit: !!(emp && emp.canEdit),
+    canDelete: !!(emp && emp.canDelete),
+  };
+  const stored = (emp && emp.sectionPerms && emp.sectionPerms[section]) || {};
+  const merged = { ...legacy, ...stored };
+  if (emp && emp.isAccounting) return { canViewAll: true, canEdit: false, canDelete: false };
+  // Editing or deleting in a section implies being able to view all records in it.
+  merged.canViewAll = merged.canViewAll || merged.canEdit || merged.canDelete;
+  return merged;
+};
+
 // Applies the coherence rules that keep the six permission toggles consistent with
 // each other, no matter which one was just changed by hand:
 // - Editing, deleting, or accounting access all require view access first.
@@ -504,6 +529,9 @@ const emptyNewEmployee = {
   canManageCompanies: false,
   isOwner: false,
   sections: { ...DEFAULT_SECTIONS },
+  // Per-section view-all/edit/delete overrides; empty until customized per section, in
+  // which case each section falls back to the account-wide toggles above.
+  sectionPerms: {},
 };
 
 // Full-screen modal for editing one employee's grade and detailed permissions. Centered
@@ -511,7 +539,7 @@ const emptyNewEmployee = {
 // fully visible and easy to use — this is the one place permissions for an existing
 // employee are changed. Closes itself if the employee record disappears (e.g. deleted
 // from another tab) or is promoted to a main account (which no longer uses these toggles).
-const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, onSetSection, onSave, onDelete }) => {
+const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, onSetSection, onSetSectionPerm, onSave, onDelete }) => {
   // Name/username/password are edited right here, not in the employee table — the
   // table's name cell is a plain, non-editable label that only opens this modal.
   const [draft, setDraft] = useState({ name: "", username: "", password: "" });
@@ -622,27 +650,6 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
         <p className="text-xs text-stone-500 mb-1">Individual permissions</p>
         <div className="border border-stone-200 rounded-xl px-3 divide-y divide-stone-100 mb-4">
           <ToggleSwitch
-            label="View all tickets"
-            description="See every employee's tickets, not just their own"
-            checked={emp.canViewAll || emp.canEdit || emp.canDelete}
-            disabled={emp.isAccounting || emp.canEdit || emp.canDelete}
-            onChange={(v) => onSetPermission("canViewAll", v)}
-          />
-          <ToggleSwitch
-            label="Edit tickets"
-            description="Edit any ticket they can see"
-            checked={emp.canEdit}
-            disabled={emp.isAccounting}
-            onChange={(v) => onSetPermission("canEdit", v)}
-          />
-          <ToggleSwitch
-            label="Delete tickets"
-            description="Permanently remove any ticket they can see"
-            checked={emp.canDelete}
-            disabled={emp.isAccounting}
-            onChange={(v) => onSetPermission("canDelete", v)}
-          />
-          <ToggleSwitch
             label="Accounting mode"
             description="View all tickets, but the only edit allowed is the Notes field"
             checked={emp.isAccounting}
@@ -662,16 +669,50 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
           />
         </div>
 
-        <p className="text-xs text-stone-500 mb-1">Section access</p>
-        <div className="border border-stone-200 rounded-xl px-3 divide-y divide-stone-100">
-          {SECTION_OPTIONS.map((s) => (
-            <ToggleSwitch
-              key={s.value}
-              label={s.label}
-              checked={!!sections[s.value]}
-              onChange={(v) => onSetSection(s.value, v)}
-            />
-          ))}
+        <p className="text-xs text-stone-500 mb-1">Section access &amp; permissions</p>
+        <p className="text-[11px] text-stone-400 mb-2">
+          Turn a section on or off, then set exactly what they can do inside it — view/edit/delete are independent per section.
+        </p>
+        <div className="space-y-2">
+          {SECTION_OPTIONS.map((s) => {
+            const sectionOn = !!sections[s.value];
+            const perm = employeeSectionPerm(emp, s.value);
+            const hasOwnership = SECTIONS_WITH_OWNERSHIP.includes(s.value);
+            return (
+              <div key={s.value} className="border border-stone-200 rounded-xl px-3 divide-y divide-stone-100 overflow-hidden">
+                <ToggleSwitch
+                  label={s.label}
+                  checked={sectionOn}
+                  onChange={(v) => onSetSection(s.value, v)}
+                />
+                {sectionOn && (
+                  <div className={emp.isAccounting ? "opacity-50 pointer-events-none" : ""}>
+                    {hasOwnership && (
+                      <ToggleSwitch
+                        label="View all"
+                        description={`See every employee's ${s.label.toLowerCase()} records, not just their own`}
+                        checked={perm.canViewAll}
+                        disabled={perm.canEdit || perm.canDelete}
+                        onChange={(v) => onSetSectionPerm(s.value, "canViewAll", v)}
+                      />
+                    )}
+                    <ToggleSwitch
+                      label="Edit"
+                      description={`Edit ${s.label.toLowerCase()} records they can see`}
+                      checked={perm.canEdit}
+                      onChange={(v) => onSetSectionPerm(s.value, "canEdit", v)}
+                    />
+                    <ToggleSwitch
+                      label="Delete"
+                      description={`Permanently remove ${s.label.toLowerCase()} records they can see`}
+                      checked={perm.canDelete}
+                      onChange={(v) => onSetSectionPerm(s.value, "canDelete", v)}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {onDelete && (
@@ -2646,6 +2687,25 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     await persistEmployees(next);
   };
 
+  // Sets one of View all / Edit / Delete for one specific section (Flights, Hotels, Visa,
+  // Transportation, or Files), independent of every other section's permissions. Edit or
+  // Delete being turned on implies View all is on too for that same section, mirroring the
+  // coherence rule reconcilePermissions applies to the old account-wide toggles.
+  const handleToggleSectionPermission = async (username, section, field, checked) => {
+    if (!currentUser.isAdmin && !isOwnerUser) {
+      setManageError("Only the main account can change employee permissions");
+      return;
+    }
+    const next = (employees || []).map((e) => {
+      if (e.username !== username) return e;
+      const current = employeeSectionPerm(e, section);
+      const updated = { ...current, [field]: checked };
+      updated.canViewAll = updated.canViewAll || updated.canEdit || updated.canDelete;
+      return { ...e, sectionPerms: { ...(e.sectionPerms || {}), [section]: updated } };
+    });
+    await persistEmployees(next);
+  };
+
   // Promotes an employee to a main/admin account. Any main account can promote another one.
   const handlePromoteToAdmin = async (username) => {
     if (!currentUser.isAdmin) {
@@ -3475,16 +3535,28 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (firstAllowed) setActiveSection(firstAllowed.value);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, activeSection, mySections.flights, mySections.hotels, mySections.visa, mySections.cars, mySections.files]);
-  const canViewAllTickets =
-    !!currentUser &&
-    (currentUser.isAdmin ||
-      !!(
-        currentEmployeeRecord &&
-        (currentEmployeeRecord.canViewAll ||
-          currentEmployeeRecord.isAccounting ||
-          currentEmployeeRecord.canEdit ||
-          currentEmployeeRecord.canDelete)
-      ));
+  // View all / Edit / Delete, resolved independently for one section at a time. The main
+  // account always gets everything; an accounting account gets view-all everywhere but
+  // never edit/delete (their only allowed edit anywhere is the Notes field); everyone
+  // else gets whatever was individually granted for that specific section (see
+  // employeeSectionPerm — falls back to their old account-wide toggles if a section was
+  // never customized).
+  const sectionPermFor = (section) => {
+    if (!currentUser) return { canViewAll: false, canEdit: false, canDelete: false };
+    if (currentUser.isAdmin) return { canViewAll: true, canEdit: true, canDelete: true };
+    return employeeSectionPerm(currentEmployeeRecord, section);
+  };
+  const flightsPerm = sectionPermFor("flights");
+  const hotelsPerm = sectionPermFor("hotels");
+  const visaPerm = sectionPermFor("visa");
+  const carsPerm = sectionPermFor("cars");
+  const filesPerm = sectionPermFor("files");
+  // The Flights section is the app's original/default section, so the handful of
+  // generic (non-section-scoped) helpers below — the flight ticket handlers, the
+  // top-header badge, and the flight ticket detail page — keep using these names.
+  const canViewAllTickets = flightsPerm.canViewAll;
+  const canEditTickets = flightsPerm.canEdit;
+  const canDeleteTickets = flightsPerm.canDelete;
   // Accounting accounts can see everything but cannot add tickets — their only allowed
   // edit anywhere in the app is the Notes field on a ticket's detail page.
   const isAccountingUser =
@@ -3496,20 +3568,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     !!currentUser &&
     (currentUser.isAdmin ||
       !!(currentEmployeeRecord && !currentEmployeeRecord.isAccounting));
-  // A non-admin employee can be granted permission to edit tickets (within whatever
-  // set of tickets they can already see). Accounting accounts are excluded even if the
-  // flag is set — their only allowed edit is the Notes field, never the ticket itself.
-  const canEditTickets =
-    !!currentUser &&
-    (currentUser.isAdmin ||
-      !!(currentEmployeeRecord && currentEmployeeRecord.canEdit && !currentEmployeeRecord.isAccounting));
-  // A separate, independently grantable permission: whether this employee can delete
-  // tickets. Previously this was main-account only; now the main account can hand it
-  // to specific employees (e.g. a Manager) without giving them full main-account access.
-  const canDeleteTickets =
-    !!currentUser &&
-    (currentUser.isAdmin ||
-      !!(currentEmployeeRecord && currentEmployeeRecord.canDelete && !currentEmployeeRecord.isAccounting));
   // A separate permission axis from ticket access: whether this account can add/edit/
   // remove saved company records (name, tax number, commercial register, phone numbers).
   const canManageCompanies =
@@ -3537,10 +3595,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         t.employeeUsername ? t.employeeUsername === currentUser.username : t.employee === currentUser.name
       );
 
-  // Hotels reuse the same view/add/edit/delete permission axis as flight tickets.
   const visibleHotelBookings = !currentUser
     ? []
-    : canViewAllTickets
+    : hotelsPerm.canViewAll
     ? hotelBookings
     : hotelBookings.filter((h) =>
         h.employeeUsername ? h.employeeUsername === currentUser.username : h.employee === currentUser.name
@@ -3777,24 +3834,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       ? t.customers
       : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
 
-  // Visa bookings filtered by the same view permission as everywhere else — used by the
-  // Files picker so an employee can only pull a copy of visa bookings they can already see.
-  const visibleVisaBookingsForFiles = !currentUser
-    ? []
-    : canViewAllTickets
-    ? visaBookings
-    : visaBookings.filter((v) =>
-        v.employeeUsername ? v.employeeUsername === currentUser.username : v.employee === currentUser.name
-      );
+  // Visa bookings aren't tagged with an owning employee (see SECTIONS_WITH_OWNERSHIP),
+  // so anyone with Visa section access can pull a copy of any visa booking here — same
+  // as the main Visa list itself.
+  const visibleVisaBookingsForFiles = !currentUser ? [] : visaBookings;
 
   // ---------- Files ----------
-  // Files reuse the exact same view/add/edit/delete permission axis as every other
-  // section, so an employee's access here always matches whatever the main account
-  // has granted them elsewhere in the app.
   const visibleFiles = (
     !currentUser
       ? []
-      : canViewAllTickets
+      : filesPerm.canViewAll
       ? files
       : files.filter((f) =>
           f.employeeUsername ? f.employeeUsername === currentUser.username : f.createdBy === currentUser.name
@@ -4770,9 +4819,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       {roleLabel(currentEmployeeRecord.role)}
                     </span>
                   )}
-                  {!currentUser.isAdmin && !canViewAllTickets && (
+                  {!currentUser.isAdmin && SECTIONS_WITH_OWNERSHIP.includes(activeSection) && !sectionPermFor(activeSection).canViewAll && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-100 bg-white/10 border border-white/20 rounded-full px-2 py-0.5">
-                      Your own tickets only
+                      Your own records only
                     </span>
                   )}
                   {isAccountingUser && (
@@ -5225,41 +5274,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <span className="font-medium">Permissions</span>
                 <span className="text-xs text-stone-500 truncate">
                   {[
-                    newEmployee.canViewAll && "View all",
-                    newEmployee.canEdit && "Edit",
-                    newEmployee.canDelete && "Delete",
                     newEmployee.isAccounting && "Notes only",
                     newEmployee.canManageCompanies && "Companies",
                     newEmployee.isOwner && "Owner",
                   ]
                     .filter(Boolean)
-                    .join(" · ") || "Own tickets only"}
+                    .join(" · ") || "Own records only"}
                 </span>
               </button>
 
               {showNewEmployeePerms && (
-                <div className="absolute z-10 mt-1 w-full bg-white border border-stone-300 rounded-xl shadow-lg p-3 divide-y divide-stone-100">
-                  <ToggleSwitch
-                    label="View all tickets"
-                    description="See every employee's tickets, not just their own"
-                    checked={newEmployee.canViewAll || newEmployee.canEdit || newEmployee.canDelete}
-                    disabled={newEmployee.isAccounting || newEmployee.canEdit || newEmployee.canDelete}
-                    onChange={(v) => setNewEmployee(reconcilePermissions({ ...newEmployee, canViewAll: v }))}
-                  />
-                  <ToggleSwitch
-                    label="Edit tickets"
-                    description="Edit any ticket they can see (view access included automatically)"
-                    checked={newEmployee.canEdit}
-                    disabled={newEmployee.isAccounting}
-                    onChange={(v) => setNewEmployee(reconcilePermissions({ ...newEmployee, canEdit: v }))}
-                  />
-                  <ToggleSwitch
-                    label="Delete tickets"
-                    description="Permanently remove any ticket they can see"
-                    checked={newEmployee.canDelete}
-                    disabled={newEmployee.isAccounting}
-                    onChange={(v) => setNewEmployee(reconcilePermissions({ ...newEmployee, canDelete: v }))}
-                  />
+                <div className="absolute z-10 mt-1 w-full bg-white border border-stone-300 rounded-xl shadow-lg p-3 max-h-[70vh] overflow-y-auto divide-y divide-stone-100">
                   <ToggleSwitch
                     label="Accounting mode"
                     description="View all tickets, but the only edit allowed is the Notes field"
@@ -5278,21 +5303,50 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     checked={newEmployee.isOwner}
                     onChange={(v) => setNewEmployee({ ...newEmployee, isOwner: v })}
                   />
-                  <div className="pt-2">
-                    <p className="text-xs text-stone-500 mb-1 pt-1.5">Section access</p>
-                    {SECTION_OPTIONS.map((s) => (
-                      <ToggleSwitch
-                        key={s.value}
-                        label={s.label}
-                        checked={!!employeeSections(newEmployee)[s.value]}
-                        onChange={(v) =>
-                          setNewEmployee({
-                            ...newEmployee,
-                            sections: { ...employeeSections(newEmployee), [s.value]: v },
-                          })
-                        }
-                      />
-                    ))}
+                  <div className="pt-2 space-y-2">
+                    <p className="text-xs text-stone-500 mb-1 pt-1.5">Section access &amp; permissions</p>
+                    {SECTION_OPTIONS.map((s) => {
+                      const sectionOn = !!employeeSections(newEmployee)[s.value];
+                      const perm = employeeSectionPerm(newEmployee, s.value);
+                      const hasOwnership = SECTIONS_WITH_OWNERSHIP.includes(s.value);
+                      const setPerm = (field, v) => {
+                        const current = employeeSectionPerm(newEmployee, s.value);
+                        const updated = { ...current, [field]: v };
+                        updated.canViewAll = updated.canViewAll || updated.canEdit || updated.canDelete;
+                        setNewEmployee({
+                          ...newEmployee,
+                          sectionPerms: { ...(newEmployee.sectionPerms || {}), [s.value]: updated },
+                        });
+                      };
+                      return (
+                        <div key={s.value} className="border border-stone-200 rounded-xl px-3 divide-y divide-stone-100 overflow-hidden">
+                          <ToggleSwitch
+                            label={s.label}
+                            checked={sectionOn}
+                            onChange={(v) =>
+                              setNewEmployee({
+                                ...newEmployee,
+                                sections: { ...employeeSections(newEmployee), [s.value]: v },
+                              })
+                            }
+                          />
+                          {sectionOn && (
+                            <div className={newEmployee.isAccounting ? "opacity-50 pointer-events-none" : ""}>
+                              {hasOwnership && (
+                                <ToggleSwitch
+                                  label="View all"
+                                  checked={perm.canViewAll}
+                                  disabled={perm.canEdit || perm.canDelete}
+                                  onChange={(v) => setPerm("canViewAll", v)}
+                                />
+                              )}
+                              <ToggleSwitch label="Edit" checked={perm.canEdit} onChange={(v) => setPerm("canEdit", v)} />
+                              <ToggleSwitch label="Delete" checked={perm.canDelete} onChange={(v) => setPerm("canDelete", v)} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -7297,7 +7351,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   >
                     <FileText size={18} />
                   </button>
-                  {canEditTickets && (
+                  {hotelsPerm.canEdit && (
                     <button
                       onClick={() => { handleEditHotelClick(viewingHotelBooking); setViewingHotelBooking(null); }}
                       className="text-stone-400 hover:text-teal-800 p-1.5"
@@ -7306,7 +7360,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <Pencil size={18} />
                     </button>
                   )}
-                  {canDeleteTickets && (
+                  {hotelsPerm.canDelete && (
                     <button
                       onClick={() => {
                         const id = viewingHotelBooking.id;
@@ -7851,7 +7905,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   >
                     <FileText size={18} />
                   </button>
-                  {canEditTickets && (
+                  {visaPerm.canEdit && (
                     <button
                       onClick={() => { handleEditVisaClick(viewingVisaBooking); setViewingVisaBooking(null); }}
                       className="text-stone-400 hover:text-teal-800 p-1.5"
@@ -7860,7 +7914,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <Pencil size={18} />
                     </button>
                   )}
-                  {canDeleteTickets && (
+                  {visaPerm.canDelete && (
                     <button
                       onClick={() => {
                         const id = viewingVisaBooking.id;
@@ -8536,7 +8590,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   >
                     <FileText size={18} />
                   </button>
-                  {canEditTickets && (
+                  {carsPerm.canEdit && (
                     <button
                       onClick={() => { handleEditCarClick(viewingCarBooking); setViewingCarBooking(null); }}
                       className="text-stone-400 hover:text-teal-800 p-1.5"
@@ -8545,7 +8599,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <Pencil size={18} />
                     </button>
                   )}
-                  {canDeleteTickets && (
+                  {carsPerm.canDelete && (
                     <button
                       onClick={() => {
                         const id = viewingCarBooking.id;
@@ -8834,6 +8888,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <p className="text-xs text-emerald-700 font-semibold">+{fmt(t.profit)}</p>
                             </div>
                           </button>
+                          {filesPerm.canDelete && (
                           <button
                             onClick={() =>
                               requestConfirm(`Delete file ${f.serial}? This cannot be undone.`, async () => {
@@ -8845,6 +8900,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           >
                             <Trash2 size={15} />
                           </button>
+                          )}
                         </div>
                       );
                     })
@@ -8991,6 +9047,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <p className="text-xs text-stone-400">{formatDisplayDate(openFile.createdAt)} · Created by {openFile.createdBy}</p>
                     </div>
                     <div className="flex items-center gap-2">
+                      {filesPerm.canEdit && (
                       <button
                         onClick={() => setEditingFileServices((v) => !v)}
                         className={
@@ -9001,12 +9058,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       >
                         <Pencil size={13} /> {editingFileServices ? "Done editing" : "Edit services"}
                       </button>
+                      )}
+                      {filesPerm.canDelete && (
                       <button
                         onClick={() => deleteFile(openFile.id)}
                         className="text-red-600 border border-red-200 hover:bg-red-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
                       >
                         <Trash2 size={13} /> Delete file
                       </button>
+                      )}
                     </div>
                   </div>
 
@@ -9101,7 +9161,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <p className="text-sm font-bold">{fmt(it.soldPrice)} {it.currency}</p>
                             <p className="text-xs text-emerald-700">net {fmt(it.netPrice)} {it.currency}</p>
                           </div>
-                          {editingFileServices && canEditTickets && (
+                          {editingFileServices && filesPerm.canEdit && (
                             <button
                               onClick={() => removeItemFromFile(openFile.id, it.id)}
                               className="text-red-500 hover:text-red-700 p-1"
@@ -9545,6 +9605,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           onSetRole={(role) => handleRoleChange(openPermissionsFor, role)}
           onSetPermission={(field, value) => handleTogglePermission(openPermissionsFor, field, value)}
           onSetSection={(section, value) => handleToggleSection(openPermissionsFor, section, value)}
+          onSetSectionPerm={(section, field, value) => handleToggleSectionPermission(openPermissionsFor, section, field, value)}
           onSave={async (draft) => {
             const err = await handleSaveEmployeeDetails(openPermissionsFor, draft);
             if (!err && draft.username !== openPermissionsFor) {
