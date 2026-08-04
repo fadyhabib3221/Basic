@@ -5827,7 +5827,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       onBlur={() => handleTicketNumberBlur(i)}
                       placeholder={`Ticket number ${i + 1}`}
                     />
-                    {c.conjunction && (
+                    {c.conjunction && (c.ticketNumber || "").replace(/[^A-Z0-9]/g, "").length >= 13 && (
                       <input
                         className="min-w-0 text-sm outline-none bg-transparent text-stone-600 -ml-1"
                         style={{ flex: "0 0 auto", width: `${Math.max((c.ticketNumber2 || "").length, 1) + 1}ch` }}
