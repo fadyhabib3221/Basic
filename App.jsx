@@ -1086,9 +1086,24 @@ const AIRPORTS = [
 ].map(([code, place]) => `${code} - ${place}`.toUpperCase());
 
 export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
-  // Keep the browser tab title in sync with the app's name.
+  // Keep the browser tab title and icon in sync with the app's name/branding.
   useEffect(() => {
     document.title = "Travel Agency Manager";
+    const faviconSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
+      '<rect width="24" height="24" rx="5" fill="#115e59"/>' +
+      '<g transform="rotate(45 12 12)">' +
+      '<path d="M21,16V14L13,9V3.5C13,2.67 12.33,2 11.5,2C10.67,2 10,2.67 10,3.5V9L2,14V16L10,13.5V19L7.5,20.5V22L11.5,21L15.5,22V20.5L13,19V13.5L21,16Z" fill="#ffffff"/>' +
+      "</g></svg>";
+    const href = "data:image/svg+xml," + encodeURIComponent(faviconSvg);
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+    link.type = "image/svg+xml";
+    link.href = href;
   }, []);
 
   // ---------- License / activation ----------
