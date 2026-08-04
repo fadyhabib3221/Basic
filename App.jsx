@@ -436,21 +436,45 @@ const resizeCustomers = (customers, count) => {
 // the grade is a starting point/label, not a lock. Grade is purely descriptive; access
 // is always driven by the individual toggles stored on the employee record.
 //
-// Alongside the five original, all-section grades (Manager/Supervisor/Employee/
-// Accountant/Owner), there's a grade per section per tier — e.g. "Flights Employee",
-// "Hotels Supervisor", "Transportation Manager" — that automatically limits the
-// employee to that one section (every other section is switched off) with a sensible
-// starting permission level for that tier. Main account/Owner can still fine-tune or
-// widen access afterward from the Permissions screen; picking the grade just sets the
-// starting point.
+// Alongside the four original, all-section grades (Supervisor/Employee/
+// Accountant/Owner — the all-section Manager grade has been removed), there's a grade
+// per section per tier — e.g. "Flights Employee", "Tourism Supervisor", "Transportation
+// Manager" — that automatically limits the employee to that one section (every other
+// section is switched off) with a sensible starting permission level for that tier.
+// Main account/Owner can still fine-tune or widen access afterward from the
+// Permissions screen; picking the grade just sets the starting point.
 const SECTION_ROLE_LABELS = { flights: "Flights", hotels: "Hotels", visa: "Visa", cars: "Transportation", files: "Files" };
-// Visa and Transportation stay at Supervisor-and-up for the dedicated per-section
-// Employee grade — not because they lack ownership tracking (they now have it, same
-// as Flights/Hotels/Files), but simply to keep the starting grade list focused; an
-// admin can still hand-build a "view only own Visa/Transportation" employee via the
-// Permissions screen's individual toggles. Files has no dedicated Employee grade
-// either, since it's normally reached through the other sections' "Copy to a file" action.
-const SECTIONS_WITH_EMPLOYEE_GRADE = ["flights", "hotels"];
+// Custom, job-title-style labels for the per-section Employee grade specifically.
+const EMPLOYEE_GRADE_LABELS = {
+  flights: "Ticketing Agent",
+  hotels: "Tourism Employee",
+  visa: "Visa Employee",
+  cars: "Transportation Employee",
+};
+// Same idea for the per-section Supervisor grade — "Ticketing Supervisor" instead of
+// "Flights Supervisor", "Tourism Supervisor" instead of "Hotels Supervisor".
+const SUPERVISOR_GRADE_LABELS = {
+  flights: "Ticketing Supervisor",
+  hotels: "Tourism Supervisor",
+  visa: "Visa Supervisor",
+  cars: "Transportation Supervisor",
+};
+// Same idea for the per-section Manager grade — "Ticketing Manager" instead of
+// "Flights Manager", "Tourism Manager" instead of "Hotels Manager".
+const MANAGER_GRADE_LABELS = {
+  flights: "Ticketing Manager",
+  hotels: "Tourism Manager",
+  visa: "Visa Manager",
+  cars: "Transportation Manager",
+};
+// Every section that has bookings tagged with an owning employee (see
+// SECTIONS_WITH_OWNERSHIP) gets its own dedicated Employee, Supervisor, and Manager
+// grade — Files is the one exception for all three, since it's normally reached
+// through the other sections' "Copy to a file" action rather than worked directly by
+// an Employee, Supervisor, or Manager.
+const SECTIONS_WITH_EMPLOYEE_GRADE = ["flights", "hotels", "visa", "cars"];
+const SECTIONS_WITH_SUPERVISOR_GRADE = ["flights", "hotels", "visa", "cars"];
+const SECTIONS_WITH_MANAGER_GRADE = ["flights", "hotels", "visa", "cars"];
 const ALL_ROLE_SECTIONS = ["flights", "hotels", "visa", "cars", "files"];
 const sectionOnlyAccess = (section) => ({ flights: false, hotels: false, visa: false, cars: false, files: false, [section]: true });
 const SECTION_TIER_PERMS = {
@@ -474,14 +498,13 @@ const sectionRolePreset = (section, tier) => {
 };
 
 const EMPLOYEE_ROLES = [
-  { value: "manager", label: "Manager" },
   { value: "supervisor", label: "Supervisor" },
   { value: "employee", label: "Employee" },
   { value: "accountant", label: "Accountant" },
   { value: "owner", label: "Owner" },
-  ...SECTIONS_WITH_EMPLOYEE_GRADE.map((s) => ({ value: `employee_${s}`, label: `${SECTION_ROLE_LABELS[s]} Employee` })),
-  ...ALL_ROLE_SECTIONS.map((s) => ({ value: `supervisor_${s}`, label: `${SECTION_ROLE_LABELS[s]} Supervisor` })),
-  ...ALL_ROLE_SECTIONS.map((s) => ({ value: `manager_${s}`, label: `${SECTION_ROLE_LABELS[s]} Manager` })),
+  ...SECTIONS_WITH_EMPLOYEE_GRADE.map((s) => ({ value: `employee_${s}`, label: EMPLOYEE_GRADE_LABELS[s] || `${SECTION_ROLE_LABELS[s]} Employee` })),
+  ...SECTIONS_WITH_SUPERVISOR_GRADE.map((s) => ({ value: `supervisor_${s}`, label: SUPERVISOR_GRADE_LABELS[s] || `${SECTION_ROLE_LABELS[s]} Supervisor` })),
+  ...SECTIONS_WITH_MANAGER_GRADE.map((s) => ({ value: `manager_${s}`, label: MANAGER_GRADE_LABELS[s] || `${SECTION_ROLE_LABELS[s]} Manager` })),
 ];
 
 // Starting toggle values applied when a grade is picked. All toggles are then freely
@@ -490,27 +513,28 @@ const EMPLOYEE_ROLES = [
 // access to Manage employees and Backup/Restore (granted separately via isOwner,
 // checked alongside currentUser.isAdmin wherever those are gated) — the one thing an
 // Owner never gets is the License panel, which stays reserved for true main accounts.
-// The five original grades are explicitly all-section (sections + sectionPerms reset to
+// The four original grades are explicitly all-section (sections + sectionPerms reset to
 // full access) so switching *back* to one of them from a section-limited grade restores
 // every section, rather than leaving the old restriction in place.
 const ALL_SECTIONS_ON = { flights: true, hotels: true, visa: true, cars: true, files: true };
 const ROLE_PRESETS = {
-  manager: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
   supervisor: { canViewAll: true, canAdd: true, canEdit: true, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
   employee: { canViewAll: false, canAdd: true, canEdit: false, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
   accountant: { canViewAll: true, canAdd: false, canEdit: false, canDelete: false, isAccounting: true, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
   owner: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: true, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
   ...Object.fromEntries(SECTIONS_WITH_EMPLOYEE_GRADE.map((s) => [`employee_${s}`, sectionRolePreset(s, "employee")])),
-  ...Object.fromEntries(ALL_ROLE_SECTIONS.map((s) => [`supervisor_${s}`, sectionRolePreset(s, "supervisor")])),
-  ...Object.fromEntries(ALL_ROLE_SECTIONS.map((s) => [`manager_${s}`, sectionRolePreset(s, "manager")])),
+  ...Object.fromEntries(SECTIONS_WITH_SUPERVISOR_GRADE.map((s) => [`supervisor_${s}`, sectionRolePreset(s, "supervisor")])),
+  ...Object.fromEntries(SECTIONS_WITH_MANAGER_GRADE.map((s) => [`manager_${s}`, sectionRolePreset(s, "manager")])),
 };
 
 const roleLabel = (value) => (EMPLOYEE_ROLES.find((r) => r.value === value) || {}).label || "Employee";
 
-// Grade picker on the Add employee page groups the 17 grades into three per-tier
-// dropdowns (Manager / Supervisor / Employee — each holding that tier's general grade
-// plus its per-department variants), with Owner and Accountant standing alone next to
-// the three dropdowns since neither has department-specific variants.
+// Grade picker on the Add employee page groups the 16 grades into three per-tier
+// dropdowns (Manager / Supervisor / Employee). Supervisor and Employee each also hold
+// a general, all-section grade alongside their per-department variants; Manager no
+// longer has a general grade, so its dropdown holds only the four per-department
+// variants. Owner and Accountant stand alone next to the three dropdowns since
+// neither has department-specific variants.
 const MANAGER_GRADES = EMPLOYEE_ROLES.filter((r) => r.value === "manager" || r.value.startsWith("manager_"));
 const SUPERVISOR_GRADES = EMPLOYEE_ROLES.filter((r) => r.value === "supervisor" || r.value.startsWith("supervisor_"));
 const EMPLOYEE_GRADES = EMPLOYEE_ROLES.filter((r) => r.value === "employee" || r.value.startsWith("employee_"));
@@ -689,23 +713,12 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
           </button>
         </div>
 
-        <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
-        <div className="grid grid-cols-3 gap-1.5 mb-4">
-          {EMPLOYEE_ROLES.map((r) => (
-            <button
-              key={r.value}
-              type="button"
-              onClick={() => onSetRole(r.value)}
-              className={`text-xs font-semibold rounded-xl px-2 py-2 border transition-colors ${
-                (emp.role || "employee") === r.value
-                  ? "bg-teal-800 text-white border-teal-800"
-                  : "bg-white text-stone-600 border-stone-300 hover:bg-stone-50"
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+        {/* The clickable Grade grid was removed from this screen — grades are now
+            assigned when the employee is first added, from the three tier dropdowns on
+            the Add employee page. This just shows the grade as read-only info; every
+            individual permission below can still be changed by hand regardless of it. */}
+        <p className="text-xs text-stone-500 mb-1">Grade</p>
+        <p className="text-sm font-medium text-stone-700 mb-4">{roleLabel(emp.role)}</p>
 
         <p className="text-xs text-stone-500 mb-1">Individual permissions</p>
         <div className="border border-stone-200 rounded-xl px-3 divide-y divide-stone-100 mb-4">
@@ -5137,7 +5150,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
             <h2 className="font-semibold text-stone-900 mb-1">Employee accounts</h2>
             <p className="text-xs text-stone-400 mb-4">
-              As the main account, you can view and change every employee's password, edit their name or username, add or remove accounts, assign a grade (Manager, Supervisor, Employee, Accountant, Owner), and grant or remove main-account access. A grade fills in a starting set of permissions, but every permission — view all tickets, add tickets, edit tickets, delete tickets, accounting/notes-only mode, manage companies, Owner access, and which sections (Flights, Hotels, Visa, Transportation, Files) they can access — is an individual on/off switch you can set by hand for each employee: click their name to open it. An Owner gets everything a main account has (Manage employees, Backup/Restore, every ticket permission) except the License panel, which stays reserved for main accounts. This is a basic access gate, not a secure authentication system — anyone with technical access to the app's stored data can read these passwords. Avoid reusing important passwords here.
+              As the main account, you can view and change every employee's password, edit their name or username, add or remove accounts, and grant or remove main-account access. A grade (Manager, Supervisor, Employee, Accountant, Owner — plus a per-department version of Manager/Supervisor/Employee) is chosen once when the employee is first added, from the three grade dropdowns on the Add employee card below, and fills in a starting set of permissions. Every permission — view all services, add, edit, delete, accounting/notes-only mode, manage companies, Owner access, and which sections (Flights, Hotels, Visa, Transportation, Files) they can access — stays an individual on/off switch you can set by hand for each employee afterward: click their name to open it. An Owner gets everything a main account has (Manage employees, Backup/Restore, every ticket permission) except the License panel, which stays reserved for main accounts. This is a basic access gate, not a secure authentication system — anyone with technical access to the app's stored data can read these passwords. Avoid reusing important passwords here.
             </p>
             {manageError && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{manageError}</div>}
             <p className="text-xs text-stone-500 mb-3 flex items-center gap-1.5">
@@ -5310,15 +5323,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {/* Whole "add a new employee" block lives in one card: name/username/
                 password, the grade picker, and the Add button. */}
             <div className="border border-stone-200 rounded-2xl p-4 bg-stone-50">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <input className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
-                  placeholder="Full name" value={newEmployee.name}
+                  placeholder="Full name" value={newEmployee.name} autoComplete="off"
                   onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
                 <input className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
-                  placeholder="Username" value={newEmployee.username}
+                  placeholder="Username" value={newEmployee.username} autoComplete="off" name="new-employee-username"
                   onChange={(e) => setNewEmployee({ ...newEmployee, username: e.target.value })} />
                 <input type="password" className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
-                  placeholder="Password" value={newEmployee.password}
+                  placeholder="Password" value={newEmployee.password} autoComplete="new-password" name="new-employee-password"
                   onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
               </div>
 
@@ -5335,23 +5348,23 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   name once they've been added. */}
               <div className="mt-3">
                 <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
-                <div className="flex flex-wrap items-start gap-2">
+                <div className="flex flex-nowrap items-start gap-1.5 overflow-x-auto pb-1">
                   {GRADE_TIER_GROUPS.map((group) => {
                     const selectedInGroup = group.roles.find((r) => r.value === newEmployee.role);
                     const isOpen = newEmployeeGradeOpen === group.key;
                     return (
-                      <div key={group.key} className="relative w-40">
+                      <div key={group.key} className="relative w-28 shrink-0">
                         <button
                           type="button"
                           onClick={() => setNewEmployeeGradeOpen(isOpen ? null : group.key)}
-                          className={`w-full flex items-center justify-between border rounded-xl px-3 py-2 text-sm bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-teal-700 ${
+                          className={`w-full flex items-center justify-between border rounded-xl px-2 py-2 text-xs bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-teal-700 ${
                             selectedInGroup ? "border-teal-700" : "border-stone-300"
                           }`}
                         >
                           <span className={`font-medium truncate ${selectedInGroup ? "text-teal-800" : "text-stone-700"}`}>
                             {selectedInGroup ? selectedInGroup.label : group.title}
                           </span>
-                          <ChevronDown size={15} className={`text-stone-400 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                          <ChevronDown size={13} className={`text-stone-400 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
                         </button>
 
                         {isOpen && (
@@ -5394,7 +5407,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         key={value}
                         type="button"
                         onClick={() => setNewEmployee({ ...newEmployee, role: value, ...ROLE_PRESETS[value] })}
-                        className={`w-32 flex items-center gap-2 border rounded-xl px-3 py-2 text-sm transition-colors ${
+                        className={`w-24 shrink-0 flex items-center gap-1 border rounded-xl px-2 py-2 text-xs transition-colors ${
                           selected
                             ? "bg-teal-800 text-white border-teal-800"
                             : "bg-white text-stone-600 border-stone-300 hover:bg-stone-50"
