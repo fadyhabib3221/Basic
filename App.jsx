@@ -7,7 +7,7 @@ import {
   Plane, Search, Trash2, Pencil, X, Check, TrendingUp, Ticket, Wallet,
   Calendar, Download, Upload, Building2, Factory, Lock, LogOut, UserPlus, Users, Eye, EyeOff,
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
-  MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer,
+  MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -359,6 +359,9 @@ const getEmptyCarForm = () => ({
   soldPrice: "",
   bookingDate: todayDateStr(),
   bookingTime: "",
+  returnDate: "",
+  returnTime: "",
+  entryDate: todayDateStr(),
   collection: "",
 });
 
@@ -1026,6 +1029,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [selectedCompany, setSelectedCompany] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState("");
   const [selectedSupplier, setSelectedSupplier] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Every value ever entered (companies, customers, airlines, cities) is kept here so it
   // can be offered as an autocomplete suggestion later, even if the original ticket is deleted.
@@ -1973,6 +1977,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       soldPrice: c.soldPrice,
       bookingDate: c.bookingDate || todayDateStr(),
       bookingTime: c.bookingTime || "",
+      returnDate: c.returnDate || "",
+      returnTime: c.returnTime || "",
+      entryDate: c.entryDate || todayDateStr(),
       collection: c.collection || "",
     });
     setCarSupplierOther(!!c.supplier && !(suggestions.carSuppliers || []).includes(c.supplier));
@@ -3658,9 +3665,37 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     ];
   };
 
+  // Builds a single, human-readable line describing every filter currently applied
+  // (month/year/company/employee/supplier/search), so it can be dropped into one cell
+  // at the top of an export instead of forcing whoever opens the file to guess what
+  // selection it represents.
+  const describeFilters = ({ month, year, company, employee, supplier, search } = {}) => {
+    const parts = [];
+    if (year) parts.push(`السنة: ${year}`);
+    if (month) parts.push(`الشهر: ${monthLabel(month)}`);
+    if (company) parts.push(`الشركة: ${company}`);
+    if (employee) parts.push(`الموظف: ${employee}`);
+    if (supplier) parts.push(`المورد: ${supplier}`);
+    if (search) parts.push(`بحث: ${search}`);
+    return parts.length ? `الفلاتر المطبقة — ${parts.join("  |  ")}` : "بدون فلاتر — كل النتائج";
+  };
+
+  // Writes rows to a sheet with a filter-summary banner merged across one cell at the
+  // very top (row 1), a blank spacer row, then the normal header + data rows below.
+  const sheetWithFilterBanner = (rows, filterLabel) => {
+    const ws = XLSX.utils.json_to_sheet(rows, { origin: "A3" });
+    const colCount = Math.max(Object.keys(rows[0] || {}).length, 1);
+    XLSX.utils.sheet_add_aoa(ws, [[filterLabel]], { origin: "A1" });
+    ws["!merges"] = [
+      ...(ws["!merges"] || []),
+      { s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } },
+    ];
+    return ws;
+  };
+
   const exportMonth = (key) => {
     const rows = visibleTickets.filter((t) => monthKey(t.date) === key);
-    const ws = XLSX.utils.json_to_sheet(rowsWithTotals(rows));
+    const ws = sheetWithFilterBanner(rowsWithTotals(rows), describeFilters({ month: key }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Details");
     XLSX.writeFile(wb, `tickets_${key}.xlsx`);
@@ -3680,7 +3715,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
     monthlyBreakdown.forEach((m) => {
       const rows = visibleTickets.filter((t) => monthKey(t.date) === m.key);
-      const ws = XLSX.utils.json_to_sheet(rowsWithTotals(rows));
+      const ws = sheetWithFilterBanner(rowsWithTotals(rows), describeFilters({ month: m.key }));
       const safeName = m.key.replace(/[:\\\/\?\*\[\]]/g, "-").slice(0, 31);
       XLSX.utils.book_append_sheet(wb, ws, safeName);
     });
@@ -3693,8 +3728,32 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // tickets currently shown on screen — sorted by issue date (same-day tickets ordered
   // by ticket number ascending), as a single sheet ending with a totals row.
   const hasActiveFilter = !!(selectedMonth || selectedYear || selectedCompany || selectedEmployee || selectedSupplier || query.trim());
+
+  // Count of active filters/search, shown as a badge on the "Filters" toggle button so
+  // the person can see at a glance how many are applied without opening the panel.
+  const activeFilterCount = [selectedYear, selectedMonth, selectedCompany, selectedEmployee, selectedSupplier, query.trim()].filter(Boolean).length;
+
+  // Resets every filter and the search box at once — used by the "Clear all" action
+  // in the filter chips row.
+  const clearAllFilters = () => {
+    setSelectedYear("");
+    setSelectedMonth("");
+    setSelectedCompany("");
+    setSelectedEmployee("");
+    setSelectedSupplier("");
+    setQuery("");
+  };
+
   const exportFiltered = () => {
-    const ws = XLSX.utils.json_to_sheet(rowsWithTotals(filtered));
+    const filterLabel = describeFilters({
+      month: selectedMonth,
+      year: selectedYear,
+      company: selectedCompany,
+      employee: selectedEmployee,
+      supplier: selectedSupplier,
+      search: query.trim(),
+    });
+    const ws = sheetWithFilterBanner(rowsWithTotals(filtered), filterLabel);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Details");
     const parts = [
@@ -5454,82 +5513,154 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         </div>
         )}
 
-        {/* Search and filters */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
-          <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-            <input
-              className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-              placeholder="Search by employee, company, ticket number, customer, destination, or airline"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-          <div className="relative sm:w-40">
-            <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-            <select
-              className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
+        {/* Search and filters — one unified card: search + a "Filters" toggle with a
+            count badge, an optional expanded panel with the dropdowns, and a row of
+            removable chips for whatever is currently active. */}
+        <div className="bg-white border border-stone-200 rounded-2xl p-3 sm:p-4 mb-3">
+          <div className="flex items-stretch gap-2">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input
+                className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                placeholder="Search by employee, company, ticket number, customer, destination, or airline"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(!filtersOpen)}
+              className={`shrink-0 flex items-center gap-1.5 border rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                filtersOpen ? "border-teal-700 text-teal-800 bg-teal-50" : "border-stone-300 text-stone-600 hover:bg-stone-50 bg-white"
+              }`}
             >
-              <option value="">All years</option>
-              {yearsAvailable.map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
+              <SlidersHorizontal size={16} />
+              <span className="hidden sm:inline">Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="bg-teal-700 text-white text-[11px] font-bold rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+              <ChevronDown size={14} className={`transition-transform ${filtersOpen ? "rotate-180" : ""}`} />
+            </button>
           </div>
-          <div className="relative sm:w-56">
-            <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-            <select
-              className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-            >
-              <option value="">All months</option>
-              {monthsAvailable.map((key) => (
-                <option key={key} value={key}>{monthLabel(key)}</option>
-              ))}
-            </select>
-          </div>
-          <div className="relative sm:w-56">
-            <Building2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-            <select
-              className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-              value={selectedCompany}
-              onChange={(e) => setSelectedCompany(e.target.value)}
-            >
-              <option value="">All companies</option>
-              {companiesAvailable.map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="relative sm:w-56">
-            <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-            <select
-              className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-              value={selectedEmployee}
-              onChange={(e) => setSelectedEmployee(e.target.value)}
-            >
-              <option value="">All employees</option>
-              {employeesAvailable.map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="relative sm:w-56">
-            <Plane size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-            <select
-              className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-              value={selectedSupplier}
-              onChange={(e) => setSelectedSupplier(e.target.value)}
-            >
-              <option value="">All suppliers</option>
-              {suppliersAvailable.map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-          </div>
+
+          {filtersOpen && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mt-3 pt-3 border-t border-stone-100">
+              <div className="relative">
+                <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                <select
+                  className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                >
+                  <option value="">All years</option>
+                  {yearsAvailable.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="relative">
+                <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                <select
+                  className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                >
+                  <option value="">All months</option>
+                  {monthsAvailable.map((key) => (
+                    <option key={key} value={key}>{monthLabel(key)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="relative">
+                <Building2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                <select
+                  className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                  value={selectedCompany}
+                  onChange={(e) => setSelectedCompany(e.target.value)}
+                >
+                  <option value="">All companies</option>
+                  {companiesAvailable.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="relative">
+                <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                <select
+                  className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                  value={selectedEmployee}
+                  onChange={(e) => setSelectedEmployee(e.target.value)}
+                >
+                  <option value="">All employees</option>
+                  {employeesAvailable.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="relative">
+                <Plane size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                <select
+                  className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                  value={selectedSupplier}
+                  onChange={(e) => setSelectedSupplier(e.target.value)}
+                >
+                  <option value="">All suppliers</option>
+                  {suppliersAvailable.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {hasActiveFilter && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t border-stone-100">
+              {selectedYear && (
+                <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-800 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-1">
+                  {selectedYear}
+                  <button onClick={() => setSelectedYear("")} className="hover:text-teal-900"><X size={12} /></button>
+                </span>
+              )}
+              {selectedMonth && (
+                <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-800 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-1">
+                  {monthLabel(selectedMonth)}
+                  <button onClick={() => setSelectedMonth("")} className="hover:text-teal-900"><X size={12} /></button>
+                </span>
+              )}
+              {selectedCompany && (
+                <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-800 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-1">
+                  {selectedCompany}
+                  <button onClick={() => setSelectedCompany("")} className="hover:text-teal-900"><X size={12} /></button>
+                </span>
+              )}
+              {selectedEmployee && (
+                <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-800 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-1">
+                  {selectedEmployee}
+                  <button onClick={() => setSelectedEmployee("")} className="hover:text-teal-900"><X size={12} /></button>
+                </span>
+              )}
+              {selectedSupplier && (
+                <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-800 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-1">
+                  {selectedSupplier}
+                  <button onClick={() => setSelectedSupplier("")} className="hover:text-teal-900"><X size={12} /></button>
+                </span>
+              )}
+              {query.trim() && (
+                <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-700 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-1">
+                  "{query.trim()}"
+                  <button onClick={() => setQuery("")} className="hover:text-stone-900"><X size={12} /></button>
+                </span>
+              )}
+              <button
+                onClick={clearAllFilters}
+                className="text-xs text-red-600 hover:text-red-700 font-semibold ml-1"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
         </div>
 
         <datalist id="company-suggestions">
@@ -6444,7 +6575,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <h3 className="text-sm font-bold text-stone-700 mb-4">
               {visaEditingId ? "Edit visa booking" : "New visa booking"}
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Number of customers</label>
                 <input
@@ -6469,6 +6600,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   value={visaForm.visaType}
                   onChange={(e) => setVisaForm({ ...visaForm, visaType: e.target.value })}
                   placeholder="e.g. Schengen, UK, Dubai"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Booking date</label>
+                <input
+                  type="date"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={visaForm.bookingDate}
+                  onChange={(e) => setVisaForm({ ...visaForm, bookingDate: e.target.value })}
                 />
               </div>
               <div>
@@ -6512,6 +6652,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 )}
               </div>
             </div>
+
 
             {/* Dynamic customer name cells, one row per customer */}
             <div className="mb-4">
@@ -6617,6 +6758,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <th className="text-left px-4 py-3 font-semibold"># Customers</th>
                     <th className="text-left px-4 py-3 font-semibold">Names</th>
                     <th className="text-left px-4 py-3 font-semibold">Visa</th>
+                    <th className="text-left px-4 py-3 font-semibold">Booking date</th>
                     <th className="text-left px-4 py-3 font-semibold">Supplier</th>
                     <th className="text-right px-4 py-3 font-semibold">Net</th>
                     <th className="text-right px-4 py-3 font-semibold">Sold</th>
@@ -6636,6 +6778,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           {(v.customers || []).map((c) => c.name || "-").join(", ")}
                         </td>
                         <td className="px-4 py-3 text-stone-700">{v.visaType}</td>
+                        <td className="px-4 py-3 text-stone-700 whitespace-nowrap">
+                          {v.bookingDate ? formatDisplayDate(v.bookingDate) : "-"}
+                        </td>
                         <td className="px-4 py-3 text-stone-700">{v.supplier}</td>
                         <td className="px-4 py-3 text-right text-stone-700">{fmt(net)} {v.currency}</td>
                         <td className="px-4 py-3 text-right text-stone-700">{fmt(sold)} {v.currency}</td>
@@ -6766,7 +6911,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               {carEditingId ? "Edit transfer booking" : "New transfer booking"}
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Customer name</label>
                 <input
@@ -6785,7 +6930,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   placeholder="Phone number"
                 />
               </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Entry date (booking entered on)</label>
+                <input
+                  type="date"
+                  max={todayDateStr()}
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={carForm.entryDate}
+                  onChange={(e) => setCarForm({ ...carForm, entryDate: e.target.value })}
+                />
+              </div>
             </div>
+
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
@@ -6911,7 +7067,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <input
                     type="checkbox"
                     checked={carForm.isRoundTrip}
-                    onChange={(e) => setCarForm({ ...carForm, isRoundTrip: e.target.checked })}
+                    onChange={(e) =>
+                      setCarForm({
+                        ...carForm,
+                        isRoundTrip: e.target.checked,
+                        returnDate: e.target.checked ? carForm.returnDate : "",
+                        returnTime: e.target.checked ? carForm.returnTime : "",
+                      })
+                    }
                     className="rounded border-stone-300"
                   />
                   Round trip (go &amp; return)
@@ -6931,6 +7094,28 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 />
               </div>
             </div>
+
+            {/* Return date & time — only relevant for round trips */}
+            {carForm.isRoundTrip && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="text-xs text-stone-500 block mb-1">Return date</label>
+                  <input
+                    type="date"
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={carForm.returnDate}
+                    onChange={(e) => setCarForm({ ...carForm, returnDate: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-stone-500 block mb-1">Return time</label>
+                  <TimeSelect
+                    value={carForm.returnTime}
+                    onChange={(v) => setCarForm({ ...carForm, returnTime: v })}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Flight number — only relevant when the run starts at the airport */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -7032,6 +7217,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Entry date</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Customer</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Phone</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Route</th>
@@ -7041,6 +7227,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Waiting</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Flight #</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Date &amp; time</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Return</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Collection</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Driver tip</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net</th>
@@ -7056,6 +7243,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     const profit = sold - net;
                     return (
                       <tr key={c.id} className="leading-tight hover:bg-stone-50">
+                        <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">
+                          {c.entryDate ? formatDisplayDate(c.entryDate) : "-"}
+                        </td>
                         <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">{c.customerName}</td>
                         <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">{c.phone || "-"}</td>
                         <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">{c.routeFrom} → {c.routeTo}</td>
@@ -7071,6 +7261,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">
                           {c.bookingDate ? formatDisplayDate(c.bookingDate) : "-"}
                           {c.bookingTime ? ` · ${c.bookingTime}` : ""}
+                        </td>
+                        <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">
+                          {c.isRoundTrip
+                            ? `${c.returnDate ? formatDisplayDate(c.returnDate) : "-"}${c.returnTime ? ` · ${c.returnTime}` : ""}`
+                            : "-"}
                         </td>
                         <td className="px-2.5 py-1 text-right text-stone-700 whitespace-nowrap">
                           {c.collection ? `${fmt(parseFloat(c.collection) || 0)} ${c.currency}` : "-"}
