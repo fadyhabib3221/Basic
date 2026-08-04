@@ -511,22 +511,95 @@ const emptyNewEmployee = {
 // fully visible and easy to use — this is the one place permissions for an existing
 // employee are changed. Closes itself if the employee record disappears (e.g. deleted
 // from another tab) or is promoted to a main account (which no longer uses these toggles).
-const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, onSetSection }) => {
+const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, onSetSection, onSave, onDelete }) => {
+  // Name/username/password are edited right here, not in the employee table — the
+  // table's name cell is a plain, non-editable label that only opens this modal.
+  const [draft, setDraft] = useState({ name: "", username: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (emp) {
+      setDraft({ name: emp.name, username: emp.username, password: emp.password });
+      setShowPassword(false);
+      setSaveError("");
+    }
+  }, [emp && emp.username]);
+
   if (!emp) return null;
   const sections = employeeSections(emp);
+
+  const handleSaveDetails = async () => {
+    setSaving(true);
+    const err = await onSave({
+      name: draft.name.trim(),
+      username: draft.username.trim(),
+      password: draft.password,
+    });
+    setSaving(false);
+    setSaveError(err || "");
+  };
+
   return (
     <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
         className="bg-white rounded-2xl border border-stone-200 p-5 w-full max-w-sm max-h-[90vh] overflow-y-auto"
         onClick={(ev) => ev.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-stone-900">Permissions</h3>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1">
             <X size={16} />
           </button>
         </div>
-        <p className="text-xs text-stone-400 mb-4">{emp.name} · {emp.username}</p>
+
+        <p className="text-xs text-stone-500 mb-1">Account details</p>
+        <div className="border border-stone-200 rounded-xl p-3 mb-4 space-y-2">
+          <div>
+            <label className="text-xs text-stone-500 block mb-1">Full name</label>
+            <input
+              className="w-full border border-stone-300 rounded-xl px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              value={draft.name}
+              onChange={(ev) => setDraft({ ...draft, name: ev.target.value })}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-stone-500 block mb-1">Username</label>
+            <input
+              className="w-full border border-stone-300 rounded-xl px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              value={draft.username}
+              onChange={(ev) => setDraft({ ...draft, username: ev.target.value })}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-stone-500 block mb-1">Password</label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                className="w-full border border-stone-300 rounded-xl pl-2 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                value={draft.password}
+                onChange={(ev) => setDraft({ ...draft, password: ev.target.value })}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400"
+              >
+                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+          </div>
+          {saveError && <p className="text-xs text-red-600">{saveError}</p>}
+          <button
+            type="button"
+            onClick={handleSaveDetails}
+            disabled={saving}
+            className="w-full border border-stone-300 hover:bg-stone-50 text-stone-700 text-sm font-semibold rounded-xl px-4 py-1.5 transition-colors disabled:opacity-50"
+          >
+            Save details
+          </button>
+        </div>
 
         <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
         <div className="grid grid-cols-3 gap-1.5 mb-4">
@@ -601,9 +674,21 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
           ))}
         </div>
 
+        {onDelete && (
+          <div className="flex gap-2 mt-4">
+            <button
+              type="button"
+              onClick={onDelete}
+              className="flex-1 flex items-center justify-center gap-1.5 border border-red-200 hover:bg-red-50 text-red-600 text-sm font-semibold rounded-xl px-4 py-2 transition-colors"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          </div>
+        )}
+
         <button
           onClick={onClose}
-          className="mt-4 w-full bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 transition-colors"
+          className="mt-2 w-full bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 transition-colors"
         >
           Done
         </button>
@@ -2675,6 +2760,43 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       setCurrentUser({ ...currentUser, name: trimmedName, username: trimmedUsername });
     }
     cancelEditEmployee();
+  };
+
+  // Saves an employee's name/username/password from inside the Permissions modal.
+  // Returns an error message on failure, or null on success — the modal shows the
+  // error itself rather than relying on the page-level banner, which can sit behind it.
+  const handleSaveEmployeeDetails = async (username, draft) => {
+    if (!currentUser.isAdmin && !isOwnerUser) {
+      return "Only the main account can edit employee accounts";
+    }
+    const target = (employees || []).find((e) => e.username === username);
+    if (isOwnerUser && target && target.isAdmin) {
+      return "Only a main account can edit another main account";
+    }
+    const trimmedName = draft.name.trim();
+    const trimmedUsername = draft.username.trim();
+    if (!trimmedName || !trimmedUsername || !draft.password) {
+      return "Please fill in all fields";
+    }
+    const clash = (employees || []).some(
+      (e) => e.username !== username && e.username === trimmedUsername
+    );
+    if (clash) {
+      return "That username is already taken by another account";
+    }
+    const next = (employees || []).map((e) =>
+      e.username === username
+        ? { ...e, name: trimmedName, username: trimmedUsername, password: draft.password }
+        : e
+    );
+    await persistEmployees(next);
+
+    // If the main account edited its own account, keep the current session in sync
+    if (username === currentUser.username) {
+      await window.storage.set("session:user", trimmedUsername, false);
+      setCurrentUser({ ...currentUser, name: trimmedName, username: trimmedUsername });
+    }
+    return null;
   };
 
   const handleChangePassword = async () => {
@@ -4956,15 +5078,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 <ShieldCheck size={11} /> Main
                               </span>
                             ) : (
-                              <select
-                                value={e.role || "employee"}
-                                onChange={(ev) => handleRoleChange(e.username, ev.target.value)}
-                                className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
-                              >
-                                {EMPLOYEE_ROLES.map((r) => (
-                                  <option key={r.value} value={r.value}>{r.label}</option>
-                                ))}
-                              </select>
+                              <span className="text-xs font-medium text-stone-600">{roleLabel(e.role)}</span>
                             )}
                           </td>
                           <td className="px-3 py-2">
@@ -5019,24 +5133,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <ShieldCheck size={11} /> Main
                             </span>
                           ) : (
-                            <select
-                              value={e.role || "employee"}
-                              onChange={(ev) => handleRoleChange(e.username, ev.target.value)}
-                              className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
-                            >
-                              {EMPLOYEE_ROLES.map((r) => (
-                                <option key={r.value} value={r.value}>{r.label}</option>
-                              ))}
-                            </select>
+                            <span className="text-xs font-medium text-stone-600">{roleLabel(e.role)}</span>
                           )}
                         </td>
                         <td className="px-3 py-2 text-right">
                           <div className="flex gap-1 justify-end">
-                            {/* Promoting/demoting main-account access, and editing a main
-                                account's own credentials, stays reserved for true main
-                                accounts — an Owner never gets to touch these, so an Owner
-                                can never grant themselves (or anyone else) admin access
-                                and route around the License restriction. */}
+                            {/* Promoting/demoting main-account access stays reserved for true
+                                main accounts — an Owner never gets to touch this, so an Owner
+                                can never grant themselves (or anyone else) admin access and
+                                route around the License restriction. Editing the grade, and
+                                editing/deleting the employee entirely, now live inside the
+                                Permissions modal (opened via the name link) instead of here. */}
                             {e.isAdmin ? (
                               currentUser.isAdmin && (
                                 <button
@@ -5058,14 +5165,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 </button>
                               )
                             )}
-                            {(!e.isAdmin || currentUser.isAdmin) && (
+                            {e.isAdmin && currentUser.isAdmin && (
                               <button onClick={() => startEditEmployee(e)} className="text-stone-400 hover:text-teal-800 p-1">
                                 <Pencil size={15} />
-                              </button>
-                            )}
-                            {!e.isAdmin && (
-                              <button onClick={() => handleDeleteEmployee(e.username)} className="text-stone-400 hover:text-red-600 p-1">
-                                <Trash2 size={15} />
                               </button>
                             )}
                           </div>
@@ -9443,6 +9545,22 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           onSetRole={(role) => handleRoleChange(openPermissionsFor, role)}
           onSetPermission={(field, value) => handleTogglePermission(openPermissionsFor, field, value)}
           onSetSection={(section, value) => handleToggleSection(openPermissionsFor, section, value)}
+          onSave={async (draft) => {
+            const err = await handleSaveEmployeeDetails(openPermissionsFor, draft);
+            if (!err && draft.username !== openPermissionsFor) {
+              setOpenPermissionsFor(draft.username);
+            }
+            return err;
+          }}
+          onDelete={() => {
+            const target = (employees || []).find((e) => e.username === openPermissionsFor);
+            setOpenPermissionsFor(null);
+            if (!target) return;
+            requestConfirm(`Delete "${target.name}"? This cannot be undone.`, async () => {
+              await handleDeleteEmployee(target.username);
+              setConfirmDialog(null);
+            });
+          }}
         />
       )}
 
