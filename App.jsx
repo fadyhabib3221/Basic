@@ -5051,9 +5051,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <button
                           type="button"
                           onClick={() => {
-                            if (window.confirm(`Sign out ${emp ? emp.name : u} now?`)) {
+                            requestConfirm(`Sign out ${emp ? emp.name : u} now?`, () => {
                               handleForceSignOut(u);
-                            }
+                            });
                           }}
                           title="Sign out this employee"
                           className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 hover:text-red-800 border border-red-200 hover:border-red-300 bg-red-50 rounded-full px-1.5 py-0.5"
@@ -5327,7 +5327,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {/* Whole "add a new employee" block lives in one card: name/username/
                 password, the grade picker, and the Add button. */}
             <div className="border border-stone-200 rounded-2xl p-4 bg-stone-50">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <input className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
                   placeholder="Full name" value={newEmployee.name} autoComplete="off"
                   onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
@@ -5900,7 +5900,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               </select>
                             </div>
                           )}
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                               <label className="text-xs text-stone-500 block mb-1">Refunded by airline</label>
                               <input
@@ -6228,7 +6228,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-3 mt-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
             <div>
               <label className="text-xs text-stone-500 block mb-1">Ticket issue date</label>
               <input
@@ -7015,7 +7015,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </div>
 
                   {/* Row 2: # rooms, net, sold. */}
-                  <div className="grid grid-cols-3 gap-3 items-start">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-start">
                     <div>
                       <label className="text-[11px] text-stone-500 block mb-1"># rooms</label>
                       <input
@@ -7144,7 +7144,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 mt-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
               <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                 <p className="text-[11px] text-stone-500">Net total (EGP)</p>
                 <p className="text-sm font-bold text-stone-800">{fmt(hotelNetTotal(hotelForm))}</p>
@@ -7466,7 +7466,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 text-sm">
                 <div><span className="text-stone-500">Supplier: </span>{viewingHotelBooking.supplier || "-"}</div>
                 <div><span className="text-stone-500">Booking date: </span>{viewingHotelBooking.bookingDate ? formatDisplayDate(viewingHotelBooking.bookingDate) : "-"}</div>
                 <div><span className="text-stone-500">Employee: </span>{viewingHotelBooking.employee || "-"}</div>
@@ -7511,7 +7511,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 })}
               </div>
 
-              <div className="grid grid-cols-3 gap-3 mt-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Net total (EGP)</p>
                   <p className="text-sm font-bold text-stone-800">{fmt(hotelNetTotal(viewingHotelBooking))}</p>
@@ -7713,7 +7713,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Currency</label>
                 <select
@@ -7750,7 +7750,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
             {/* Live total preview: per-person prices above multiplied by the number of
                 customers entered, same style as the Hotels form's totals box. */}
-            <div className="grid grid-cols-3 gap-3 mt-1 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-1 mb-4">
               <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                 <p className="text-[11px] text-stone-500">Net total (× {visaForm.customers.length || 1})</p>
                 <p className="text-sm font-bold text-stone-800">{fmt(visaNetTotal(visaForm))} {visaForm.currency}</p>
@@ -8020,7 +8020,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 text-sm">
                 <div><span className="text-stone-500">Supplier: </span>{viewingVisaBooking.supplier || "-"}</div>
                 <div>
                   <span className="text-stone-500">Booking date: </span>
@@ -8037,7 +8037,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Net total</p>
                   <p className="text-sm font-bold text-stone-800">
@@ -8280,7 +8280,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
             {/* Waiting hours / round trip / starts at the airport — grouped together
                 in one horizontal card */}
-            <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="flex items-center gap-2 text-xs text-stone-500 mb-1 cursor-pointer">
                   <input
@@ -8366,7 +8366,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             )}
 
             {/* Currency, amount to collect from the customer, net/sold prices, and driver tip */}
-            <div className="grid grid-cols-5 gap-4 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Currency</label>
                 <select
@@ -8702,7 +8702,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 text-sm">
                 <div>
                   <span className="text-stone-500">Route: </span>
                   {viewingCarBooking.routeFrom || "-"} → {viewingCarBooking.routeTo || "-"}
@@ -8735,7 +8735,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Collection</p>
                   <p className="text-sm font-bold text-stone-800">
@@ -8754,7 +8754,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Net</p>
                   <p className="text-sm font-bold text-stone-800">
@@ -9066,7 +9066,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </div>
 
                   {/* Totals for the draft's items so far */}
-                  <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
                     <div className="bg-stone-50 rounded-xl p-3 text-center">
                       <p className="text-[11px] text-stone-500">Net</p>
                       <p className="font-bold text-sm">{fmt(fileTotals(draftFile).net)}</p>
@@ -9210,7 +9210,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   )}
 
                   {/* Totals for this file only — separate from every other section's totals */}
-                  <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
                     <div className="bg-stone-50 rounded-xl p-3 text-center">
                       <p className="text-[11px] text-stone-500">Net</p>
                       <p className="font-bold text-sm">{fmt(fileTotals(openFile).net)}</p>
