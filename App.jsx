@@ -1604,9 +1604,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     };
   }, [currentUser]);
 
-  // The main account polls who else is currently connected
+  // The main account (and any Owner/GM-grade employee, who gets the same admin-level
+  // view) polls who else is currently connected. A plain employee record load may still
+  // be in flight when this first runs, so it re-checks whenever `employees` updates too.
   useEffect(() => {
-    if (!currentUser || !currentUser.isAdmin) return;
+    if (!currentUser) return;
+    const viewerIsOwnerGrade =
+      !currentUser.isAdmin &&
+      !!(employees || []).find((e) => e.username === currentUser.username && e.isOwner);
+    if (!currentUser.isAdmin && !viewerIsOwnerGrade) return;
     let cancelled = false;
     const loadPresence = async () => {
       try {
@@ -1641,7 +1647,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [currentUser]);
+  }, [currentUser, employees]);
 
   const isOnline = (username) => {
     const entry = presenceMap[username];
