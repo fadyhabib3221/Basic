@@ -8,7 +8,7 @@ import {
   Calendar, Download, Upload, Building2, Factory, Lock, LogOut, UserPlus, Users, Eye, EyeOff,
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
-  History,
+  History, Bell, Send,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -1154,6 +1154,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [printPreview, setPrintPreview] = useState(null);
   const printIframeRef = useRef(null);
 
+  // ---------- Employee-to-employee requests ----------
+  // Lets any employee ask another employee for something (e.g. "please check this
+  // customer's file"). Stored centrally like tickets/employees so it's visible to
+  // everyone, and picked up by the same polling loop that already keeps other shared
+  // data in sync — that's also how a teammate's screen finds out about a new request
+  // addressed to them without a manual refresh.
+  const [requests, setRequests] = useState([]);
+  const [showRequestsPanel, setShowRequestsPanel] = useState(false);
+  const [newRequestTo, setNewRequestTo] = useState("");
+  const [newRequestMessage, setNewRequestMessage] = useState("");
+  const [requestSendError, setRequestSendError] = useState("");
+  // The single incoming request currently shown as a popup/notification, or null.
+  // Only ever holds requests addressed to the signed-in account.
+  const [incomingRequestPopup, setIncomingRequestPopup] = useState(null);
+  // Ids of requests already shown as a popup this session, so the same one never pops
+  // up twice (e.g. after the next poll re-fetches the same still-pending request).
+  const seenRequestIdsRef = useRef(new Set());
+
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -1372,7 +1390,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   useEffect(() => {
     (async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, sessionRes, suggestionsRes, setupRes, licenseRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, sessionRes, suggestionsRes, setupRes, licenseRes, requestsRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:visas", true).catch(() => null),
@@ -1383,6 +1401,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           window.storage.get("tickets:suggestions", true).catch(() => null),
           window.storage.get("tickets:setupComplete", true).catch(() => null),
           window.storage.get("tickets:license", true).catch(() => null),
+          window.storage.get("tickets:requests", true).catch(() => null),
         ]);
         const ticketsData = ticketsRes && ticketsRes.value ? JSON.parse(ticketsRes.value) : [];
         const hotelsData = hotelsRes && hotelsRes.value ? JSON.parse(hotelsRes.value) : [];
@@ -1390,12 +1409,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         const carsData = carsRes && carsRes.value ? JSON.parse(carsRes.value) : [];
         const filesData = filesRes && filesRes.value ? JSON.parse(filesRes.value) : [];
         const employeesData = employeesRes && employeesRes.value ? JSON.parse(employeesRes.value) : [];
+        const requestsData = requestsRes && requestsRes.value ? JSON.parse(requestsRes.value) : [];
         setTickets(ticketsData);
         setHotelBookings(hotelsData);
         setVisaBookings(visasData);
         setCarBookings(carsData);
         setFiles(filesData);
         setEmployees(employeesData);
+        setRequests(requestsData);
+        requestsData.forEach((r) => seenRequestIdsRef.current.add(r.id));
         if (licenseRes && licenseRes.value) {
           try {
             setLicenseRecord(JSON.parse(licenseRes.value));
@@ -1462,7 +1484,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     let cancelled = false;
     const loadCoreData = async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, suggestionsRes, licenseRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, suggestionsRes, licenseRes, requestsRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:visas", true).catch(() => null),
@@ -1471,6 +1493,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           window.storage.get("tickets:employees", true).catch(() => null),
           window.storage.get("tickets:suggestions", true).catch(() => null),
           window.storage.get("tickets:license", true).catch(() => null),
+          window.storage.get("tickets:requests", true).catch(() => null),
         ]);
         if (cancelled) return;
         if (ticketsRes && ticketsRes.value) {
@@ -1540,6 +1563,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           }
         } else {
           setLicenseRecord(null);
+        }
+        if (requestsRes && requestsRes.value) {
+          try {
+            const parsedRequests = JSON.parse(requestsRes.value);
+            setRequests(parsedRequests);
+            const freshIncoming = parsedRequests.find(
+              (r) =>
+                r.toUsername === currentUser.username &&
+                r.status === "pending" &&
+                !seenRequestIdsRef.current.has(r.id)
+            );
+            parsedRequests.forEach((r) => seenRequestIdsRef.current.add(r.id));
+            if (freshIncoming) {
+              setIncomingRequestPopup(freshIncoming);
+            }
+          } catch (e) {
+            // ignore malformed data for this cycle, try again next poll
+          }
         }
       } catch (e) {
         // Live refresh is best-effort; a failed poll just tries again next interval
@@ -1938,6 +1979,57 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     } catch (e) {
       // Suggestions are a convenience feature, so failures here are silent
     }
+  };
+
+  const persistRequests = async (next) => {
+    setRequests(next);
+    next.forEach((r) => seenRequestIdsRef.current.add(r.id));
+    try {
+      await window.storage.set("tickets:requests", JSON.stringify(next), true);
+    } catch (e) {
+      setRequestSendError("Could not save the request, please try again");
+    }
+  };
+
+  // Sends a new request from the signed-in account to another employee.
+  const handleSendRequest = async () => {
+    setRequestSendError("");
+    if (!newRequestTo) {
+      setRequestSendError("Please choose who this request is for");
+      return;
+    }
+    if (!newRequestMessage.trim()) {
+      setRequestSendError("Please write what you need");
+      return;
+    }
+    const target = (employees || []).find((e) => e.username === newRequestTo);
+    if (!target) {
+      setRequestSendError("That employee could not be found");
+      return;
+    }
+    const newReq = {
+      id: `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      fromUsername: currentUser.username,
+      fromName: currentUser.name,
+      toUsername: target.username,
+      toName: target.name,
+      message: newRequestMessage.trim(),
+      status: "pending", // "pending" | "completed" | "declined"
+      createdAt: new Date().toISOString(),
+      respondedAt: null,
+    };
+    await persistRequests([newReq, ...(requests || [])]);
+    setNewRequestTo("");
+    setNewRequestMessage("");
+  };
+
+  // Lets the recipient of a request mark it completed or declined. Also used to
+  // dismiss the incoming popup without changing its status (status stays "pending").
+  const handleRespondToRequest = async (requestId, status) => {
+    const next = (requests || []).map((r) =>
+      r.id === requestId ? { ...r, status, respondedAt: new Date().toISOString() } : r
+    );
+    await persistRequests(next);
   };
 
   // Remembers values entered on a ticket (airline, cities) so they keep showing up as
@@ -3709,6 +3801,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const isOwnerUser =
     !!currentUser && !currentUser.isAdmin && !!(currentEmployeeRecord && currentEmployeeRecord.isOwner);
   const hasAdminAccess = !!currentUser && (currentUser.isAdmin || isOwnerUser);
+  const myPendingRequestsCount = (requests || []).filter(
+    (r) => currentUser && r.toUsername === currentUser.username && r.status === "pending"
+  ).length;
   // An Owner should never see that a main/admin account exists at all, so admin usernames
   // are dropped from the online-presence list whenever the viewer isn't a true admin.
   const visibleOnlineUsernames = onlineUsernames.filter((u) => {
@@ -5034,6 +5129,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <Factory size={15} /> Manage companies
                 </button>
               )}
+              <button
+                onClick={() => {
+                  setShowRequestsPanel(!showRequestsPanel);
+                  setRequestSendError("");
+                }}
+                className="relative border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
+                <Bell size={15} /> Requests
+                {myPendingRequestsCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {myPendingRequestsCount}
+                  </span>
+                )}
+              </button>
               <button
                 onClick={() => {
                   setShowChangePassword(!showChangePassword);
@@ -9719,6 +9827,161 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 Confirm
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showRequestsPanel && currentUser && (
+        <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl border border-stone-200 p-5 w-full max-w-lg max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-stone-900 flex items-center gap-1.5">
+                <Bell size={16} className="text-teal-800" /> Requests
+              </h3>
+              <button onClick={() => setShowRequestsPanel(false)} className="text-stone-400 hover:text-stone-700 p-1">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Compose a new request */}
+            <div className="border border-stone-200 rounded-xl p-3 mb-4 space-y-2">
+              <p className="text-xs text-stone-500">New request</p>
+              <select
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                value={newRequestTo}
+                onChange={(e) => setNewRequestTo(e.target.value)}
+              >
+                <option value="">Select an employee…</option>
+                {(employees || [])
+                  .filter((e) => e.username !== currentUser.username)
+                  .map((e) => (
+                    <option key={e.username} value={e.username}>{e.name}</option>
+                  ))}
+              </select>
+              <textarea
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 resize-none"
+                rows={2}
+                placeholder="What do you need from them?"
+                value={newRequestMessage}
+                onChange={(e) => setNewRequestMessage(e.target.value)}
+              />
+              {requestSendError && <p className="text-xs text-red-600">{requestSendError}</p>}
+              <button
+                onClick={handleSendRequest}
+                className="w-full bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-3 py-2 shadow-sm shadow-teal-800/30 transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Send size={14} /> Send request
+              </button>
+            </div>
+
+            {/* Incoming requests (addressed to me) */}
+            <p className="text-xs text-stone-500 mb-1">Sent to you</p>
+            <div className="space-y-2 mb-4">
+              {(requests || []).filter((r) => r.toUsername === currentUser.username).length === 0 ? (
+                <p className="text-xs text-stone-400">No requests yet</p>
+              ) : (
+                (requests || [])
+                  .filter((r) => r.toUsername === currentUser.username)
+                  .map((r) => (
+                    <div key={r.id} className="border border-stone-200 rounded-xl p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm text-stone-800"><span className="font-semibold">{r.fromName}</span></p>
+                          <p className="text-sm text-stone-600 mt-0.5">{r.message}</p>
+                        </div>
+                        <span className={`shrink-0 text-[10px] font-semibold rounded-full px-2 py-0.5 ${
+                          r.status === "pending" ? "text-amber-700 bg-amber-50 border border-amber-200" :
+                          r.status === "completed" ? "text-emerald-700 bg-emerald-50 border border-emerald-200" :
+                          "text-stone-500 bg-stone-100 border border-stone-200"
+                        }`}>
+                          {r.status === "pending" ? "Pending" : r.status === "completed" ? "Done" : "Declined"}
+                        </span>
+                      </div>
+                      {r.status === "pending" && (
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() => handleRespondToRequest(r.id, "completed")}
+                            className="text-xs font-semibold text-emerald-700 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-full px-2.5 py-1"
+                          >
+                            Mark done
+                          </button>
+                          <button
+                            onClick={() => handleRespondToRequest(r.id, "declined")}
+                            className="text-xs font-semibold text-stone-500 border border-stone-200 bg-stone-50 hover:bg-stone-100 rounded-full px-2.5 py-1"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+              )}
+            </div>
+
+            {/* Outgoing requests (sent by me) */}
+            <p className="text-xs text-stone-500 mb-1">Sent by you</p>
+            <div className="space-y-2">
+              {(requests || []).filter((r) => r.fromUsername === currentUser.username).length === 0 ? (
+                <p className="text-xs text-stone-400">You haven't sent any requests</p>
+              ) : (
+                (requests || [])
+                  .filter((r) => r.fromUsername === currentUser.username)
+                  .map((r) => (
+                    <div key={r.id} className="border border-stone-200 rounded-xl p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm text-stone-800">To <span className="font-semibold">{r.toName}</span></p>
+                          <p className="text-sm text-stone-600 mt-0.5">{r.message}</p>
+                        </div>
+                        <span className={`shrink-0 text-[10px] font-semibold rounded-full px-2 py-0.5 ${
+                          r.status === "pending" ? "text-amber-700 bg-amber-50 border border-amber-200" :
+                          r.status === "completed" ? "text-emerald-700 bg-emerald-50 border border-emerald-200" :
+                          "text-stone-500 bg-stone-100 border border-stone-200"
+                        }`}>
+                          {r.status === "pending" ? "Pending" : r.status === "completed" ? "Done" : "Declined"}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Incoming-request notification popup — floats in the corner without blocking the
+          rest of the app, so it works as a lightweight "you've got a new request" alert. */}
+      {incomingRequestPopup && (
+        <div className="fixed top-4 right-4 z-50 w-full max-w-xs bg-white rounded-2xl border border-teal-200 shadow-xl shadow-black/10 p-4">
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <p className="text-sm font-semibold text-stone-900 flex items-center gap-1.5">
+              <Bell size={14} className="text-teal-800" /> New request
+            </p>
+            <button onClick={() => setIncomingRequestPopup(null)} className="text-stone-400 hover:text-stone-700 p-0.5">
+              <X size={14} />
+            </button>
+          </div>
+          <p className="text-xs text-stone-500 mb-1">From {incomingRequestPopup.fromName}</p>
+          <p className="text-sm text-stone-700 mb-3">{incomingRequestPopup.message}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                handleRespondToRequest(incomingRequestPopup.id, "completed");
+                setIncomingRequestPopup(null);
+              }}
+              className="flex-1 text-xs font-semibold text-emerald-700 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-full px-2.5 py-1.5"
+            >
+              Mark done
+            </button>
+            <button
+              onClick={() => {
+                setShowRequestsPanel(true);
+                setIncomingRequestPopup(null);
+              }}
+              className="flex-1 text-xs font-semibold text-teal-800 border border-teal-200 bg-teal-50 hover:bg-teal-100 rounded-full px-2.5 py-1.5"
+            >
+              Open
+            </button>
           </div>
         </div>
       )}
