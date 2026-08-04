@@ -5739,7 +5739,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </label>
                   <div className="w-full md:w-[20ch] md:shrink-0 flex items-center border border-stone-300 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-teal-700">
                     <input
-                      className="min-w-0 text-sm font-mono outline-none bg-transparent flex-1"
+                      className="min-w-0 text-sm outline-none bg-transparent flex-1"
                       style={c.conjunction ? { flex: "0 0 auto", width: `${Math.max((c.ticketNumber || "").length, 3) + 1}ch` } : undefined}
                       value={c.ticketNumber}
                       onChange={(e) => handleCustomerFieldChange(i, "ticketNumber", e.target.value)}
@@ -5748,7 +5748,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     />
                     {c.conjunction && (
                       <input
-                        className="min-w-0 text-sm font-mono outline-none bg-transparent text-stone-600"
+                        className="min-w-0 text-sm outline-none bg-transparent text-stone-600"
                         style={{ flex: "0 0 auto", width: `${Math.max((c.ticketNumber2 || "").length, 1) + 1}ch` }}
                         value={c.ticketNumber2 || ""}
                         onChange={(e) => handleCustomerFieldChange(i, "ticketNumber2", e.target.value)}
@@ -5757,7 +5757,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     )}
                   </div>
                   <input
-                    className="w-full md:w-[9ch] md:shrink-0 border border-stone-300 rounded-xl px-3 py-2 text-sm font-mono uppercase outline-none focus:ring-2 focus:ring-teal-700"
+                    className="w-full md:w-[13ch] md:shrink-0 border border-stone-300 rounded-xl px-3 py-2 text-sm font-mono uppercase outline-none focus:ring-2 focus:ring-teal-700"
                     value={c.pnrReference || ""}
                     onChange={(e) => handleCustomerFieldChange(i, "pnrReference", e.target.value)}
                     onBlur={() => handlePnrReferenceBlur(i)}
