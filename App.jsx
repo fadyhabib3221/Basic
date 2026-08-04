@@ -440,15 +440,21 @@ const EMPLOYEE_ROLES = [
   { value: "supervisor", label: "Supervisor" },
   { value: "employee", label: "Employee" },
   { value: "accountant", label: "Accountant" },
+  { value: "owner", label: "Owner" },
 ];
 
 // Starting toggle values applied when a grade is picked. All six are then freely
-// editable by hand, independent of which grade is selected.
+// editable by hand, independent of which grade is selected. "Owner" is a step above
+// the rest: full ticket/company access like the other grades below, PLUS admin-level
+// access to Manage employees and Backup/Restore (granted separately via isOwner,
+// checked alongside currentUser.isAdmin wherever those are gated) — the one thing an
+// Owner never gets is the License panel, which stays reserved for true main accounts.
 const ROLE_PRESETS = {
-  manager: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true },
-  supervisor: { canViewAll: true, canAdd: true, canEdit: true, canDelete: false, isAccounting: false, canManageCompanies: false },
-  employee: { canViewAll: false, canAdd: true, canEdit: false, canDelete: false, isAccounting: false, canManageCompanies: false },
-  accountant: { canViewAll: true, canAdd: false, canEdit: false, canDelete: false, isAccounting: true, canManageCompanies: false },
+  manager: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: false },
+  supervisor: { canViewAll: true, canAdd: true, canEdit: true, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false },
+  employee: { canViewAll: false, canAdd: true, canEdit: false, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false },
+  accountant: { canViewAll: true, canAdd: false, canEdit: false, canDelete: false, isAccounting: true, canManageCompanies: false, isOwner: false },
+  owner: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: true },
 };
 
 const roleLabel = (value) => (EMPLOYEE_ROLES.find((r) => r.value === value) || {}).label || "Employee";
@@ -496,6 +502,7 @@ const emptyNewEmployee = {
   canDelete: false,
   isAccounting: false,
   canManageCompanies: false,
+  isOwner: false,
   sections: { ...DEFAULT_SECTIONS },
 };
 
@@ -522,7 +529,7 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
         <p className="text-xs text-stone-400 mb-4">{emp.name} · {emp.username}</p>
 
         <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
-        <div className="grid grid-cols-4 gap-1.5 mb-4">
+        <div className="grid grid-cols-3 gap-1.5 mb-4">
           {EMPLOYEE_ROLES.map((r) => (
             <button
               key={r.value}
@@ -573,6 +580,12 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
             description="Add, edit, or remove saved company records"
             checked={emp.canManageCompanies}
             onChange={(v) => onSetPermission("canManageCompanies", v)}
+          />
+          <ToggleSwitch
+            label="Owner access"
+            description="Admin-level access — manage employees, backup/restore — everything except the License panel"
+            checked={emp.isOwner}
+            onChange={(v) => onSetPermission("isOwner", v)}
           />
         </div>
 
@@ -2478,7 +2491,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleAddEmployee = async () => {
     setManageError("");
-    if (!currentUser.isAdmin) {
+    if (!currentUser.isAdmin && !isOwnerUser) {
       setManageError("Only the main account can add employees");
       return;
     }
@@ -2508,7 +2521,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // (for the badge/label), and every toggle it sets can still be flipped individually
   // afterwards via handleTogglePermission — the preset is just a fast starting point.
   const handleRoleChange = async (username, role) => {
-    if (!currentUser.isAdmin) {
+    if (!currentUser.isAdmin && !isOwnerUser) {
       setManageError("Only the main account can change employee permissions");
       return;
     }
@@ -2525,7 +2538,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // between them (edit/delete requiring view, accounting overriding add/edit/delete) is
   // enforced afterwards by reconcilePermissions so the stored record never contradicts itself.
   const handleTogglePermission = async (username, field, checked) => {
-    if (!currentUser.isAdmin) {
+    if (!currentUser.isAdmin && !isOwnerUser) {
       setManageError("Only the main account can change employee permissions");
       return;
     }
@@ -2538,7 +2551,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Toggles one section (Flights/Hotels/Visa/Transportation/Files) on or off for an
   // employee, independent of their ticket permissions above.
   const handleToggleSection = async (username, section, checked) => {
-    if (!currentUser.isAdmin) {
+    if (!currentUser.isAdmin && !isOwnerUser) {
       setManageError("Only the main account can change employee permissions");
       return;
     }
@@ -2596,7 +2609,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleDeleteEmployee = async (username) => {
-    if (!currentUser.isAdmin) {
+    if (!currentUser.isAdmin && !isOwnerUser) {
       setManageError("Only the main account can remove employees");
       return;
     }
@@ -2624,8 +2637,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const saveEditEmployee = async () => {
-    if (!currentUser.isAdmin) {
+    if (!currentUser.isAdmin && !isOwnerUser) {
       setManageError("Only the main account can edit employee accounts");
+      return;
+    }
+    // An Owner has admin-level access to everyone else, but must never be able to edit
+    // a true main account's own credentials — that stays admin-to-admin only.
+    const targetBeingEdited = (employees || []).find((e) => e.username === editingUsername);
+    if (isOwnerUser && targetBeingEdited && targetBeingEdited.isAdmin) {
+      setManageError("Only a main account can edit another main account");
       return;
     }
     setManageError("");
@@ -2687,9 +2707,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setConfirmPasswordInput("");
   };
 
-  // ---------- Backup / restore (main account only) ----------
+  // ---------- Backup / restore (main account or Owner) ----------
   const handleBackup = () => {
-    if (!currentUser.isAdmin) return;
+    if (!currentUser.isAdmin && !isOwnerUser) return;
     const payload = {
       backupFormat: "flight-tickets-v1",
       exportedAt: new Date().toISOString(),
@@ -2710,7 +2730,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const triggerRestore = () => {
-    if (!currentUser.isAdmin) return;
+    if (!currentUser.isAdmin && !isOwnerUser) return;
     setRestoreError("");
     setRestoreSuccess("");
     fileInputRef.current && fileInputRef.current.click();
@@ -3373,6 +3393,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const canManageCompanies =
     !!currentUser &&
     (currentUser.isAdmin || !!(currentEmployeeRecord && currentEmployeeRecord.canManageCompanies));
+  // A step above the other toggles: an Owner-grade employee gets admin-level access to
+  // Manage employees and Backup/Restore, but never the License panel — that stays
+  // reserved for true main accounts (currentUser.isAdmin) so an Owner can never grant
+  // themselves (or anyone else) admin access and route around this restriction.
+  const isOwnerUser =
+    !!currentUser && !currentUser.isAdmin && !!(currentEmployeeRecord && currentEmployeeRecord.isOwner);
+  const hasAdminAccess = !!currentUser && (currentUser.isAdmin || isOwnerUser);
   const visibleTickets = !currentUser
     ? []
     : canViewAllTickets
@@ -4624,7 +4651,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       Accounting — view only
                     </span>
                   )}
-                  {currentUser.isAdmin && (
+                  {hasAdminAccess && (
                     <button
                       type="button"
                       onClick={() => setShowOnlineList(!showOnlineList)}
@@ -4638,19 +4665,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              {currentUser.isAdmin && (
+              {hasAdminAccess && (
                 <button onClick={handleBackup}
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
                   <Download size={15} /> Backup
                 </button>
               )}
-              {currentUser.isAdmin && (
+              {hasAdminAccess && (
                 <button onClick={triggerRestore}
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
                   <Upload size={15} /> Restore
                 </button>
               )}
-              {currentUser.isAdmin && (
+              {hasAdminAccess && (
                 <input
                   type="file"
                   accept="application/json"
@@ -4659,7 +4686,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="hidden"
                 />
               )}
-              {currentUser.isAdmin && (
+              {hasAdminAccess && (
                 <button onClick={() => setShowManage(!showManage)}
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
                   <Users size={15} /> Manage employees
@@ -4717,7 +4744,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </header>
         </div>
-        {currentUser.isAdmin && showOnlineList && (
+        {hasAdminAccess && showOnlineList && (
           <>
             <div className="fixed inset-0 z-30" onClick={() => setShowOnlineList(false)} />
             <div className="fixed z-40 top-24 left-4 right-4 md:left-auto md:right-6 md:w-72 bg-white border border-stone-300 rounded-2xl shadow-lg p-2">
@@ -4843,7 +4870,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             }}
           >
           <div className="bg-stone-50 rounded-2xl w-full max-w-3xl my-8 md:my-0 max-h-[90vh] overflow-y-auto p-1" onClick={(e) => e.stopPropagation()}>
-        {showManage && currentUser.isAdmin && (
+        {showManage && hasAdminAccess && (
           <div className="bg-stone-50">
             <button onClick={() => setShowManage(false)}
               className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
@@ -4852,7 +4879,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
             <h2 className="font-semibold text-stone-900 mb-1">Employee accounts</h2>
             <p className="text-xs text-stone-400 mb-4">
-              As the main account, you can view and change every employee's password, edit their name or username, add or remove accounts, assign a grade (Manager, Supervisor, Employee, Accountant), and grant or remove main-account access. A grade fills in a starting set of permissions, but every permission — view all tickets, add tickets, edit tickets, delete tickets, accounting/notes-only mode, manage companies, and which sections (Flights, Hotels, Visa, Transportation, Files) they can access — is an individual on/off switch you can set by hand for each employee: click their name to open it. This is a basic access gate, not a secure authentication system — anyone with technical access to the app's stored data can read these passwords. Avoid reusing important passwords here.
+              As the main account, you can view and change every employee's password, edit their name or username, add or remove accounts, assign a grade (Manager, Supervisor, Employee, Accountant, Owner), and grant or remove main-account access. A grade fills in a starting set of permissions, but every permission — view all tickets, add tickets, edit tickets, delete tickets, accounting/notes-only mode, manage companies, Owner access, and which sections (Flights, Hotels, Visa, Transportation, Files) they can access — is an individual on/off switch you can set by hand for each employee: click their name to open it. An Owner gets everything a main account has (Manage employees, Backup/Restore, every ticket permission) except the License panel, which stays reserved for main accounts. This is a basic access gate, not a secure authentication system — anyone with technical access to the app's stored data can read these passwords. Avoid reusing important passwords here.
             </p>
             {manageError && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{manageError}</div>}
             <p className="text-xs text-stone-500 mb-3 flex items-center gap-1.5">
@@ -4996,26 +5023,37 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         </td>
                         <td className="px-3 py-2 text-right">
                           <div className="flex gap-1 justify-end">
+                            {/* Promoting/demoting main-account access, and editing a main
+                                account's own credentials, stays reserved for true main
+                                accounts — an Owner never gets to touch these, so an Owner
+                                can never grant themselves (or anyone else) admin access
+                                and route around the License restriction. */}
                             {e.isAdmin ? (
-                              <button
-                                onClick={() => handleDemoteAdmin(e.username)}
-                                title="Remove main-account access"
-                                className="text-stone-400 hover:text-amber-600 text-[11px] font-semibold border border-stone-200 rounded-lg px-1.5 py-1"
-                              >
-                                Remove main
-                              </button>
+                              currentUser.isAdmin && (
+                                <button
+                                  onClick={() => handleDemoteAdmin(e.username)}
+                                  title="Remove main-account access"
+                                  className="text-stone-400 hover:text-amber-600 text-[11px] font-semibold border border-stone-200 rounded-lg px-1.5 py-1"
+                                >
+                                  Remove main
+                                </button>
+                              )
                             ) : (
-                              <button
-                                onClick={() => handlePromoteToAdmin(e.username)}
-                                title="Make this a main account"
-                                className="text-stone-400 hover:text-teal-800 text-[11px] font-semibold border border-stone-200 rounded-lg px-1.5 py-1 flex items-center gap-1"
-                              >
-                                <ShieldCheck size={12} /> Make main
+                              currentUser.isAdmin && (
+                                <button
+                                  onClick={() => handlePromoteToAdmin(e.username)}
+                                  title="Make this a main account"
+                                  className="text-stone-400 hover:text-teal-800 text-[11px] font-semibold border border-stone-200 rounded-lg px-1.5 py-1 flex items-center gap-1"
+                                >
+                                  <ShieldCheck size={12} /> Make main
+                                </button>
+                              )
+                            )}
+                            {(!e.isAdmin || currentUser.isAdmin) && (
+                              <button onClick={() => startEditEmployee(e)} className="text-stone-400 hover:text-teal-800 p-1">
+                                <Pencil size={15} />
                               </button>
                             )}
-                            <button onClick={() => startEditEmployee(e)} className="text-stone-400 hover:text-teal-800 p-1">
-                              <Pencil size={15} />
-                            </button>
                             {!e.isAdmin && (
                               <button onClick={() => handleDeleteEmployee(e.username)} className="text-stone-400 hover:text-red-600 p-1">
                                 <Trash2 size={15} />
@@ -5045,7 +5083,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 point. Every toggle can still be switched by hand afterwards. */}
             <div className="mt-3 max-w-sm">
               <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 {EMPLOYEE_ROLES.map((r) => (
                   <button
                     key={r.value}
@@ -5081,6 +5119,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     newEmployee.canDelete && "Delete",
                     newEmployee.isAccounting && "Notes only",
                     newEmployee.canManageCompanies && "Companies",
+                    newEmployee.isOwner && "Owner",
                   ]
                     .filter(Boolean)
                     .join(" · ") || "Own tickets only"}
@@ -5121,6 +5160,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     description="Add, edit, or remove saved company records"
                     checked={newEmployee.canManageCompanies}
                     onChange={(v) => setNewEmployee({ ...newEmployee, canManageCompanies: v })}
+                  />
+                  <ToggleSwitch
+                    label="Owner access"
+                    description="Admin-level access — manage employees, backup/restore — everything except the License panel"
+                    checked={newEmployee.isOwner}
+                    onChange={(v) => setNewEmployee({ ...newEmployee, isOwner: v })}
                   />
                   <div className="pt-2">
                     <p className="text-xs text-stone-500 mb-1 pt-1.5">Section access</p>
