@@ -1105,6 +1105,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const [showManage, setShowManage] = useState(false);
   const [newEmployee, setNewEmployee] = useState(emptyNewEmployee);
+  const [newEmployeeGradeOpen, setNewEmployeeGradeOpen] = useState(false); // dropdown open/closed for the Grade picker on the Add employee page
   const [openPermissionsFor, setOpenPermissionsFor] = useState(null); // username, or null if closed
   const [manageError, setManageError] = useState("");
   const [visiblePasswords, setVisiblePasswords] = useState({});
@@ -5282,15 +5283,55 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
             </div>
 
-            {/* No grade/permissions picker here on purpose — a new employee is always
-                created with the minimal default permissions in emptyNewEmployee (Employee
-                grade, view/add only their own records, no sections restricted). The
-                department (section), grade, and every individual permission are set
-                afterward, by hand, from the Permissions screen reached by clicking the
-                employee's name in the table above once they've been added. */}
-            <p className="text-[11px] text-stone-400 mt-2 max-w-sm">
-              New accounts start with basic access only. Set their department, grade, and permissions afterward by clicking their name above.
-            </p>
+            {/* Grade dropdown: closed by default, showing just the currently selected
+                grade. Opening it reveals every grade as a radio-style row; picking one
+                sets that grade's starting permissions on newEmployee and immediately
+                closes the list back down, so the chosen grade shows outside/above it.
+                Everything can still be fine-tuned afterward from the Permissions screen
+                reached by clicking the employee's name once they've been added. */}
+            <div className="mt-3 max-w-sm relative">
+              <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
+              <button
+                type="button"
+                onClick={() => setNewEmployeeGradeOpen(!newEmployeeGradeOpen)}
+                className="w-full flex items-center justify-between border border-stone-300 rounded-xl px-3 py-2 text-sm bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-teal-700"
+              >
+                <span className="font-medium text-stone-700">{roleLabel(newEmployee.role)}</span>
+                <ChevronDown size={15} className={`text-stone-400 transition-transform ${newEmployeeGradeOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {newEmployeeGradeOpen && (
+                <div className="absolute z-10 mt-1 w-full border border-stone-200 rounded-xl bg-white shadow-lg max-h-64 overflow-y-auto">
+                  {EMPLOYEE_ROLES.map((r) => {
+                    const selected = newEmployee.role === r.value;
+                    return (
+                      <button
+                        key={r.value}
+                        type="button"
+                        onClick={() => {
+                          setNewEmployee({ ...newEmployee, role: r.value, ...ROLE_PRESETS[r.value] });
+                          setNewEmployeeGradeOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-stone-50 border-b border-stone-100 last:border-b-0"
+                      >
+                        <span
+                          className={`shrink-0 w-4 h-4 rounded-full border flex items-center justify-center ${
+                            selected ? "border-teal-700" : "border-stone-300"
+                          }`}
+                        >
+                          {selected && <span className="w-2 h-2 rounded-full bg-teal-700" />}
+                        </span>
+                        <span className={selected ? "text-teal-800 font-semibold" : "text-stone-600"}>{r.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <p className="text-[11px] text-stone-400 mt-1.5">
+                You can fine-tune every permission for each section after adding them, from Manage employees.
+              </p>
+            </div>
 
             <button onClick={handleAddEmployee}
               className="mt-3 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors flex items-center gap-1.5">
