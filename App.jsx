@@ -1922,11 +1922,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setHotelError("");
   };
 
-  const handleDeleteHotel = (id) => {
+  const handleDeleteHotel = (id, onDeleted) => {
     requestConfirm("Delete this hotel booking? This cannot be undone.", async () => {
       await persistHotelBookings(hotelBookings.filter((h) => h.id !== id));
       if (hotelEditingId === id) resetHotelForm();
       setConfirmDialog(null);
+      if (onDeleted) onDeleted();
     });
   };
 
@@ -2035,11 +2036,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setVisaError("");
   };
 
-  const handleDeleteVisa = (id) => {
+  const handleDeleteVisa = (id, onDeleted) => {
     requestConfirm("Delete this visa booking? This cannot be undone.", async () => {
       await persistVisaBookings(visaBookings.filter((v) => v.id !== id));
       if (visaEditingId === id) resetVisaForm();
       setConfirmDialog(null);
+      if (onDeleted) onDeleted();
     });
   };
 
@@ -2135,11 +2137,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setCarError("");
   };
 
-  const handleDeleteCar = (id) => {
+  const handleDeleteCar = (id, onDeleted) => {
     requestConfirm("Delete this transfer booking? This cannot be undone.", async () => {
       await persistCarBookings(carBookings.filter((c) => c.id !== id));
       if (carEditingId === id) resetCarForm();
       setConfirmDialog(null);
+      if (onDeleted) onDeleted();
     });
   };
 
@@ -2207,6 +2210,59 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // receipt across all services.
   const openPrintPreview = (docTitle, subtitle, sections) => {
     setPrintPreview({ title: docTitle, html: buildReceiptHtml(docTitle, subtitle, sections) });
+  };
+
+  // Opens a printable receipt for a single flight ticket (with its refund, if any) in
+  // the print preview popup.
+  const handlePrintTicket = (t) => {
+    const customers = getCustomers(t);
+    const customerRows = customers.map((c, i) => [
+      `Customer ${i + 1}`,
+      `${c.name || "-"}${c.ticketNumber ? ` — ${c.ticketNumber}` : ""}`,
+    ]);
+
+    const sections = [
+      {
+        heading: "Booking",
+        rows: [
+          ["Company", t.company && t.company.trim() ? t.company : "Individual"],
+          ["Supplier", t.supplier || "-"],
+          ["Route", routeLabel(t)],
+          ["Airline", t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"],
+          ["Ticket issue date", t.date ? formatDisplayDate(t.date) : "-"],
+          ...(t.isReissued ? [["Exchanged from", t.oldTicketNumber || "an older ticket"]] : []),
+        ],
+      },
+      {
+        heading: "Customers",
+        rows: customerRows,
+      },
+      {
+        heading: "Pricing",
+        rows: [
+          ["Net price", fmt(t.netPrice)],
+          ["Sold price", fmt(t.soldPrice)],
+          ["Profit", fmt(profit(t.netPrice, t.soldPrice))],
+        ],
+      },
+      ...(hasRefund(t)
+        ? [
+            {
+              heading: "Refund",
+              rows: [
+                ["Refunded by airline", fmt(getRefunds(t)[0]?.airlineAmount)],
+                ["Refunded to customer", fmt(getRefunds(t)[0]?.customerAmount)],
+                ["Net after refund", fmt(netAfterRefund(t))],
+                ["Sold after refund", fmt(soldAfterRefund(t))],
+                ["Profit after refund", fmt(profitAfterRefund(t))],
+              ],
+            },
+          ]
+        : []),
+      ...(t.notes ? [{ heading: "Notes", rows: [["Notes", t.notes]] }] : []),
+    ];
+
+    openPrintPreview(`Ticket - ${(customers[0] && customers[0].name) || ""}`, "Flight Ticket Receipt", sections);
   };
 
   // Opens a printable receipt for a single transfer booking in the print preview popup.
@@ -4431,23 +4487,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.netPrice)}</td>
         <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
         <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
-        <td className="px-2.5 py-1 text-right whitespace-nowrap" onClick={(ev) => ev.stopPropagation()}>
-          <div className="flex gap-0.5 justify-end">
-            <button onClick={() => setCopyPickerSource({ type: "flights", record: t })} className="text-stone-400 hover:text-amber-600 p-0.5" title="Copy to a file">
-              <FileText size={13} />
-            </button>
-            {(currentUser.isAdmin || canEditTickets) && (
-              <button onClick={() => handleEdit(t)} className="text-stone-400 hover:text-teal-800 p-0.5">
-                <Pencil size={13} />
-              </button>
-            )}
-            {(currentUser.isAdmin || canDeleteTickets) && (
-              <button onClick={() => handleDelete(t.id)} className="text-stone-400 hover:text-red-600 p-0.5">
-                <Trash2 size={13} />
-              </button>
-            )}
-          </div>
-        </td>
       </tr>
     ));
     getRefunds(t)
@@ -4485,7 +4524,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <td className="px-2.5 py-1 font-semibold text-red-800 text-right whitespace-nowrap">
             {fmt((parseFloat(refund.airlineAmount) || 0) - (parseFloat(refund.customerAmount) || 0))}
           </td>
-          <td className="px-2.5 py-1 text-right whitespace-nowrap"><span className="text-red-300 text-[11px] block text-right">—</span></td>
         </tr>
       );
     });
@@ -6185,7 +6223,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net price</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Sold price</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Profit</th>
-                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -6963,13 +7000,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net total (EGP)</th>
                 <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Sold total (EGP)</th>
                 <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Profit (EGP)</th>
-                <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredHotelBookings.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="text-center text-stone-400 px-2.5 py-6">
+                  <td colSpan={10} className="text-center text-stone-400 px-2.5 py-6">
                     {visibleHotelBookings.length === 0 ? "No hotel bookings yet." : "No hotel bookings match the current search/filters."}
                   </td>
                 </tr>
@@ -7003,33 +7039,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(hotelSoldTotal(h))}</td>
                   <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">
                     {fmt(hotelProfitTotal(h))}
-                  </td>
-                  <td className="px-2.5 py-1 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => setCopyPickerSource({ type: "hotels", record: h })}
-                      className="text-amber-600 hover:text-amber-800 mr-2"
-                      title="Copy to a file"
-                    >
-                      <FileText size={14} />
-                    </button>
-                    {canEditTickets && (
-                      <button
-                        onClick={() => handleEditHotelClick(h)}
-                        className="text-teal-700 hover:text-teal-900 mr-2"
-                        title="Edit"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                    )}
-                    {canDeleteTickets && (
-                      <button
-                        onClick={() => handleDeleteHotel(h.id)}
-                        className="text-red-600 hover:text-red-800"
-                        title="Delete"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
                   </td>
                 </tr>
               ))}
@@ -7065,6 +7074,34 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   >
                     <Printer size={18} />
                   </button>
+                  <button
+                    onClick={() => setCopyPickerSource({ type: "hotels", record: viewingHotelBooking })}
+                    className="text-stone-400 hover:text-amber-600 p-1.5"
+                    title="Copy to a file"
+                  >
+                    <FileText size={18} />
+                  </button>
+                  {canEditTickets && (
+                    <button
+                      onClick={() => { handleEditHotelClick(viewingHotelBooking); setViewingHotelBooking(null); }}
+                      className="text-stone-400 hover:text-teal-800 p-1.5"
+                      title="Edit"
+                    >
+                      <Pencil size={18} />
+                    </button>
+                  )}
+                  {canDeleteTickets && (
+                    <button
+                      onClick={() => {
+                        const id = viewingHotelBooking.id;
+                        handleDeleteHotel(id, () => setViewingHotelBooking(null));
+                      }}
+                      className="text-stone-400 hover:text-red-600 p-1.5"
+                      title="Delete"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
                   <button
                     onClick={() => setViewingHotelBooking(null)}
                     className="text-stone-400 hover:text-stone-700 p-1.5"
@@ -7532,7 +7569,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <th className="text-right px-4 py-3 font-semibold">Net</th>
                     <th className="text-right px-4 py-3 font-semibold">Sold</th>
                     <th className="text-right px-4 py-3 font-semibold">Profit</th>
-                    <th className="text-right px-4 py-3 font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -7558,35 +7594,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-4 py-3 text-right text-stone-700">{fmt(net)} {v.currency}</td>
                         <td className="px-4 py-3 text-right text-stone-700">{fmt(sold)} {v.currency}</td>
                         <td className="px-4 py-3 text-right font-semibold text-emerald-700">{fmt(profit)} {v.currency}</td>
-                        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => setCopyPickerSource({ type: "visa", record: v })}
-                              className="text-amber-600 hover:text-amber-800"
-                              title="Copy to a file"
-                            >
-                              <FileText size={16} />
-                            </button>
-                            {canEditTickets && (
-                              <button
-                                onClick={() => handleEditVisaClick(v)}
-                                className="text-teal-800 hover:text-teal-900"
-                                title="Edit"
-                              >
-                                <Pencil size={16} />
-                              </button>
-                            )}
-                            {canDeleteTickets && (
-                              <button
-                                onClick={() => handleDeleteVisa(v.id)}
-                                className="text-red-500 hover:text-red-700"
-                                title="Delete"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
                       </tr>
                     );
                   })}
@@ -7621,6 +7628,34 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   >
                     <Printer size={18} />
                   </button>
+                  <button
+                    onClick={() => setCopyPickerSource({ type: "visa", record: viewingVisaBooking })}
+                    className="text-stone-400 hover:text-amber-600 p-1.5"
+                    title="Copy to a file"
+                  >
+                    <FileText size={18} />
+                  </button>
+                  {canEditTickets && (
+                    <button
+                      onClick={() => { handleEditVisaClick(viewingVisaBooking); setViewingVisaBooking(null); }}
+                      className="text-stone-400 hover:text-teal-800 p-1.5"
+                      title="Edit"
+                    >
+                      <Pencil size={18} />
+                    </button>
+                  )}
+                  {canDeleteTickets && (
+                    <button
+                      onClick={() => {
+                        const id = viewingVisaBooking.id;
+                        handleDeleteVisa(id, () => setViewingVisaBooking(null));
+                      }}
+                      className="text-stone-400 hover:text-red-600 p-1.5"
+                      title="Delete"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
                   <button
                     onClick={() => setViewingVisaBooking(null)}
                     className="text-stone-400 hover:text-stone-700 p-1.5"
@@ -8201,7 +8236,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Sold</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Profit</th>
-                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -8248,31 +8282,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-2.5 py-1 text-right text-stone-700 whitespace-nowrap">{fmt(net)} {c.currency}</td>
                         <td className="px-2.5 py-1 text-right text-stone-700 whitespace-nowrap">{fmt(sold)} {c.currency}</td>
                         <td className="px-2.5 py-1 text-right font-semibold text-emerald-700 whitespace-nowrap">{fmt(profit)} {c.currency}</td>
-                        <td
-                          className="px-2.5 py-1 text-right whitespace-nowrap"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex items-center justify-end gap-0.5">
-                            {canEditTickets && (
-                              <button
-                                onClick={() => handleEditCarClick(c)}
-                                className="text-teal-800 hover:text-teal-900 p-0.5"
-                                title="Edit"
-                              >
-                                <Pencil size={13} />
-                              </button>
-                            )}
-                            {canDeleteTickets && (
-                              <button
-                                onClick={() => handleDeleteCar(c.id)}
-                                className="text-red-500 hover:text-red-700 p-0.5"
-                                title="Delete"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
                       </tr>
                     );
                   })}
@@ -8304,6 +8313,34 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   >
                     <Printer size={18} />
                   </button>
+                  <button
+                    onClick={() => setCopyPickerSource({ type: "cars", record: viewingCarBooking })}
+                    className="text-stone-400 hover:text-amber-600 p-1.5"
+                    title="Copy to a file"
+                  >
+                    <FileText size={18} />
+                  </button>
+                  {canEditTickets && (
+                    <button
+                      onClick={() => { handleEditCarClick(viewingCarBooking); setViewingCarBooking(null); }}
+                      className="text-stone-400 hover:text-teal-800 p-1.5"
+                      title="Edit"
+                    >
+                      <Pencil size={18} />
+                    </button>
+                  )}
+                  {canDeleteTickets && (
+                    <button
+                      onClick={() => {
+                        const id = viewingCarBooking.id;
+                        handleDeleteCar(id, () => setViewingCarBooking(null));
+                      }}
+                      className="text-stone-400 hover:text-red-600 p-1.5"
+                      title="Delete"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
                   <button
                     onClick={() => setViewingCarBooking(null)}
                     className="text-stone-400 hover:text-stone-700 p-1.5"
@@ -9016,6 +9053,37 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               >
                 <X size={15} /> Close
               </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <button
+                onClick={() => handlePrintTicket(viewingTicket)}
+                className="border border-stone-300 text-stone-600 hover:text-teal-800 hover:border-teal-700 text-sm font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
+              >
+                <Printer size={15} /> Print
+              </button>
+              <button
+                onClick={() => setCopyPickerSource({ type: "flights", record: viewingTicket })}
+                className="border border-stone-300 text-stone-600 hover:text-amber-700 hover:border-amber-400 text-sm font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
+              >
+                <FileText size={15} /> Copy to a file
+              </button>
+              {(currentUser.isAdmin || canEditTickets) && (
+                <button
+                  onClick={() => { handleEdit(viewingTicket); closeTicketDetail(); }}
+                  className="border border-stone-300 text-stone-600 hover:text-teal-800 hover:border-teal-700 text-sm font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
+                >
+                  <Pencil size={15} /> Edit
+                </button>
+              )}
+              {(currentUser.isAdmin || canDeleteTickets) && (
+                <button
+                  onClick={() => { handleDelete(viewingTicket.id); closeTicketDetail(); }}
+                  className="border border-stone-300 text-red-600 hover:text-red-700 hover:border-red-400 text-sm font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
+                >
+                  <Trash2 size={15} /> Delete
+                </button>
+              )}
             </div>
 
             <div className="bg-white border border-stone-200 rounded-2xl divide-y divide-stone-100">
