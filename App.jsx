@@ -1031,6 +1031,37 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [selectedSupplier, setSelectedSupplier] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // Search + filter state for the Hotels, Visa, Transportation, and Files sections —
+  // each section gets its own independent search box and filter set (mirroring the
+  // Flights search/filters above), matched to the fields that section actually has.
+  const [hotelQuery, setHotelQuery] = useState("");
+  const [hotelFiltersOpen, setHotelFiltersOpen] = useState(false);
+  const [hotelSelectedYear, setHotelSelectedYear] = useState("");
+  const [hotelSelectedMonth, setHotelSelectedMonth] = useState("");
+  const [hotelSelectedEmployee, setHotelSelectedEmployee] = useState("");
+  const [hotelSelectedSupplier, setHotelSelectedSupplier] = useState("");
+  const [hotelSelectedHotelName, setHotelSelectedHotelName] = useState("");
+
+  const [visaQuery, setVisaQuery] = useState("");
+  const [visaFiltersOpen, setVisaFiltersOpen] = useState(false);
+  const [visaSelectedYear, setVisaSelectedYear] = useState("");
+  const [visaSelectedMonth, setVisaSelectedMonth] = useState("");
+  const [visaSelectedEmployee, setVisaSelectedEmployee] = useState("");
+  const [visaSelectedSupplier, setVisaSelectedSupplier] = useState("");
+
+  const [carQuery, setCarQuery] = useState("");
+  const [carFiltersOpen, setCarFiltersOpen] = useState(false);
+  const [carSelectedYear, setCarSelectedYear] = useState("");
+  const [carSelectedMonth, setCarSelectedMonth] = useState("");
+  const [carSelectedEmployee, setCarSelectedEmployee] = useState("");
+  const [carSelectedSupplier, setCarSelectedSupplier] = useState("");
+
+  const [fileQuery, setFileQuery] = useState("");
+  const [fileFiltersOpen, setFileFiltersOpen] = useState(false);
+  const [fileSelectedYear, setFileSelectedYear] = useState("");
+  const [fileSelectedCompany, setFileSelectedCompany] = useState("");
+  const [fileSelectedEmployee, setFileSelectedEmployee] = useState("");
+
   // Every value ever entered (companies, customers, airlines, cities) is kept here so it
   // can be offered as an autocomplete suggestion later, even if the original ticket is deleted.
   const [suggestions, setSuggestions] = useState({ companies: [], customers: [], airlines: [], cities: [], suppliers: [], hotelNames: [], visaSuppliers: [], carSuppliers: [] });
@@ -3125,7 +3156,125 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       })
       .join(", ");
 
-  const hotelTotals = visibleHotelBookings.reduce(
+  // ---------- Hotels: search + filters ----------
+  const hotelMonthsAvailable = Array.from(
+    new Set(visibleHotelBookings.map((h) => monthKey(h.bookingDate)))
+  ).sort((a, b) => b.localeCompare(a));
+  const hotelYearsAvailable = Array.from(
+    new Set(visibleHotelBookings.map((h) => (h.bookingDate ? h.bookingDate.slice(0, 4) : "")).filter(Boolean))
+  ).sort((a, b) => b.localeCompare(a));
+  const hotelEmployeesAvailable = Array.from(
+    new Set(visibleHotelBookings.map((h) => (h.employee || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+  const hotelSuppliersAvailable = Array.from(
+    new Set(visibleHotelBookings.map((h) => (h.supplier || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+  const hotelNamesAvailable = Array.from(
+    new Set(visibleHotelBookings.map((h) => (h.hotel || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const hasActiveHotelFilter = !!(
+    hotelSelectedYear || hotelSelectedMonth || hotelSelectedEmployee || hotelSelectedSupplier || hotelSelectedHotelName || hotelQuery.trim()
+  );
+  const activeHotelFilterCount = [
+    hotelSelectedYear, hotelSelectedMonth, hotelSelectedEmployee, hotelSelectedSupplier, hotelSelectedHotelName, hotelQuery.trim(),
+  ].filter(Boolean).length;
+  const clearAllHotelFilters = () => {
+    setHotelQuery("");
+    setHotelSelectedYear("");
+    setHotelSelectedMonth("");
+    setHotelSelectedEmployee("");
+    setHotelSelectedSupplier("");
+    setHotelSelectedHotelName("");
+  };
+  const filteredHotelBookings = visibleHotelBookings.filter((h) => {
+    if (hotelSelectedYear && (h.bookingDate || "").slice(0, 4) !== hotelSelectedYear) return false;
+    if (hotelSelectedMonth && monthKey(h.bookingDate) !== hotelSelectedMonth) return false;
+    if (hotelSelectedEmployee && (h.employee || "").trim() !== hotelSelectedEmployee) return false;
+    if (hotelSelectedSupplier && (h.supplier || "").trim() !== hotelSelectedSupplier) return false;
+    if (hotelSelectedHotelName && (h.hotel || "").trim() !== hotelSelectedHotelName) return false;
+    const q = hotelQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (h.employee || "").toLowerCase().includes(q) ||
+      (h.customer || "").toLowerCase().includes(q) ||
+      (h.hotel || "").toLowerCase().includes(q) ||
+      (h.supplier || "").toLowerCase().includes(q) ||
+      (h.notes || "").toLowerCase().includes(q)
+    );
+  });
+
+  // ---------- Visa: search + filters ----------
+  // Visa bookings don't track which employee created them, so there's no Employee filter here.
+  const visaMonthsAvailable = Array.from(
+    new Set(visaBookings.map((v) => monthKey(v.bookingDate)))
+  ).sort((a, b) => b.localeCompare(a));
+  const visaYearsAvailable = Array.from(
+    new Set(visaBookings.map((v) => (v.bookingDate ? v.bookingDate.slice(0, 4) : "")).filter(Boolean))
+  ).sort((a, b) => b.localeCompare(a));
+  const visaSuppliersAvailable = Array.from(
+    new Set(visaBookings.map((v) => (v.supplier || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const hasActiveVisaFilter = !!(visaSelectedYear || visaSelectedMonth || visaSelectedSupplier || visaQuery.trim());
+  const activeVisaFilterCount = [visaSelectedYear, visaSelectedMonth, visaSelectedSupplier, visaQuery.trim()].filter(Boolean).length;
+  const clearAllVisaFilters = () => {
+    setVisaQuery("");
+    setVisaSelectedYear("");
+    setVisaSelectedMonth("");
+    setVisaSelectedSupplier("");
+  };
+  const filteredVisaBookings = visaBookings.filter((v) => {
+    if (visaSelectedYear && (v.bookingDate || "").slice(0, 4) !== visaSelectedYear) return false;
+    if (visaSelectedMonth && monthKey(v.bookingDate) !== visaSelectedMonth) return false;
+    if (visaSelectedSupplier && (v.supplier || "").trim() !== visaSelectedSupplier) return false;
+    const q = visaQuery.trim().toLowerCase();
+    if (!q) return true;
+    const customerNames = (v.customers || []).map((c) => c.name || "").join(" ");
+    return (
+      (v.visaType || "").toLowerCase().includes(q) ||
+      (v.supplier || "").toLowerCase().includes(q) ||
+      customerNames.toLowerCase().includes(q)
+    );
+  });
+
+  // ---------- Transportation (cars): search + filters ----------
+  // Car bookings don't track which employee created them either, so no Employee filter here.
+  const carMonthsAvailable = Array.from(
+    new Set(carBookings.map((c) => monthKey(c.bookingDate)))
+  ).sort((a, b) => b.localeCompare(a));
+  const carYearsAvailable = Array.from(
+    new Set(carBookings.map((c) => (c.bookingDate ? c.bookingDate.slice(0, 4) : "")).filter(Boolean))
+  ).sort((a, b) => b.localeCompare(a));
+  const carSuppliersAvailable = Array.from(
+    new Set(carBookings.map((c) => (c.supplier || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const hasActiveCarFilter = !!(carSelectedYear || carSelectedMonth || carSelectedSupplier || carQuery.trim());
+  const activeCarFilterCount = [carSelectedYear, carSelectedMonth, carSelectedSupplier, carQuery.trim()].filter(Boolean).length;
+  const clearAllCarFilters = () => {
+    setCarQuery("");
+    setCarSelectedYear("");
+    setCarSelectedMonth("");
+    setCarSelectedSupplier("");
+  };
+  const filteredCarBookings = carBookings.filter((c) => {
+    if (carSelectedYear && (c.bookingDate || "").slice(0, 4) !== carSelectedYear) return false;
+    if (carSelectedMonth && monthKey(c.bookingDate) !== carSelectedMonth) return false;
+    if (carSelectedSupplier && (c.supplier || "").trim() !== carSelectedSupplier) return false;
+    const q = carQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (c.customerName || "").toLowerCase().includes(q) ||
+      (c.routeFrom || "").toLowerCase().includes(q) ||
+      (c.routeTo || "").toLowerCase().includes(q) ||
+      (c.carType || "").toLowerCase().includes(q) ||
+      (c.supplier || "").toLowerCase().includes(q) ||
+      (c.flightNumber || "").toLowerCase().includes(q)
+    );
+  });
+
+  const hotelTotals = filteredHotelBookings.reduce(
     (acc, h) => {
       acc.count += 1;
       acc.net += hotelNetTotal(h);
@@ -3140,7 +3289,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // (each booking's own currency is converted to EGP so mixed-currency bookings can
   // be summed together). Counts the number of applicants/customers on each visa
   // booking, and the number of bookings for transfers.
-  const visaTotals = visaBookings.reduce(
+  const visaTotals = filteredVisaBookings.reduce(
     (acc, v) => {
       const net = hotelInEgp(visaNetTotal(v), v.currency);
       const sold = hotelInEgp(visaSoldTotal(v), v.currency);
@@ -3152,7 +3301,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     },
     { count: 0, net: 0, sold: 0, profit: 0 }
   );
-  const carTotals = carBookings.reduce(
+  const carTotals = filteredCarBookings.reduce(
     (acc, c) => {
       const net = hotelInEgp(parseFloat(c.netPrice) || 0, c.currency);
       const sold = hotelInEgp(parseFloat(c.soldPrice) || 0, c.currency);
@@ -3201,6 +3350,40 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "") || (b.serial || "").localeCompare(a.serial || ""));
 
   const FILE_SOURCE_LABELS = { flights: "Flight", hotels: "Hotel", visa: "Visa", cars: "Transportation" };
+
+
+  // ---------- Files: search + filters ----------
+  const fileYearsAvailable = Array.from(
+    new Set(visibleFiles.map((f) => (f.createdAt ? f.createdAt.slice(0, 4) : "")).filter(Boolean))
+  ).sort((a, b) => b.localeCompare(a));
+  const fileCompaniesAvailable = Array.from(
+    new Set(visibleFiles.map((f) => (f.company || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+  const fileEmployeesAvailable = Array.from(
+    new Set(visibleFiles.map((f) => (f.createdBy || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const hasActiveFileFilter = !!(fileSelectedYear || fileSelectedCompany || fileSelectedEmployee || fileQuery.trim());
+  const activeFileFilterCount = [fileSelectedYear, fileSelectedCompany, fileSelectedEmployee, fileQuery.trim()].filter(Boolean).length;
+  const clearAllFileFilters = () => {
+    setFileQuery("");
+    setFileSelectedYear("");
+    setFileSelectedCompany("");
+    setFileSelectedEmployee("");
+  };
+  const filteredFiles = visibleFiles.filter((f) => {
+    if (fileSelectedYear && (f.createdAt || "").slice(0, 4) !== fileSelectedYear) return false;
+    if (fileSelectedCompany && (f.company || "").trim() !== fileSelectedCompany) return false;
+    if (fileSelectedEmployee && (f.createdBy || "").trim() !== fileSelectedEmployee) return false;
+    const q = fileQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (f.serial || "").toLowerCase().includes(q) ||
+      (f.company || "").toLowerCase().includes(q) ||
+      (f.notes || "").toLowerCase().includes(q) ||
+      (f.createdBy || "").toLowerCase().includes(q)
+    );
+  });
 
   // Auto-generates a starting serial number for a file, based on the file's own date
   // (defaults to today, but the date is user-editable — see updateFileDate below):
@@ -3277,7 +3460,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       { net: 0, sold: 0, profit: 0 }
     );
 
-  const filesGrandTotals = visibleFiles.reduce(
+  const filesGrandTotals = filteredFiles.reduce(
     (acc, f) => {
       const t = fileTotals(f);
       acc.net += t.net;
@@ -4921,10 +5104,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </span>
           </p>
           <button
-            onClick={() => (hasActiveFilter ? exportFiltered() : exportAllMonths())}
-            className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
+            onClick={() => { if (hasActiveFilter) exportFiltered(); }}
+            disabled={!hasActiveFilter}
+            title={hasActiveFilter ? "" : "Select at least one filter (year, month, company, employee, supplier, or search) before exporting"}
+            className={`text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5 ${
+              hasActiveFilter
+                ? "text-teal-800 border border-teal-800 hover:bg-teal-50"
+                : "text-stone-400 border border-stone-200 cursor-not-allowed"
+            }`}
           >
-            <Download size={14} /> {hasActiveFilter ? "Export filtered results to Excel" : "Export all months to Excel"}
+            <Download size={14} /> {hasActiveFilter ? "Export filtered results to Excel" : "Select a filter to export"}
           </button>
         </div>
         <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-6">
@@ -5309,7 +5498,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <input
                   type="radio"
                   name="routeMode"
-                  className="w-4 h-4 accent-green-600"
+                  className="w-4 h-4 accent-teal-800"
                   checked={!form.multiDestination && (form.tripType || "oneWay") === "oneWay"}
                   onChange={() => setForm({ ...form, tripType: "oneWay", multiDestination: false })}
                 />
@@ -5319,7 +5508,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <input
                   type="radio"
                   name="routeMode"
-                  className="w-4 h-4 accent-green-600"
+                  className="w-4 h-4 accent-teal-800"
                   checked={!form.multiDestination && form.tripType === "roundTrip"}
                   onChange={() => setForm({ ...form, tripType: "roundTrip", multiDestination: false })}
                 />
@@ -5329,7 +5518,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <input
                   type="radio"
                   name="routeMode"
-                  className="w-4 h-4 accent-green-600"
+                  className="w-4 h-4 accent-teal-800"
                   checked={!!form.multiDestination}
                   onChange={() => {
                     setForm({
@@ -5546,116 +5735,132 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
 
           {filtersOpen && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mt-3 pt-3 border-t border-stone-100">
-              <div className="relative">
-                <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                <select
-                  className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
-                >
-                  <option value="">All years</option>
-                  {yearsAvailable.map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
+            <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-stone-100">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Year</label>
+                <div className="relative">
+                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(e.target.value)}
+                  >
+                    <option value="">All years</option>
+                    {yearsAvailable.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="relative">
-                <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                <select
-                  className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                >
-                  <option value="">All months</option>
-                  {monthsAvailable.map((key) => (
-                    <option key={key} value={key}>{monthLabel(key)}</option>
-                  ))}
-                </select>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Month</label>
+                <div className="relative">
+                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                  >
+                    <option value="">All months</option>
+                    {monthsAvailable.map((key) => (
+                      <option key={key} value={key}>{monthLabel(key)}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="relative">
-                <Building2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                <select
-                  className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                  value={selectedCompany}
-                  onChange={(e) => setSelectedCompany(e.target.value)}
-                >
-                  <option value="">All companies</option>
-                  {companiesAvailable.map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </select>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Company</label>
+                <div className="relative">
+                  <Building2 size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={selectedCompany}
+                    onChange={(e) => setSelectedCompany(e.target.value)}
+                  >
+                    <option value="">All companies</option>
+                    {companiesAvailable.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="relative">
-                <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                <select
-                  className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                  value={selectedEmployee}
-                  onChange={(e) => setSelectedEmployee(e.target.value)}
-                >
-                  <option value="">All employees</option>
-                  {employeesAvailable.map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </select>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Employee</label>
+                <div className="relative">
+                  <User size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={selectedEmployee}
+                    onChange={(e) => setSelectedEmployee(e.target.value)}
+                  >
+                    <option value="">All employees</option>
+                    {employeesAvailable.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="relative">
-                <Plane size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                <select
-                  className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                  value={selectedSupplier}
-                  onChange={(e) => setSelectedSupplier(e.target.value)}
-                >
-                  <option value="">All suppliers</option>
-                  {suppliersAvailable.map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </select>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Supplier</label>
+                <div className="relative">
+                  <Plane size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={selectedSupplier}
+                    onChange={(e) => setSelectedSupplier(e.target.value)}
+                  >
+                    <option value="">All suppliers</option>
+                    {suppliersAvailable.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
           )}
 
           {hasActiveFilter && (
-            <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t border-stone-100">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
+              <span className="text-stone-400 font-medium">Applied:</span>
               {selectedYear && (
-                <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-800 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-1">
-                  {selectedYear}
-                  <button onClick={() => setSelectedYear("")} className="hover:text-teal-900"><X size={12} /></button>
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Year: <span className="font-semibold text-stone-800">{selectedYear}</span>
+                  <button onClick={() => setSelectedYear("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
               )}
               {selectedMonth && (
-                <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-800 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-1">
-                  {monthLabel(selectedMonth)}
-                  <button onClick={() => setSelectedMonth("")} className="hover:text-teal-900"><X size={12} /></button>
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Month: <span className="font-semibold text-stone-800">{monthLabel(selectedMonth)}</span>
+                  <button onClick={() => setSelectedMonth("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
               )}
               {selectedCompany && (
-                <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-800 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-1">
-                  {selectedCompany}
-                  <button onClick={() => setSelectedCompany("")} className="hover:text-teal-900"><X size={12} /></button>
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Company: <span className="font-semibold text-stone-800">{selectedCompany}</span>
+                  <button onClick={() => setSelectedCompany("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
               )}
               {selectedEmployee && (
-                <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-800 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-1">
-                  {selectedEmployee}
-                  <button onClick={() => setSelectedEmployee("")} className="hover:text-teal-900"><X size={12} /></button>
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Employee: <span className="font-semibold text-stone-800">{selectedEmployee}</span>
+                  <button onClick={() => setSelectedEmployee("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
               )}
               {selectedSupplier && (
-                <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-800 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-1">
-                  {selectedSupplier}
-                  <button onClick={() => setSelectedSupplier("")} className="hover:text-teal-900"><X size={12} /></button>
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Supplier: <span className="font-semibold text-stone-800">{selectedSupplier}</span>
+                  <button onClick={() => setSelectedSupplier("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
               )}
               {query.trim() && (
-                <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-700 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-1">
-                  "{query.trim()}"
-                  <button onClick={() => setQuery("")} className="hover:text-stone-900"><X size={12} /></button>
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Search: <span className="font-semibold text-stone-800">"{query.trim()}"</span>
+                  <button onClick={() => setQuery("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
               )}
               <button
                 onClick={clearAllFilters}
-                className="text-xs text-red-600 hover:text-red-700 font-semibold ml-1"
+                className="text-red-600 hover:text-red-700 font-semibold ml-auto"
               >
                 Clear all
               </button>
@@ -6308,6 +6513,169 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         )}
 
+        {/* Search and filters — same unified card style as Flights, adapted to the
+            fields hotel bookings actually have (no month/year select stub — those
+            come from each booking's own booking date). */}
+        <div className="bg-white border border-stone-200 rounded-2xl p-3 sm:p-4 mb-3">
+          <div className="flex items-stretch gap-2">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input
+                className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                placeholder="Search by employee, customer, hotel, or supplier"
+                value={hotelQuery}
+                onChange={(e) => setHotelQuery(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setHotelFiltersOpen(!hotelFiltersOpen)}
+              className={`shrink-0 flex items-center gap-1.5 border rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                hotelFiltersOpen ? "border-teal-700 text-teal-800 bg-teal-50" : "border-stone-300 text-stone-600 hover:bg-stone-50 bg-white"
+              }`}
+            >
+              <SlidersHorizontal size={16} />
+              <span className="hidden sm:inline">Filters</span>
+              {activeHotelFilterCount > 0 && (
+                <span className="bg-teal-700 text-white text-[11px] font-bold rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center">
+                  {activeHotelFilterCount}
+                </span>
+              )}
+              <ChevronDown size={14} className={`transition-transform ${hotelFiltersOpen ? "rotate-180" : ""}`} />
+            </button>
+          </div>
+
+          {hotelFiltersOpen && (
+            <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-stone-100">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Year</label>
+                <div className="relative">
+                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={hotelSelectedYear}
+                    onChange={(e) => setHotelSelectedYear(e.target.value)}
+                  >
+                    <option value="">All years</option>
+                    {hotelYearsAvailable.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Month</label>
+                <div className="relative">
+                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={hotelSelectedMonth}
+                    onChange={(e) => setHotelSelectedMonth(e.target.value)}
+                  >
+                    <option value="">All months</option>
+                    {hotelMonthsAvailable.map((key) => (
+                      <option key={key} value={key}>{monthLabel(key)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Employee</label>
+                <div className="relative">
+                  <User size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={hotelSelectedEmployee}
+                    onChange={(e) => setHotelSelectedEmployee(e.target.value)}
+                  >
+                    <option value="">All employees</option>
+                    {hotelEmployeesAvailable.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Supplier</label>
+                <div className="relative">
+                  <Building2 size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={hotelSelectedSupplier}
+                    onChange={(e) => setHotelSelectedSupplier(e.target.value)}
+                  >
+                    <option value="">All suppliers</option>
+                    {hotelSuppliersAvailable.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Hotel</label>
+                <div className="relative">
+                  <Building2 size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={hotelSelectedHotelName}
+                    onChange={(e) => setHotelSelectedHotelName(e.target.value)}
+                  >
+                    <option value="">All hotels</option>
+                    {hotelNamesAvailable.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {hasActiveHotelFilter && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
+              <span className="text-stone-400 font-medium">Applied:</span>
+              {hotelSelectedYear && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Year: <span className="font-semibold text-stone-800">{hotelSelectedYear}</span>
+                  <button onClick={() => setHotelSelectedYear("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              {hotelSelectedMonth && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Month: <span className="font-semibold text-stone-800">{monthLabel(hotelSelectedMonth)}</span>
+                  <button onClick={() => setHotelSelectedMonth("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              {hotelSelectedEmployee && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Employee: <span className="font-semibold text-stone-800">{hotelSelectedEmployee}</span>
+                  <button onClick={() => setHotelSelectedEmployee("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              {hotelSelectedSupplier && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Supplier: <span className="font-semibold text-stone-800">{hotelSelectedSupplier}</span>
+                  <button onClick={() => setHotelSelectedSupplier("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              {hotelSelectedHotelName && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Hotel: <span className="font-semibold text-stone-800">{hotelSelectedHotelName}</span>
+                  <button onClick={() => setHotelSelectedHotelName("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              {hotelQuery.trim() && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Search: <span className="font-semibold text-stone-800">"{hotelQuery.trim()}"</span>
+                  <button onClick={() => setHotelQuery("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              <button onClick={clearAllHotelFilters} className="text-red-600 hover:text-red-700 font-semibold ml-auto">
+                Clear all
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="bg-white border border-stone-200 rounded-2xl overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
@@ -6326,14 +6694,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </tr>
             </thead>
             <tbody>
-              {visibleHotelBookings.length === 0 && (
+              {filteredHotelBookings.length === 0 && (
                 <tr>
                   <td colSpan={11} className="text-center text-stone-400 px-2.5 py-6">
-                    No hotel bookings yet.
+                    {visibleHotelBookings.length === 0 ? "No hotel bookings yet." : "No hotel bookings match the current search/filters."}
                   </td>
                 </tr>
               )}
-              {visibleHotelBookings.map((h) => (
+              {filteredHotelBookings.map((h) => (
                 <tr
                   key={h.id}
                   className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer"
@@ -6743,11 +7111,130 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         )}
 
+        {/* Search and filters — same unified card style as Flights/Hotels, adapted to
+            the fields visa bookings actually have (no Employee filter — visa bookings
+            don't track which employee created them). */}
+        <div className="bg-white border border-stone-200 rounded-2xl p-3 sm:p-4 mb-3">
+          <div className="flex items-stretch gap-2">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input
+                className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                placeholder="Search by customer name, visa type, or supplier"
+                value={visaQuery}
+                onChange={(e) => setVisaQuery(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setVisaFiltersOpen(!visaFiltersOpen)}
+              className={`shrink-0 flex items-center gap-1.5 border rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                visaFiltersOpen ? "border-teal-700 text-teal-800 bg-teal-50" : "border-stone-300 text-stone-600 hover:bg-stone-50 bg-white"
+              }`}
+            >
+              <SlidersHorizontal size={16} />
+              <span className="hidden sm:inline">Filters</span>
+              {activeVisaFilterCount > 0 && (
+                <span className="bg-teal-700 text-white text-[11px] font-bold rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center">
+                  {activeVisaFilterCount}
+                </span>
+              )}
+              <ChevronDown size={14} className={`transition-transform ${visaFiltersOpen ? "rotate-180" : ""}`} />
+            </button>
+          </div>
+
+          {visaFiltersOpen && (
+            <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-stone-100">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Year</label>
+                <div className="relative">
+                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={visaSelectedYear}
+                    onChange={(e) => setVisaSelectedYear(e.target.value)}
+                  >
+                    <option value="">All years</option>
+                    {visaYearsAvailable.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Month</label>
+                <div className="relative">
+                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={visaSelectedMonth}
+                    onChange={(e) => setVisaSelectedMonth(e.target.value)}
+                  >
+                    <option value="">All months</option>
+                    {visaMonthsAvailable.map((key) => (
+                      <option key={key} value={key}>{monthLabel(key)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Supplier</label>
+                <div className="relative">
+                  <Building2 size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={visaSelectedSupplier}
+                    onChange={(e) => setVisaSelectedSupplier(e.target.value)}
+                  >
+                    <option value="">All suppliers</option>
+                    {visaSuppliersAvailable.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {hasActiveVisaFilter && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
+              <span className="text-stone-400 font-medium">Applied:</span>
+              {visaSelectedYear && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Year: <span className="font-semibold text-stone-800">{visaSelectedYear}</span>
+                  <button onClick={() => setVisaSelectedYear("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              {visaSelectedMonth && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Month: <span className="font-semibold text-stone-800">{monthLabel(visaSelectedMonth)}</span>
+                  <button onClick={() => setVisaSelectedMonth("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              {visaSelectedSupplier && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Supplier: <span className="font-semibold text-stone-800">{visaSelectedSupplier}</span>
+                  <button onClick={() => setVisaSelectedSupplier("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              {visaQuery.trim() && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Search: <span className="font-semibold text-stone-800">"{visaQuery.trim()}"</span>
+                  <button onClick={() => setVisaQuery("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              <button onClick={clearAllVisaFilters} className="text-red-600 hover:text-red-700 font-semibold ml-auto">
+                Clear all
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Visa bookings list */}
-        {visaBookings.length === 0 ? (
+        {filteredVisaBookings.length === 0 ? (
           <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
             <PassportIcon size={40} className="mx-auto mb-3 text-stone-300" />
-            <p className="text-sm">No visa bookings yet.</p>
+            <p className="text-sm">{visaBookings.length === 0 ? "No visa bookings yet." : "No visa bookings match the current search/filters."}</p>
           </div>
         ) : (
           <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
@@ -6767,7 +7254,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {visaBookings.map((v) => {
+                  {filteredVisaBookings.map((v) => {
                     const net = visaNetTotal(v);
                     const sold = visaSoldTotal(v);
                     const profit = sold - net;
@@ -7205,11 +7692,130 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         )}
 
+        {/* Search and filters — same unified card style as the other sections, adapted
+            to the fields transfer bookings actually have (no Employee filter — these
+            bookings don't track which employee created them). */}
+        <div className="bg-white border border-stone-200 rounded-2xl p-3 sm:p-4 mb-3">
+          <div className="flex items-stretch gap-2">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input
+                className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                placeholder="Search by customer, route, car type, supplier, or flight number"
+                value={carQuery}
+                onChange={(e) => setCarQuery(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setCarFiltersOpen(!carFiltersOpen)}
+              className={`shrink-0 flex items-center gap-1.5 border rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                carFiltersOpen ? "border-teal-700 text-teal-800 bg-teal-50" : "border-stone-300 text-stone-600 hover:bg-stone-50 bg-white"
+              }`}
+            >
+              <SlidersHorizontal size={16} />
+              <span className="hidden sm:inline">Filters</span>
+              {activeCarFilterCount > 0 && (
+                <span className="bg-teal-700 text-white text-[11px] font-bold rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center">
+                  {activeCarFilterCount}
+                </span>
+              )}
+              <ChevronDown size={14} className={`transition-transform ${carFiltersOpen ? "rotate-180" : ""}`} />
+            </button>
+          </div>
+
+          {carFiltersOpen && (
+            <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-stone-100">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Year</label>
+                <div className="relative">
+                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={carSelectedYear}
+                    onChange={(e) => setCarSelectedYear(e.target.value)}
+                  >
+                    <option value="">All years</option>
+                    {carYearsAvailable.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Month</label>
+                <div className="relative">
+                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={carSelectedMonth}
+                    onChange={(e) => setCarSelectedMonth(e.target.value)}
+                  >
+                    <option value="">All months</option>
+                    {carMonthsAvailable.map((key) => (
+                      <option key={key} value={key}>{monthLabel(key)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Supplier</label>
+                <div className="relative">
+                  <Building2 size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                  <select
+                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                    value={carSelectedSupplier}
+                    onChange={(e) => setCarSelectedSupplier(e.target.value)}
+                  >
+                    <option value="">All suppliers</option>
+                    {carSuppliersAvailable.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {hasActiveCarFilter && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
+              <span className="text-stone-400 font-medium">Applied:</span>
+              {carSelectedYear && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Year: <span className="font-semibold text-stone-800">{carSelectedYear}</span>
+                  <button onClick={() => setCarSelectedYear("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              {carSelectedMonth && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Month: <span className="font-semibold text-stone-800">{monthLabel(carSelectedMonth)}</span>
+                  <button onClick={() => setCarSelectedMonth("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              {carSelectedSupplier && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Supplier: <span className="font-semibold text-stone-800">{carSelectedSupplier}</span>
+                  <button onClick={() => setCarSelectedSupplier("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              {carQuery.trim() && (
+                <span className="inline-flex items-center gap-1 text-stone-600">
+                  Search: <span className="font-semibold text-stone-800">"{carQuery.trim()}"</span>
+                  <button onClick={() => setCarQuery("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              )}
+              <button onClick={clearAllCarFilters} className="text-red-600 hover:text-red-700 font-semibold ml-auto">
+                Clear all
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Transfer bookings list */}
-        {carBookings.length === 0 ? (
+        {filteredCarBookings.length === 0 ? (
           <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
             <Car size={40} className="mx-auto mb-3 text-stone-300" />
-            <p className="text-sm">No transfer bookings yet.</p>
+            <p className="text-sm">{carBookings.length === 0 ? "No transfer bookings yet." : "No transfer bookings match the current search/filters."}</p>
           </div>
         ) : (
           <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
@@ -7237,7 +7843,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {carBookings.map((c) => {
+                  {filteredCarBookings.map((c) => {
                     const net = parseFloat(c.netPrice) || 0;
                     const sold = parseFloat(c.soldPrice) || 0;
                     const profit = sold - net;
@@ -7349,6 +7955,123 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </div>
                 </div>
 
+                {/* Search and filters — same unified card style as the other sections. */}
+                <div className="bg-white border border-stone-200 rounded-2xl p-3 sm:p-4 mb-4">
+                  <div className="flex items-stretch gap-2">
+                    <div className="relative flex-1">
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                      <input
+                        className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        placeholder="Search by serial, company, notes, or employee"
+                        value={fileQuery}
+                        onChange={(e) => setFileQuery(e.target.value)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFileFiltersOpen(!fileFiltersOpen)}
+                      className={`shrink-0 flex items-center gap-1.5 border rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                        fileFiltersOpen ? "border-teal-700 text-teal-800 bg-teal-50" : "border-stone-300 text-stone-600 hover:bg-stone-50 bg-white"
+                      }`}
+                    >
+                      <SlidersHorizontal size={16} />
+                      <span className="hidden sm:inline">Filters</span>
+                      {activeFileFilterCount > 0 && (
+                        <span className="bg-teal-700 text-white text-[11px] font-bold rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center">
+                          {activeFileFilterCount}
+                        </span>
+                      )}
+                      <ChevronDown size={14} className={`transition-transform ${fileFiltersOpen ? "rotate-180" : ""}`} />
+                    </button>
+                  </div>
+
+                  {fileFiltersOpen && (
+                    <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-stone-100">
+                      <div>
+                        <label className="text-xs text-stone-500 block mb-1">Year</label>
+                        <div className="relative">
+                          <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                          <select
+                            className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                            value={fileSelectedYear}
+                            onChange={(e) => setFileSelectedYear(e.target.value)}
+                          >
+                            <option value="">All years</option>
+                            {fileYearsAvailable.map((y) => (
+                              <option key={y} value={y}>{y}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-stone-500 block mb-1">Company</label>
+                        <div className="relative">
+                          <Building2 size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                          <select
+                            className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                            value={fileSelectedCompany}
+                            onChange={(e) => setFileSelectedCompany(e.target.value)}
+                          >
+                            <option value="">All companies</option>
+                            {fileCompaniesAvailable.map((name) => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-stone-500 block mb-1">Employee</label>
+                        <div className="relative">
+                          <User size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                          <select
+                            className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
+                            value={fileSelectedEmployee}
+                            onChange={(e) => setFileSelectedEmployee(e.target.value)}
+                          >
+                            <option value="">All employees</option>
+                            {fileEmployeesAvailable.map((name) => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {hasActiveFileFilter && (
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
+                      <span className="text-stone-400 font-medium">Applied:</span>
+                      {fileSelectedYear && (
+                        <span className="inline-flex items-center gap-1 text-stone-600">
+                          Year: <span className="font-semibold text-stone-800">{fileSelectedYear}</span>
+                          <button onClick={() => setFileSelectedYear("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                        </span>
+                      )}
+                      {fileSelectedCompany && (
+                        <span className="inline-flex items-center gap-1 text-stone-600">
+                          Company: <span className="font-semibold text-stone-800">{fileSelectedCompany}</span>
+                          <button onClick={() => setFileSelectedCompany("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                        </span>
+                      )}
+                      {fileSelectedEmployee && (
+                        <span className="inline-flex items-center gap-1 text-stone-600">
+                          Employee: <span className="font-semibold text-stone-800">{fileSelectedEmployee}</span>
+                          <button onClick={() => setFileSelectedEmployee("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                        </span>
+                      )}
+                      {fileQuery.trim() && (
+                        <span className="inline-flex items-center gap-1 text-stone-600">
+                          Search: <span className="font-semibold text-stone-800">"{fileQuery.trim()}"</span>
+                          <button onClick={() => setFileQuery("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                        </span>
+                      )}
+                      <button onClick={clearAllFileFilters} className="text-red-600 hover:text-red-700 font-semibold ml-auto">
+                        Clear all
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100 overflow-hidden mb-6">
                   <button
                     onClick={startNewFileDraft}
@@ -7357,12 +8080,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <Plus size={16} /> Create new file
                   </button>
 
-                  {visibleFiles.length === 0 ? (
+                  {filteredFiles.length === 0 ? (
                     <p className="text-sm text-stone-400 text-center py-10">
-                      No files yet — create one and pull in copies from Flights, Hotels, or Visa.
+                      {visibleFiles.length === 0
+                        ? "No files yet — create one and pull in copies from Flights, Hotels, or Visa."
+                        : "No files match the current search/filters."}
                     </p>
                   ) : (
-                    visibleFiles.map((f) => {
+                    filteredFiles.map((f) => {
                       const t = fileTotals(f);
                       return (
                         <div
