@@ -5338,11 +5338,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         {isLicensed ? (
         <>
         {/* Top-level section switcher */}
-        <div className="flex items-center justify-center gap-3 mb-6">
+        <div className="flex items-center gap-2 md:gap-3 mb-6 overflow-x-auto md:justify-center md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0">
           {mySections.flights && (
           <button
             onClick={() => setActiveSection("flights")}
-            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "flights"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
@@ -5355,7 +5355,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           {mySections.hotels && (
           <button
             onClick={() => setActiveSection("hotels")}
-            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "hotels"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
@@ -5368,7 +5368,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           {mySections.visa && (
           <button
             onClick={() => setActiveSection("visa")}
-            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "visa"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
@@ -5381,7 +5381,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           {mySections.cars && (
           <button
             onClick={() => setActiveSection("cars")}
-            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "cars"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
@@ -5394,7 +5394,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           {mySections.files && (
           <button
             onClick={() => setActiveSection("files")}
-            className={`flex flex-col items-center gap-1.5 px-6 py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "files"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
