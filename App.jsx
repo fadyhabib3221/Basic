@@ -3400,6 +3400,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const isOwnerUser =
     !!currentUser && !currentUser.isAdmin && !!(currentEmployeeRecord && currentEmployeeRecord.isOwner);
   const hasAdminAccess = !!currentUser && (currentUser.isAdmin || isOwnerUser);
+  // An Owner should never see that a main/admin account exists at all, so admin usernames
+  // are dropped from the online-presence list whenever the viewer isn't a true admin.
+  const visibleOnlineUsernames = onlineUsernames.filter((u) => {
+    if (!currentUser || currentUser.isAdmin) return true;
+    const emp = (employees || []).find((e) => e.username === u);
+    return !(emp && emp.isAdmin);
+  });
   const visibleTickets = !currentUser
     ? []
     : canViewAllTickets
@@ -4658,7 +4665,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-50 bg-emerald-500/20 border border-emerald-300/30 rounded-full px-2 py-0.5 hover:bg-emerald-500/30"
                     >
                       <Wifi size={11} />
-                      {onlineUsernames.length} online now
+                      {visibleOnlineUsernames.length} online now
                     </button>
                   )}
                 </p>
@@ -4749,16 +4756,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="fixed inset-0 z-30" onClick={() => setShowOnlineList(false)} />
             <div className="fixed z-40 top-24 left-4 right-4 md:left-auto md:right-6 md:w-72 bg-white border border-stone-300 rounded-2xl shadow-lg p-2">
               <div className="flex items-center justify-between px-1 pb-1 mb-1 border-b border-stone-100">
-                <p className="text-xs font-semibold text-stone-600">{onlineUsernames.length} online now</p>
+                <p className="text-xs font-semibold text-stone-600">{visibleOnlineUsernames.length} online now</p>
                 <button onClick={() => setShowOnlineList(false)} className="text-stone-400 hover:text-stone-700 p-0.5">
                   <X size={14} />
                 </button>
               </div>
-              {onlineUsernames.length === 0 ? (
+              {visibleOnlineUsernames.length === 0 ? (
                 <p className="text-xs text-stone-400 px-1 py-1">No one online right now</p>
               ) : (
                 <ul className="space-y-1 max-h-72 overflow-y-auto">
-                  {onlineUsernames.map((u) => {
+                  {visibleOnlineUsernames.map((u) => {
                     const emp = (employees || []).find((e) => e.username === u);
                     const activity = presenceMap[u] && presenceMap[u].activity;
                     return (
@@ -4884,7 +4891,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {manageError && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{manageError}</div>}
             <p className="text-xs text-stone-500 mb-3 flex items-center gap-1.5">
               <Wifi size={13} className="text-emerald-600" />
-              {onlineUsernames.length} of {(employees || []).length} employees connected right now
+              {visibleOnlineUsernames.length} of {(employees || []).filter((e) => currentUser.isAdmin || !e.isAdmin).length} employees connected right now
             </p>
             <div className="border border-stone-200 rounded-xl overflow-hidden mb-4">
               <table className="w-full text-sm">
@@ -4899,7 +4906,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </tr>
                 </thead>
                 <tbody>
-                  {(employees || []).map((e) => {
+                  {(employees || [])
+                    .filter((e) => currentUser.isAdmin || !e.isAdmin)
+                    .map((e) => {
                     const isEditing = editingUsername === e.username;
                     if (isEditing) {
                       return (
