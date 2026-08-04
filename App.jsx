@@ -435,26 +435,72 @@ const resizeCustomers = (customers, count) => {
 // ROLE_PRESETS), but every toggle can still be switched on or off by hand afterwards —
 // the grade is a starting point/label, not a lock. Grade is purely descriptive; access
 // is always driven by the individual toggles stored on the employee record.
+//
+// Alongside the five original, all-section grades (Manager/Supervisor/Employee/
+// Accountant/Owner), there's a grade per section per tier — e.g. "Flights Employee",
+// "Hotels Supervisor", "Transportation Manager" — that automatically limits the
+// employee to that one section (every other section is switched off) with a sensible
+// starting permission level for that tier. Main account/Owner can still fine-tune or
+// widen access afterward from the Permissions screen; picking the grade just sets the
+// starting point.
+const SECTION_ROLE_LABELS = { flights: "Flights", hotels: "Hotels", visa: "Visa", cars: "Transportation", files: "Files" };
+// Visa and Transportation bookings aren't tagged with an owning employee, so there's no
+// meaningful "their own vs everyone's" split for a plain Employee grade there — those two
+// sections start at Supervisor and up. Files has no dedicated Employee grade either,
+// since it's normally reached through the other sections' "Copy to a file" action.
+const SECTIONS_WITH_EMPLOYEE_GRADE = ["flights", "hotels"];
+const ALL_ROLE_SECTIONS = ["flights", "hotels", "visa", "cars", "files"];
+const sectionOnlyAccess = (section) => ({ flights: false, hotels: false, visa: false, cars: false, files: false, [section]: true });
+const SECTION_TIER_PERMS = {
+  employee: { canViewAll: false, canEdit: false, canDelete: false, canManageCompanies: false },
+  supervisor: { canViewAll: true, canEdit: true, canDelete: false, canManageCompanies: false },
+  manager: { canViewAll: true, canEdit: true, canDelete: true, canManageCompanies: true },
+};
+const sectionRolePreset = (section, tier) => {
+  const p = SECTION_TIER_PERMS[tier];
+  return {
+    canViewAll: p.canViewAll,
+    canAdd: true,
+    canEdit: p.canEdit,
+    canDelete: p.canDelete,
+    isAccounting: false,
+    canManageCompanies: p.canManageCompanies,
+    isOwner: false,
+    sections: sectionOnlyAccess(section),
+    sectionPerms: { [section]: { canViewAll: p.canViewAll, canEdit: p.canEdit, canDelete: p.canDelete } },
+  };
+};
+
 const EMPLOYEE_ROLES = [
   { value: "manager", label: "Manager" },
   { value: "supervisor", label: "Supervisor" },
   { value: "employee", label: "Employee" },
   { value: "accountant", label: "Accountant" },
   { value: "owner", label: "Owner" },
+  ...SECTIONS_WITH_EMPLOYEE_GRADE.map((s) => ({ value: `employee_${s}`, label: `${SECTION_ROLE_LABELS[s]} Employee` })),
+  ...ALL_ROLE_SECTIONS.map((s) => ({ value: `supervisor_${s}`, label: `${SECTION_ROLE_LABELS[s]} Supervisor` })),
+  ...ALL_ROLE_SECTIONS.map((s) => ({ value: `manager_${s}`, label: `${SECTION_ROLE_LABELS[s]} Manager` })),
 ];
 
-// Starting toggle values applied when a grade is picked. All six are then freely
+// Starting toggle values applied when a grade is picked. All toggles are then freely
 // editable by hand, independent of which grade is selected. "Owner" is a step above
 // the rest: full ticket/company access like the other grades below, PLUS admin-level
 // access to Manage employees and Backup/Restore (granted separately via isOwner,
 // checked alongside currentUser.isAdmin wherever those are gated) — the one thing an
 // Owner never gets is the License panel, which stays reserved for true main accounts.
+// The five original grades are explicitly all-section (sections + sectionPerms reset to
+// full access) so switching *back* to one of them from a section-limited grade restores
+// every section, rather than leaving the old restriction in place.
+const ALL_SECTIONS_ON = { flights: true, hotels: true, visa: true, cars: true, files: true };
 const ROLE_PRESETS = {
-  manager: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: false },
-  supervisor: { canViewAll: true, canAdd: true, canEdit: true, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false },
-  employee: { canViewAll: false, canAdd: true, canEdit: false, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false },
-  accountant: { canViewAll: true, canAdd: false, canEdit: false, canDelete: false, isAccounting: true, canManageCompanies: false, isOwner: false },
-  owner: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: true },
+  manager: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
+  supervisor: { canViewAll: true, canAdd: true, canEdit: true, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
+  employee: { canViewAll: false, canAdd: true, canEdit: false, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
+  accountant: { canViewAll: true, canAdd: false, canEdit: false, canDelete: false, isAccounting: true, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
+  owner: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: true, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
+  ...Object.fromEntries(SECTIONS_WITH_EMPLOYEE_GRADE.map((s) => [`employee_${s}`, sectionRolePreset(s, "employee")])),
+  ...Object.fromEntries(ALL_ROLE_SECTIONS.map((s) => [`supervisor_${s}`, sectionRolePreset(s, "supervisor")])),
+  ...Object.fromEntries(ALL_ROLE_SECTIONS.map((s) => [`manager_${s}`, sectionRolePreset(s, "manager")])),
 };
 
 const roleLabel = (value) => (EMPLOYEE_ROLES.find((r) => r.value === value) || {}).label || "Employee";
@@ -478,12 +524,15 @@ const DEFAULT_SECTIONS = { flights: true, hotels: true, visa: true, cars: true, 
 // resolves to full access rather than blocking every section.
 const employeeSections = (emp) => ({ ...DEFAULT_SECTIONS, ...((emp && emp.sections) || {}) });
 
-// Fine-grained permissions — view all / edit / delete — set independently for each of
-// the five sections, on top of the on/off "section access" toggle above. Flights, Hotels,
-// and Files track which employee created each record, so "view all" has real meaning
-// there (off = only your own records); Visa and Transportation bookings were never tagged
-// with an owning employee, so those two sections have no "view all" toggle and are always
-// fully visible to anyone who has access to the section at all — only Edit/Delete apply.
+// Fine-grained permissions — View all services / Edit / Delete — set independently for
+// each of the five sections, on top of the on/off "section access" toggle above. All
+// three are fully independent switches: an employee can have Edit on with View all
+// services off, which simply limits them to editing their own records. Flights, Hotels,
+// and Files track which employee created each record, so "View all services" has real
+// meaning there (off = only your own records); Visa and Transportation bookings were
+// never tagged with an owning employee, so those two sections have no "View all
+// services" toggle and are always fully visible to anyone who has access to the section
+// at all — only Edit/Delete apply.
 const SECTIONS_WITH_OWNERSHIP = ["flights", "hotels", "files"];
 // Every existing employee predates this feature, so a section with nothing stored in
 // sectionPerms falls back to that employee's old, single account-wide
@@ -498,8 +547,6 @@ const employeeSectionPerm = (emp, section) => {
   const stored = (emp && emp.sectionPerms && emp.sectionPerms[section]) || {};
   const merged = { ...legacy, ...stored };
   if (emp && emp.isAccounting) return { canViewAll: true, canEdit: false, canDelete: false };
-  // Editing or deleting in a section implies being able to view all records in it.
-  merged.canViewAll = merged.canViewAll || merged.canEdit || merged.canDelete;
   return merged;
 };
 
@@ -671,7 +718,7 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
 
         <p className="text-xs text-stone-500 mb-1">Section access &amp; permissions</p>
         <p className="text-[11px] text-stone-400 mb-2">
-          Turn a section on or off, then set exactly what they can do inside it — view/edit/delete are independent per section.
+          Turn a section on or off, then set exactly what they can do inside it — View all services, Edit, and Delete are each independent per section.
         </p>
         <div className="space-y-2">
           {SECTION_OPTIONS.map((s) => {
@@ -689,10 +736,9 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
                   <div className={emp.isAccounting ? "opacity-50 pointer-events-none" : ""}>
                     {hasOwnership && (
                       <ToggleSwitch
-                        label="View all"
+                        label="View all services"
                         description={`See every employee's ${s.label.toLowerCase()} records, not just their own`}
                         checked={perm.canViewAll}
-                        disabled={perm.canEdit || perm.canDelete}
                         onChange={(v) => onSetSectionPerm(s.value, "canViewAll", v)}
                       />
                     )}
@@ -1059,7 +1105,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const [showManage, setShowManage] = useState(false);
   const [newEmployee, setNewEmployee] = useState(emptyNewEmployee);
-  const [showNewEmployeePerms, setShowNewEmployeePerms] = useState(false);
   const [openPermissionsFor, setOpenPermissionsFor] = useState(null); // username, or null if closed
   const [manageError, setManageError] = useState("");
   const [visiblePasswords, setVisiblePasswords] = useState({});
@@ -2687,10 +2732,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     await persistEmployees(next);
   };
 
-  // Sets one of View all / Edit / Delete for one specific section (Flights, Hotels, Visa,
-  // Transportation, or Files), independent of every other section's permissions. Edit or
-  // Delete being turned on implies View all is on too for that same section, mirroring the
-  // coherence rule reconcilePermissions applies to the old account-wide toggles.
+  // Sets one of View all services / Edit / Delete for one specific section (Flights,
+  // Hotels, Visa, Transportation, or Files), independent of every other section's
+  // permissions — and independent of the other two toggles within the same section too.
   const handleToggleSectionPermission = async (username, section, field, checked) => {
     if (!currentUser.isAdmin && !isOwnerUser) {
       setManageError("Only the main account can change employee permissions");
@@ -2700,7 +2744,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       if (e.username !== username) return e;
       const current = employeeSectionPerm(e, section);
       const updated = { ...current, [field]: checked };
-      updated.canViewAll = updated.canViewAll || updated.canEdit || updated.canDelete;
       return { ...e, sectionPerms: { ...(e.sectionPerms || {}), [section]: updated } };
     });
     await persistEmployees(next);
@@ -5239,8 +5282,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
             </div>
 
-            {/* Grade: picking one fills the toggles below with a sensible starting
-                point. Every toggle can still be switched by hand afterwards. */}
+            {/* Grade: picking one sets the employee's section access and permissions
+                automatically (a section-specific grade limits them to that one section).
+                Fine-tuning every individual toggle happens afterward, from the
+                Permissions screen reached by clicking the employee's name below. */}
             <div className="mt-3 max-w-sm">
               <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
               <div className="grid grid-cols-3 gap-1.5">
@@ -5261,95 +5306,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Detailed, individually switchable permissions — the grade above is only a
-                starting point; every toggle here can be set by hand regardless of grade. */}
-            <div className="relative mt-3 max-w-sm">
-              <button
-                type="button"
-                onClick={() => setShowNewEmployeePerms(!showNewEmployeePerms)}
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center justify-between gap-2"
-              >
-                <span className="font-medium">Permissions</span>
-                <span className="text-xs text-stone-500 truncate">
-                  {[
-                    newEmployee.isAccounting && "Notes only",
-                    newEmployee.canManageCompanies && "Companies",
-                    newEmployee.isOwner && "Owner",
-                  ]
-                    .filter(Boolean)
-                    .join(" · ") || "Own records only"}
-                </span>
-              </button>
-
-              {showNewEmployeePerms && (
-                <div className="absolute z-10 mt-1 w-full bg-white border border-stone-300 rounded-xl shadow-lg p-3 max-h-[70vh] overflow-y-auto divide-y divide-stone-100">
-                  <ToggleSwitch
-                    label="Accounting mode"
-                    description="View all tickets, but the only edit allowed is the Notes field"
-                    checked={newEmployee.isAccounting}
-                    onChange={(v) => setNewEmployee(reconcilePermissions({ ...newEmployee, isAccounting: v }))}
-                  />
-                  <ToggleSwitch
-                    label="Manage companies"
-                    description="Add, edit, or remove saved company records"
-                    checked={newEmployee.canManageCompanies}
-                    onChange={(v) => setNewEmployee({ ...newEmployee, canManageCompanies: v })}
-                  />
-                  <ToggleSwitch
-                    label="Owner access"
-                    description="Admin-level access — manage employees, backup/restore — everything except the License panel"
-                    checked={newEmployee.isOwner}
-                    onChange={(v) => setNewEmployee({ ...newEmployee, isOwner: v })}
-                  />
-                  <div className="pt-2 space-y-2">
-                    <p className="text-xs text-stone-500 mb-1 pt-1.5">Section access &amp; permissions</p>
-                    {SECTION_OPTIONS.map((s) => {
-                      const sectionOn = !!employeeSections(newEmployee)[s.value];
-                      const perm = employeeSectionPerm(newEmployee, s.value);
-                      const hasOwnership = SECTIONS_WITH_OWNERSHIP.includes(s.value);
-                      const setPerm = (field, v) => {
-                        const current = employeeSectionPerm(newEmployee, s.value);
-                        const updated = { ...current, [field]: v };
-                        updated.canViewAll = updated.canViewAll || updated.canEdit || updated.canDelete;
-                        setNewEmployee({
-                          ...newEmployee,
-                          sectionPerms: { ...(newEmployee.sectionPerms || {}), [s.value]: updated },
-                        });
-                      };
-                      return (
-                        <div key={s.value} className="border border-stone-200 rounded-xl px-3 divide-y divide-stone-100 overflow-hidden">
-                          <ToggleSwitch
-                            label={s.label}
-                            checked={sectionOn}
-                            onChange={(v) =>
-                              setNewEmployee({
-                                ...newEmployee,
-                                sections: { ...employeeSections(newEmployee), [s.value]: v },
-                              })
-                            }
-                          />
-                          {sectionOn && (
-                            <div className={newEmployee.isAccounting ? "opacity-50 pointer-events-none" : ""}>
-                              {hasOwnership && (
-                                <ToggleSwitch
-                                  label="View all"
-                                  checked={perm.canViewAll}
-                                  disabled={perm.canEdit || perm.canDelete}
-                                  onChange={(v) => setPerm("canViewAll", v)}
-                                />
-                              )}
-                              <ToggleSwitch label="Edit" checked={perm.canEdit} onChange={(v) => setPerm("canEdit", v)} />
-                              <ToggleSwitch label="Delete" checked={perm.canDelete} onChange={(v) => setPerm("canDelete", v)} />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              <p className="text-[11px] text-stone-400 mt-1.5">
+                You can fine-tune every permission for each section after adding them, from Manage employees.
+              </p>
             </div>
 
             <button onClick={handleAddEmployee}
