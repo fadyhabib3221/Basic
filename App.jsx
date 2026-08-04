@@ -444,10 +444,12 @@ const resizeCustomers = (customers, count) => {
 // widen access afterward from the Permissions screen; picking the grade just sets the
 // starting point.
 const SECTION_ROLE_LABELS = { flights: "Flights", hotels: "Hotels", visa: "Visa", cars: "Transportation", files: "Files" };
-// Visa and Transportation bookings aren't tagged with an owning employee, so there's no
-// meaningful "their own vs everyone's" split for a plain Employee grade there — those two
-// sections start at Supervisor and up. Files has no dedicated Employee grade either,
-// since it's normally reached through the other sections' "Copy to a file" action.
+// Visa and Transportation stay at Supervisor-and-up for the dedicated per-section
+// Employee grade — not because they lack ownership tracking (they now have it, same
+// as Flights/Hotels/Files), but simply to keep the starting grade list focused; an
+// admin can still hand-build a "view only own Visa/Transportation" employee via the
+// Permissions screen's individual toggles. Files has no dedicated Employee grade
+// either, since it's normally reached through the other sections' "Copy to a file" action.
 const SECTIONS_WITH_EMPLOYEE_GRADE = ["flights", "hotels"];
 const ALL_ROLE_SECTIONS = ["flights", "hotels", "visa", "cars", "files"];
 const sectionOnlyAccess = (section) => ({ flights: false, hotels: false, visa: false, cars: false, files: false, [section]: true });
@@ -505,6 +507,19 @@ const ROLE_PRESETS = {
 
 const roleLabel = (value) => (EMPLOYEE_ROLES.find((r) => r.value === value) || {}).label || "Employee";
 
+// Grade picker on the Add employee page groups the 17 grades into three per-tier
+// dropdowns (Manager / Supervisor / Employee — each holding that tier's general grade
+// plus its per-department variants), with Owner and Accountant standing alone next to
+// the three dropdowns since neither has department-specific variants.
+const MANAGER_GRADES = EMPLOYEE_ROLES.filter((r) => r.value === "manager" || r.value.startsWith("manager_"));
+const SUPERVISOR_GRADES = EMPLOYEE_ROLES.filter((r) => r.value === "supervisor" || r.value.startsWith("supervisor_"));
+const EMPLOYEE_GRADES = EMPLOYEE_ROLES.filter((r) => r.value === "employee" || r.value.startsWith("employee_"));
+const GRADE_TIER_GROUPS = [
+  { key: "manager", title: "Manager", roles: MANAGER_GRADES },
+  { key: "supervisor", title: "Supervisor", roles: SUPERVISOR_GRADES },
+  { key: "employee", title: "Employee", roles: EMPLOYEE_GRADES },
+];
+
 // Which of the app's sections (Flights/Hotels/Visa/Transportation/Files) an employee can
 // see and use, independent of their ticket permissions (view/add/edit/delete) above — an
 // employee could, for example, be allowed to add tickets but only in the Hotels section.
@@ -527,13 +542,11 @@ const employeeSections = (emp) => ({ ...DEFAULT_SECTIONS, ...((emp && emp.sectio
 // Fine-grained permissions — View all services / Edit / Delete — set independently for
 // each of the five sections, on top of the on/off "section access" toggle above. All
 // three are fully independent switches: an employee can have Edit on with View all
-// services off, which simply limits them to editing their own records. Flights, Hotels,
-// and Files track which employee created each record, so "View all services" has real
-// meaning there (off = only your own records); Visa and Transportation bookings were
-// never tagged with an owning employee, so those two sections have no "View all
-// services" toggle and are always fully visible to anyone who has access to the section
-// at all — only Edit/Delete apply.
-const SECTIONS_WITH_OWNERSHIP = ["flights", "hotels", "files"];
+// services off, which simply limits them to editing their own records. Every section —
+// Flights, Hotels, Visa, Transportation, and Files — tracks which employee created each
+// record, so "View all services" has real meaning everywhere (off = only your own
+// records).
+const SECTIONS_WITH_OWNERSHIP = ["flights", "hotels", "visa", "cars", "files"];
 // Every existing employee predates this feature, so a section with nothing stored in
 // sectionPerms falls back to that employee's old, single account-wide
 // canViewAll/canEdit/canDelete values — permissions stay exactly as they were until the
@@ -1105,7 +1118,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const [showManage, setShowManage] = useState(false);
   const [newEmployee, setNewEmployee] = useState(emptyNewEmployee);
-  const [newEmployeeGradeOpen, setNewEmployeeGradeOpen] = useState(false); // dropdown open/closed for the Grade picker on the Add employee page
+  const [newEmployeeGradeOpen, setNewEmployeeGradeOpen] = useState(null); // which of the three Grade dropdowns is open on the Add employee page: "manager" | "supervisor" | "employee" | null
   const [openPermissionsFor, setOpenPermissionsFor] = useState(null); // username, or null if closed
   const [manageError, setManageError] = useState("");
   const [visiblePasswords, setVisiblePasswords] = useState({});
@@ -2198,6 +2211,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const record = {
         ...visaForm,
         id: `V-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        employee: currentUser.name,
+        employeeUsername: currentUser.username,
       };
       await persistVisaBookings([record, ...visaBookings]);
     }
@@ -2286,6 +2301,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const record = {
         ...carForm,
         id: `C-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        employee: currentUser.name,
+        employeeUsername: currentUser.username,
       };
       await persistCarBookings([record, ...carBookings]);
     }
@@ -3763,15 +3780,25 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   });
 
   // ---------- Visa: search + filters ----------
-  // Visa bookings don't track which employee created them, so there's no Employee filter here.
+  // Visa bookings are tagged with an owning employee (employeeUsername), same as
+  // Flights/Hotels/Files — falls back to matching on the display name for any legacy
+  // booking saved before this field existed. There's still no Employee filter dropdown
+  // here, unlike Hotels, since that wasn't asked for.
+  const visibleVisaBookings = !currentUser
+    ? []
+    : visaPerm.canViewAll
+    ? visaBookings
+    : visaBookings.filter((v) =>
+        v.employeeUsername ? v.employeeUsername === currentUser.username : v.employee === currentUser.name
+      );
   const visaMonthsAvailable = Array.from(
-    new Set(visaBookings.map((v) => monthKey(v.bookingDate)))
+    new Set(visibleVisaBookings.map((v) => monthKey(v.bookingDate)))
   ).sort((a, b) => b.localeCompare(a));
   const visaYearsAvailable = Array.from(
-    new Set(visaBookings.map((v) => (v.bookingDate ? v.bookingDate.slice(0, 4) : "")).filter(Boolean))
+    new Set(visibleVisaBookings.map((v) => (v.bookingDate ? v.bookingDate.slice(0, 4) : "")).filter(Boolean))
   ).sort((a, b) => b.localeCompare(a));
   const visaSuppliersAvailable = Array.from(
-    new Set(visaBookings.map((v) => (v.supplier || "").trim()).filter(Boolean))
+    new Set(visibleVisaBookings.map((v) => (v.supplier || "").trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
   const hasActiveVisaFilter = !!(visaSelectedYear || visaSelectedMonth || visaSelectedSupplier || visaQuery.trim());
@@ -3782,7 +3809,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setVisaSelectedMonth("");
     setVisaSelectedSupplier("");
   };
-  const filteredVisaBookings = visaBookings.filter((v) => {
+  const filteredVisaBookings = visibleVisaBookings.filter((v) => {
     if (visaSelectedYear && (v.bookingDate || "").slice(0, 4) !== visaSelectedYear) return false;
     if (visaSelectedMonth && monthKey(v.bookingDate) !== visaSelectedMonth) return false;
     if (visaSelectedSupplier && (v.supplier || "").trim() !== visaSelectedSupplier) return false;
@@ -3797,15 +3824,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   });
 
   // ---------- Transportation (cars): search + filters ----------
-  // Car bookings don't track which employee created them either, so no Employee filter here.
+  // Car bookings are tagged with an owning employee (employeeUsername) the same way,
+  // falling back to the display name for any legacy booking saved before this field
+  // existed. Still no Employee filter dropdown here, unlike Hotels.
+  const visibleCarBookings = !currentUser
+    ? []
+    : carsPerm.canViewAll
+    ? carBookings
+    : carBookings.filter((c) =>
+        c.employeeUsername ? c.employeeUsername === currentUser.username : c.employee === currentUser.name
+      );
   const carMonthsAvailable = Array.from(
-    new Set(carBookings.map((c) => monthKey(c.bookingDate)))
+    new Set(visibleCarBookings.map((c) => monthKey(c.bookingDate)))
   ).sort((a, b) => b.localeCompare(a));
   const carYearsAvailable = Array.from(
-    new Set(carBookings.map((c) => (c.bookingDate ? c.bookingDate.slice(0, 4) : "")).filter(Boolean))
+    new Set(visibleCarBookings.map((c) => (c.bookingDate ? c.bookingDate.slice(0, 4) : "")).filter(Boolean))
   ).sort((a, b) => b.localeCompare(a));
   const carSuppliersAvailable = Array.from(
-    new Set(carBookings.map((c) => (c.supplier || "").trim()).filter(Boolean))
+    new Set(visibleCarBookings.map((c) => (c.supplier || "").trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
   const hasActiveCarFilter = !!(carSelectedYear || carSelectedMonth || carSelectedSupplier || carQuery.trim());
@@ -3816,7 +3852,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setCarSelectedMonth("");
     setCarSelectedSupplier("");
   };
-  const filteredCarBookings = carBookings.filter((c) => {
+  const filteredCarBookings = visibleCarBookings.filter((c) => {
     if (carSelectedYear && (c.bookingDate || "").slice(0, 4) !== carSelectedYear) return false;
     if (carSelectedMonth && monthKey(c.bookingDate) !== carSelectedMonth) return false;
     if (carSelectedSupplier && (c.supplier || "").trim() !== carSelectedSupplier) return false;
@@ -3878,10 +3914,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       ? t.customers
       : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
 
-  // Visa bookings aren't tagged with an owning employee (see SECTIONS_WITH_OWNERSHIP),
-  // so anyone with Visa section access can pull a copy of any visa booking here — same
-  // as the main Visa list itself.
-  const visibleVisaBookingsForFiles = !currentUser ? [] : visaBookings;
+  // Visa bookings are now tagged with an owning employee like every other section, so
+  // the "copy to a file" picker in Files only offers bookings this employee can already
+  // see in the main Visa list — reusing the same permission-filtered list.
+  const visibleVisaBookingsForFiles = visibleVisaBookings;
 
   // ---------- Files ----------
   const visibleFiles = (
@@ -5271,72 +5307,122 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </tbody>
               </table>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <input className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                placeholder="Full name" value={newEmployee.name}
-                onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
-              <input className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                placeholder="Username" value={newEmployee.username}
-                onChange={(e) => setNewEmployee({ ...newEmployee, username: e.target.value })} />
-              <input type="password" className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                placeholder="Password" value={newEmployee.password}
-                onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
-            </div>
+            {/* Whole "add a new employee" block lives in one card: name/username/
+                password, the grade picker, and the Add button. */}
+            <div className="border border-stone-200 rounded-2xl p-4 bg-stone-50">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <input className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                  placeholder="Full name" value={newEmployee.name}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
+                <input className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                  placeholder="Username" value={newEmployee.username}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, username: e.target.value })} />
+                <input type="password" className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                  placeholder="Password" value={newEmployee.password}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
+              </div>
 
-            {/* Grade dropdown: closed by default, showing just the currently selected
-                grade. Opening it reveals every grade as a radio-style row; picking one
-                sets that grade's starting permissions on newEmployee and immediately
-                closes the list back down, so the chosen grade shows outside/above it.
-                Everything can still be fine-tuned afterward from the Permissions screen
-                reached by clicking the employee's name once they've been added. */}
-            <div className="mt-3 max-w-sm relative">
-              <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
-              <button
-                type="button"
-                onClick={() => setNewEmployeeGradeOpen(!newEmployeeGradeOpen)}
-                className="w-full flex items-center justify-between border border-stone-300 rounded-xl px-3 py-2 text-sm bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-teal-700"
-              >
-                <span className="font-medium text-stone-700">{roleLabel(newEmployee.role)}</span>
-                <ChevronDown size={15} className={`text-stone-400 transition-transform ${newEmployeeGradeOpen ? "rotate-180" : ""}`} />
-              </button>
+              {/* Grade picker: one dropdown per tier (Manager / Supervisor / Employee),
+                  each holding that tier's general grade plus its per-department variants.
+                  Owner and Accountant stand alone next to the three dropdowns since they
+                  have no per-department variants. Picking any option sets that grade's
+                  starting permissions on newEmployee and immediately closes its dropdown,
+                  so the chosen grade shows outside/above the list. Name/username/password
+                  above are never touched by any of this — they only get cleared once the
+                  employee is actually added (see handleAddEmployee), so they stay exactly
+                  as typed while you pick a grade. Everything can still be fine-tuned
+                  afterward from the Permissions screen reached by clicking the employee's
+                  name once they've been added. */}
+              <div className="mt-3">
+                <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
+                <div className="flex flex-wrap items-start gap-2">
+                  {GRADE_TIER_GROUPS.map((group) => {
+                    const selectedInGroup = group.roles.find((r) => r.value === newEmployee.role);
+                    const isOpen = newEmployeeGradeOpen === group.key;
+                    return (
+                      <div key={group.key} className="relative w-40">
+                        <button
+                          type="button"
+                          onClick={() => setNewEmployeeGradeOpen(isOpen ? null : group.key)}
+                          className={`w-full flex items-center justify-between border rounded-xl px-3 py-2 text-sm bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-teal-700 ${
+                            selectedInGroup ? "border-teal-700" : "border-stone-300"
+                          }`}
+                        >
+                          <span className={`font-medium truncate ${selectedInGroup ? "text-teal-800" : "text-stone-700"}`}>
+                            {selectedInGroup ? selectedInGroup.label : group.title}
+                          </span>
+                          <ChevronDown size={15} className={`text-stone-400 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                        </button>
 
-              {newEmployeeGradeOpen && (
-                <div className="absolute z-10 mt-1 w-full border border-stone-200 rounded-xl bg-white shadow-lg max-h-64 overflow-y-auto">
-                  {EMPLOYEE_ROLES.map((r) => {
-                    const selected = newEmployee.role === r.value;
+                        {isOpen && (
+                          <div className="absolute z-10 mt-1 w-56 border border-stone-200 rounded-xl bg-white shadow-lg max-h-64 overflow-y-auto">
+                            {group.roles.map((r) => {
+                              const selected = newEmployee.role === r.value;
+                              return (
+                                <button
+                                  key={r.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setNewEmployee({ ...newEmployee, role: r.value, ...ROLE_PRESETS[r.value] });
+                                    setNewEmployeeGradeOpen(null);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-stone-50 border-b border-stone-100 last:border-b-0"
+                                >
+                                  <span
+                                    className={`shrink-0 w-4 h-4 rounded-full border flex items-center justify-center ${
+                                      selected ? "border-teal-700" : "border-stone-300"
+                                    }`}
+                                  >
+                                    {selected && <span className="w-2 h-2 rounded-full bg-teal-700" />}
+                                  </span>
+                                  <span className={selected ? "text-teal-800 font-semibold" : "text-stone-600"}>{r.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Owner and Accountant have no per-department variants, so they sit as
+                      standalone picks next to the three tier dropdowns rather than inside one. */}
+                  {["owner", "accountant"].map((value) => {
+                    const selected = newEmployee.role === value;
                     return (
                       <button
-                        key={r.value}
+                        key={value}
                         type="button"
-                        onClick={() => {
-                          setNewEmployee({ ...newEmployee, role: r.value, ...ROLE_PRESETS[r.value] });
-                          setNewEmployeeGradeOpen(false);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-stone-50 border-b border-stone-100 last:border-b-0"
+                        onClick={() => setNewEmployee({ ...newEmployee, role: value, ...ROLE_PRESETS[value] })}
+                        className={`w-32 flex items-center gap-2 border rounded-xl px-3 py-2 text-sm transition-colors ${
+                          selected
+                            ? "bg-teal-800 text-white border-teal-800"
+                            : "bg-white text-stone-600 border-stone-300 hover:bg-stone-50"
+                        }`}
                       >
                         <span
                           className={`shrink-0 w-4 h-4 rounded-full border flex items-center justify-center ${
-                            selected ? "border-teal-700" : "border-stone-300"
+                            selected ? "border-white" : "border-stone-300"
                           }`}
                         >
-                          {selected && <span className="w-2 h-2 rounded-full bg-teal-700" />}
+                          {selected && <span className="w-2 h-2 rounded-full bg-white" />}
                         </span>
-                        <span className={selected ? "text-teal-800 font-semibold" : "text-stone-600"}>{r.label}</span>
+                        {roleLabel(value)}
                       </button>
                     );
                   })}
                 </div>
-              )}
 
-              <p className="text-[11px] text-stone-400 mt-1.5">
-                You can fine-tune every permission for each section after adding them, from Manage employees.
-              </p>
+                <p className="text-[11px] text-stone-400 mt-2">
+                  You can fine-tune every permission for each section after adding them, from Manage employees.
+                </p>
+              </div>
+
+              <button onClick={handleAddEmployee}
+                className="mt-3 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors flex items-center gap-1.5">
+                <UserPlus size={15} /> Add employee
+              </button>
             </div>
-
-            <button onClick={handleAddEmployee}
-              className="mt-3 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors flex items-center gap-1.5">
-              <UserPlus size={15} /> Add employee
-            </button>
           </div>
           </div>
         )}
@@ -7804,7 +7890,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         {filteredVisaBookings.length === 0 ? (
           <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
             <PassportIcon size={40} className="mx-auto mb-3 text-stone-300" />
-            <p className="text-sm">{visaBookings.length === 0 ? "No visa bookings yet." : "No visa bookings match the current search/filters."}</p>
+            <p className="text-sm">{visibleVisaBookings.length === 0 ? "No visa bookings yet." : "No visa bookings match the current search/filters."}</p>
           </div>
         ) : (
           <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
@@ -8463,7 +8549,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         {filteredCarBookings.length === 0 ? (
           <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400">
             <Car size={40} className="mx-auto mb-3 text-stone-300" />
-            <p className="text-sm">{carBookings.length === 0 ? "No transfer bookings yet." : "No transfer bookings match the current search/filters."}</p>
+            <p className="text-sm">{visibleCarBookings.length === 0 ? "No transfer bookings yet." : "No transfer bookings match the current search/filters."}</p>
           </div>
         ) : (
           <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
