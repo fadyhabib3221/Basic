@@ -5821,7 +5821,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <div className="w-full md:w-[24ch] md:shrink-0 flex items-center border border-stone-300 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-teal-700">
                     <input
                       className="min-w-0 text-sm outline-none bg-transparent flex-1"
-                      style={c.conjunction ? { flex: "0 0 auto", width: `${Math.max((c.ticketNumber || "").length, 20) + 1}ch` } : { width: "20ch" }}
+                      style={c.conjunction ? { flex: "0 0 auto", width: `${Math.max((c.ticketNumber || "").length, 3) + 1}ch` } : { width: "20ch" }}
                       value={c.ticketNumber}
                       onChange={(e) => handleCustomerFieldChange(i, "ticketNumber", e.target.value)}
                       onBlur={() => handleTicketNumberBlur(i)}
@@ -5829,7 +5829,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     />
                     {c.conjunction && (
                       <input
-                        className="min-w-0 text-sm outline-none bg-transparent text-stone-600"
+                        className="min-w-0 text-sm outline-none bg-transparent text-stone-600 -ml-1"
                         style={{ flex: "0 0 auto", width: `${Math.max((c.ticketNumber2 || "").length, 1) + 1}ch` }}
                         value={c.ticketNumber2 || ""}
                         onChange={(e) => handleCustomerFieldChange(i, "ticketNumber2", e.target.value)}
