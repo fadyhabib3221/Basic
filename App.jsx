@@ -99,7 +99,7 @@ const checkLicenseCode = (rawCode) => {
   return { valid: true, code: entry.code, expiresAt: entry.expiresAt };
 };
 
-const emptyCustomerRow = () => ({ name: "", ticketNumber: "", conjunction: false, ticketNumber2: "" });
+const emptyCustomerRow = () => ({ name: "", ticketNumber: "", conjunction: false, ticketNumber2: "", pnrReference: "" });
 
 // Ticket supplier / booking source options.
 const SUPPLIERS = ["Amadeus", "Sabre", "NDC", "Lowcost"];
@@ -2218,7 +2218,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const customers = getCustomers(t);
     const customerRows = customers.map((c, i) => [
       `Customer ${i + 1}`,
-      `${c.name || "-"}${c.ticketNumber ? ` — ${c.ticketNumber}` : ""}`,
+      `${c.name || "-"}${c.ticketNumber ? ` — ${c.ticketNumber}` : ""}${c.pnrReference ? ` (PNR: ${c.pnrReference})` : ""}`,
     ]);
 
     const sections = [
@@ -2972,9 +2972,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const customers = resizeCustomers(form.customers, value);
     // When more customer rows are added, auto-sequence their ticket numbers by
     // increasing the previous customer's number by one (only if it was filled in).
+    // The PNR reference isn't sequenced like the ticket number — every passenger on
+    // the same booking shares the same PNR — so new rows just inherit the first
+    // customer's PNR reference verbatim (only if it was filled in).
+    const firstPnr = form.customers[0] && form.customers[0].pnrReference;
     for (let i = form.customers.length; i < customers.length; i++) {
       const generated = nextTicketNumber(lastIssuedTicketNumber(customers[i - 1]));
       if (generated) customers[i] = { ...customers[i], ticketNumber: generated };
+      if (firstPnr) customers[i] = { ...customers[i], pnrReference: firstPnr };
     }
     setForm({ ...form, customersCount: count, customers });
   };
@@ -3032,6 +3037,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       // prefix-then-hyphen formatting.
       const digits = nextValue.replace(/[^0-9]/g, "").slice(0, 3);
       nextValue = digits ? `-${digits}` : "";
+    } else if (field === "pnrReference") {
+      // PNR references are up to 6 letters/digits (the airline's booking locator).
+      nextValue = nextValue.replace(/[^A-Z0-9]/g, "").slice(0, 6);
     }
     const customers = form.customers.map((c, i) => (i === index ? { ...c, [field]: nextValue } : c));
     let airline = form.airline;
@@ -3094,6 +3102,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       customers[i] = { ...customers[i], ticketNumber: generated };
       last = generated;
     }
+    setForm({ ...form, customers });
+  };
+
+  // Runs once the person leaves the PNR reference field. Only the FIRST customer's PNR
+  // drives the rest — all passengers on the same booking normally share one PNR — so
+  // finishing typing it there copies it into every other customer row that's still
+  // empty. Rows already typed into by hand (e.g. a different PNR for an interline
+  // passenger) are left alone, and each ticket number stays independently editable —
+  // the PNR reference is a separate field and never touches it.
+  const handlePnrReferenceBlur = (index) => {
+    if (index !== 0) return;
+    const value = form.customers[0] && form.customers[0].pnrReference;
+    if (!value) return;
+    const customers = form.customers.map((c, i) => (i === 0 || c.pnrReference ? c : { ...c, pnrReference: value }));
     setForm({ ...form, customers });
   };
 
@@ -3916,7 +3938,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       customers.some(
         (c) =>
           (c.name || "").toLowerCase().includes(q) ||
-          (c.ticketNumber || "").toLowerCase().includes(q)
+          (c.ticketNumber || "").toLowerCase().includes(q) ||
+          (c.pnrReference || "").toLowerCase().includes(q)
       )
     );
   });
@@ -4024,6 +4047,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         "Status": ticketStatus(t, i),
         "Customer": c.name || "",
         "Ticket number": c.ticketNumber || "",
+        "PNR reference": c.pnrReference || "",
         "From": t.from,
         "To": t.to,
         "Route": routeLabel(t),
@@ -5713,18 +5737,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     />
                     Conjunction
                   </label>
-                  <div className="w-full md:flex-1 flex items-center border border-stone-300 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-teal-700">
+                  <div className="w-full md:w-[20ch] md:shrink-0 flex items-center border border-stone-300 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-teal-700">
                     <input
-                      className="min-w-0 text-sm outline-none bg-transparent flex-1"
+                      className="min-w-0 text-sm font-mono outline-none bg-transparent flex-1"
                       style={c.conjunction ? { flex: "0 0 auto", width: `${Math.max((c.ticketNumber || "").length, 3) + 1}ch` } : undefined}
                       value={c.ticketNumber}
                       onChange={(e) => handleCustomerFieldChange(i, "ticketNumber", e.target.value)}
                       onBlur={() => handleTicketNumberBlur(i)}
-                      placeholder={`Ticket number ${i + 1} (e.g. 077-1234567890)`}
+                      placeholder={`Ticket number ${i + 1}`}
                     />
                     {c.conjunction && (
                       <input
-                        className="min-w-0 text-sm outline-none bg-transparent text-stone-600"
+                        className="min-w-0 text-sm font-mono outline-none bg-transparent text-stone-600"
                         style={{ flex: "0 0 auto", width: `${Math.max((c.ticketNumber2 || "").length, 1) + 1}ch` }}
                         value={c.ticketNumber2 || ""}
                         onChange={(e) => handleCustomerFieldChange(i, "ticketNumber2", e.target.value)}
@@ -5732,6 +5756,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       />
                     )}
                   </div>
+                  <input
+                    className="w-full md:w-[9ch] md:shrink-0 border border-stone-300 rounded-xl px-3 py-2 text-sm font-mono uppercase outline-none focus:ring-2 focus:ring-teal-700"
+                    value={c.pnrReference || ""}
+                    onChange={(e) => handleCustomerFieldChange(i, "pnrReference", e.target.value)}
+                    onBlur={() => handlePnrReferenceBlur(i)}
+                    placeholder="PNR ref"
+                    maxLength={6}
+                    title="Booking PNR reference (up to 6 letters/digits)"
+                  />
                 </div>
               ))}
             </div>
@@ -9147,6 +9180,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <tr className="bg-stone-50 text-stone-500 text-xs">
                         <th className="text-left px-3 py-2 font-medium">Customer</th>
                         <th className="text-left px-3 py-2 font-medium">Ticket number</th>
+                        <th className="text-left px-3 py-2 font-medium">PNR</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -9166,6 +9200,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <span className="text-stone-400">{c.ticketNumber2}</span>
                             )}
                           </td>
+                          <td className="px-3 py-2 text-stone-700 font-mono">{c.pnrReference || "-"}</td>
                         </tr>
                       ))}
                     </tbody>
