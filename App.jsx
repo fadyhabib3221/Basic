@@ -1128,6 +1128,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  // Basic brute-force throttling: after 5 failed attempts in a row, lock the login form
+  // for 30 seconds. This is in-memory only (resets on page reload), so it's friction
+  // against casual/automated guessing, not a real security boundary.
+  const [loginFailCount, setLoginFailCount] = useState(0);
+  const [loginLockUntil, setLoginLockUntil] = useState(0);
 
   const [setupName, setSetupName] = useState("");
   const [setupUsername, setSetupUsername] = useState("");
@@ -2649,13 +2654,28 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleLogin = async () => {
     setLoginError("");
+    if (loginLockUntil && Date.now() < loginLockUntil) {
+      const secondsLeft = Math.ceil((loginLockUntil - Date.now()) / 1000);
+      setLoginError(`Too many failed attempts. Try again in ${secondsLeft}s.`);
+      return;
+    }
     const match = (employees || []).find(
       (e) => e.username === loginUsername.trim() && e.password === loginPassword
     );
     if (!match) {
-      setLoginError("Incorrect username or password");
+      const nextCount = loginFailCount + 1;
+      setLoginFailCount(nextCount);
+      if (nextCount >= 5) {
+        setLoginLockUntil(Date.now() + 30000);
+        setLoginFailCount(0);
+        setLoginError("Too many failed attempts. Try again in 30s.");
+      } else {
+        setLoginError("Incorrect username or password");
+      }
       return;
     }
+    setLoginFailCount(0);
+    setLoginLockUntil(0);
     await window.storage.set("session:user", match.username, false);
     sessionStartedAtRef.current = Date.now();
     setCurrentUser({ username: match.username, name: match.name, isAdmin: !!match.isAdmin });
@@ -4675,7 +4695,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <div className="relative w-full mx-auto rounded-2xl bg-white shadow-lg flex items-center justify-center mb-3 p-4">
                 <img src={LOGO_DATA_URL} alt="Perla Di Mare" className="w-full h-auto object-contain" />
               </div>
-              <h1 className="relative text-white font-semibold text-lg tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>Flight Ticket Manager</h1>
+              <h1 className="relative text-white font-semibold text-lg tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>Travel Agency Manager</h1>
               <p className="relative text-teal-200/70 text-[11px] mt-0.5">By Fady Habib</p>
               <p className="relative text-teal-50/90 text-xs mt-1">Sign in to manage tickets, sales &amp; bookings</p>
 
@@ -4902,7 +4922,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
               <div>
                 <h1 className="text-lg md:text-2xl font-semibold text-white" style={{ fontFamily: "'Fraunces', serif" }}>
-                  Flight Ticket Manager <span className="text-teal-200/60 font-medium text-xs md:text-base" style={{ fontFamily: "'Inter', sans-serif" }}>By Fady Habib</span>
+                  Travel Agency Manager <span className="text-teal-200/60 font-medium text-xs md:text-base" style={{ fontFamily: "'Inter', sans-serif" }}>By Fady Habib</span>
                 </h1>
                 <p className="text-teal-100/80 text-sm flex items-center gap-1.5 flex-wrap mt-0.5">
                   Signed in as {currentUser.name}
