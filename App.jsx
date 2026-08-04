@@ -4917,7 +4917,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <ShieldCheck size={11} /> Main account
                     </span>
                   )}
-                  {!currentUser.isAdmin && currentEmployeeRecord && (
+                  {hasAdminAccess && !currentUser.isAdmin && currentEmployeeRecord && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-white bg-white/10 border border-white/20 rounded-full px-2 py-0.5">
                       {roleLabel(currentEmployeeRecord.role)}
                     </span>
@@ -4927,7 +4927,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       Your own records only
                     </span>
                   )}
-                  {isAccountingUser && (
+                  {hasAdminAccess && isAccountingUser && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-100 bg-amber-500/20 border border-amber-300/30 rounded-full px-2 py-0.5">
                       Accounting — view only
                     </span>
@@ -8284,7 +8284,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
 
-            {/* Waiting hours / round trip / driver tip */}
+            {/* Waiting hours / round trip / starts at the airport — grouped together
+                in one horizontal card */}
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="flex items-center gap-2 text-xs text-stone-500 mb-1 cursor-pointer">
@@ -8328,14 +8329,23 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </p>
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">Driver tip</label>
-                <input
-                  type="number"
-                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                  value={carForm.driverTip}
-                  onChange={(e) => setCarForm({ ...carForm, driverTip: e.target.value })}
-                  placeholder="0"
-                />
+                <label className="flex items-center gap-2 text-xs text-stone-500 mb-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={carForm.startsAtAirport}
+                    onChange={(e) => setCarForm({ ...carForm, startsAtAirport: e.target.checked, flightNumber: e.target.checked ? carForm.flightNumber : "" })}
+                    className="rounded border-stone-300"
+                  />
+                  Starts at the airport
+                </label>
+                {carForm.startsAtAirport && (
+                  <input
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={carForm.flightNumber}
+                    onChange={(e) => setCarForm({ ...carForm, flightNumber: e.target.value })}
+                    placeholder="Flight number"
+                  />
+                )}
               </div>
             </div>
 
@@ -8361,26 +8371,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             )}
 
-            {/* Flight number — only relevant when the run starts at the airport */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            {/* Driver tip */}
+            <div className="grid grid-cols-3 gap-4 mb-4">
               <div>
-                <label className="flex items-center gap-2 text-xs text-stone-500 mb-1 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={carForm.startsAtAirport}
-                    onChange={(e) => setCarForm({ ...carForm, startsAtAirport: e.target.checked, flightNumber: e.target.checked ? carForm.flightNumber : "" })}
-                    className="rounded border-stone-300"
-                  />
-                  Starts at the airport
-                </label>
-                {carForm.startsAtAirport && (
-                  <input
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                    value={carForm.flightNumber}
-                    onChange={(e) => setCarForm({ ...carForm, flightNumber: e.target.value })}
-                    placeholder="Flight number"
-                  />
-                )}
+                <label className="text-xs text-stone-500 block mb-1">Driver tip</label>
+                <input
+                  type="number"
+                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  value={carForm.driverTip}
+                  onChange={(e) => setCarForm({ ...carForm, driverTip: e.target.value })}
+                  placeholder="0"
+                />
               </div>
             </div>
 
