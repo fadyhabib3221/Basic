@@ -8,6 +8,7 @@ import {
   Calendar, Download, Upload, Building2, Factory, Lock, LogOut, UserPlus, Users, Eye, EyeOff,
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
+  History,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -902,6 +903,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [confirmDialog, setConfirmDialog] = useState(null);
   const requestConfirm = (message, onConfirm) => setConfirmDialog({ message, onConfirm });
 
+  // In-app print preview: { title, html } while open, null while closed. Printing renders
+  // the receipt into a hidden iframe inside this popup instead of opening a separate
+  // browser tab/window, so it can't be blocked and always stays part of the app.
+  const [printPreview, setPrintPreview] = useState(null);
+  const printIframeRef = useRef(null);
+
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -961,6 +968,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [visaForm, setVisaForm] = useState(getEmptyVisaForm);
   const [visaError, setVisaError] = useState("");
   const [visaEditingId, setVisaEditingId] = useState(null);
+  // The visa booking currently shown in the read-only details modal (null = closed).
+  const [viewingVisaBooking, setViewingVisaBooking] = useState(null);
   // Whether the Supplier field on the visa booking form is in "type your own name" mode,
   // same pattern as supplierOther / hotelSupplierOther above.
   const [visaSupplierOther, setVisaSupplierOther] = useState(false);
@@ -975,6 +984,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [carForm, setCarForm] = useState(getEmptyCarForm);
   const [carError, setCarError] = useState("");
   const [carEditingId, setCarEditingId] = useState(null);
+  // The transfer booking currently shown in the read-only details modal (null = closed).
+  const [viewingCarBooking, setViewingCarBooking] = useState(null);
   // Whether the "other" free-text supplier field is shown instead of the dropdown list —
   // same pattern as visaSupplierOther above.
   const [carSupplierOther, setCarSupplierOther] = useState(false);
@@ -1011,6 +1022,25 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // everyone signed in sees today's rate without re-typing it.
   const [usdToEgpRate, setUsdToEgpRate] = useState(null);
   const [usdToEgpRateDate, setUsdToEgpRateDate] = useState("");
+
+  // IATA balance tracker (Flights section): a running balance saved to shared storage,
+  // and a separate "issued ticket value" box — entering an amount there deducts it from
+  // the balance (see applyIataTicketValue below), so everyone signed in sees the same
+  // running balance without each of them having to do the subtraction by hand.
+  // iataBalanceLoaded stays false until the saved balance has actually been fetched —
+  // deductions are blocked until then, so a deduction typed before the fetch resolves
+  // can never be computed against an unloaded `null` and wipe out the real balance.
+  const [iataBalance, setIataBalance] = useState(null);
+  const [iataBalanceLoaded, setIataBalanceLoaded] = useState(false);
+  const [iataTicketValueInput, setIataTicketValueInput] = useState("");
+  // History of today's deductions from the IATA balance only — starts empty again at
+  // the first deduction of each new day (see recordIataDeduction below). Kept in its own
+  // shared-storage key, entirely separate from tickets/customers/accounts, so these two
+  // fields never feed into any other totals. Viewed via the "History" button, which
+  // opens it in a separate popup (showIataHistory below).
+  const [iataHistory, setIataHistory] = useState({ date: "", deductions: [] });
+  const [showIataHistory, setShowIataHistory] = useState(false);
+
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   // Clicking a ticket row opens a full detail view of that ticket (id stored here).
@@ -1511,6 +1541,94 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     } catch (e) {
       // Saving the rate is best-effort; the typed value still applies locally either way
     }
+  };
+
+  // IATA balance — same shared-storage pattern as the USD rate above, so every signed-in
+  // employee sees the same running balance. iataBalanceLoaded is set true once this fetch
+  // settles (found a value or not) — deductions are blocked until then, see
+  // applyIataTicketValue below.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await window.storage.get("tickets:iataBalance", true).catch(() => null);
+        if (res && res.value !== undefined && res.value !== null && res.value !== "") {
+          const parsed = parseFloat(res.value);
+          if (!Number.isNaN(parsed)) setIataBalance(parsed);
+        }
+      } catch (e) {
+        // no saved balance yet
+      } finally {
+        setIataBalanceLoaded(true);
+      }
+    })();
+  }, []);
+
+  // Loads the IATA history log the same way the balance itself is loaded above. The log
+  // only ever holds today's deductions — if the saved entry is from an earlier day, it's
+  // treated as empty rather than shown, since history starts fresh each day.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await window.storage.get("tickets:iataHistory", true).catch(() => null);
+        if (res && res.value) {
+          const parsed = JSON.parse(res.value);
+          if (parsed && parsed.date === todayDateStr() && Array.isArray(parsed.deductions)) {
+            setIataHistory(parsed);
+          }
+        }
+      } catch (e) {
+        // no saved history yet
+      }
+    })();
+  }, []);
+
+  const persistIataHistory = async (next) => {
+    setIataHistory(next);
+    try {
+      await window.storage.set("tickets:iataHistory", JSON.stringify(next), true);
+    } catch (e) {
+      // Saving is best-effort; the list still applies locally either way
+    }
+  };
+
+  // Logs one deducted amount under today's date. The log holds only today's deductions —
+  // if the last saved entry is from a previous day, it's dropped and today starts empty,
+  // so the History popup never carries anything over from an earlier day. Only actual
+  // deductions are logged here — manually overwriting the balance box itself is not.
+  const recordIataDeduction = (amount, balanceBefore, balanceAfter) => {
+    const today = todayDateStr();
+    const entry = { amount, balanceBefore, balanceAfter, time: new Date().toISOString() };
+    const sameDay = iataHistory && iataHistory.date === today && Array.isArray(iataHistory.deductions);
+    const next = sameDay
+      ? { date: today, deductions: [...iataHistory.deductions, entry] }
+      : { date: today, deductions: [entry] };
+    persistIataHistory(next);
+  };
+
+  const persistIataBalance = async (balance) => {
+    setIataBalance(balance);
+    try {
+      await window.storage.set("tickets:iataBalance", String(balance), true);
+    } catch (e) {
+      // Saving is best-effort; the value still applies locally either way
+    }
+  };
+
+  // Deducts the amount typed into the "Issued ticket value" box from the IATA balance,
+  // logs it in today's history, then clears the box so it's ready for the next ticket.
+  // Pressing Enter in that box (see onKeyDown below) is the only way this fires —
+  // there's no separate Deduct button. Blocked until the saved balance has actually
+  // loaded, so it can never compute against an unloaded `null` and wipe out the real
+  // balance — the balance itself only ever changes here or when typed directly by hand.
+  const applyIataTicketValue = () => {
+    if (!iataBalanceLoaded) return;
+    const val = parseFloat(iataTicketValueInput);
+    if (Number.isNaN(val) || val === 0) return;
+    const balanceBefore = iataBalance || 0;
+    const nextBalance = balanceBefore - val;
+    persistIataBalance(nextBalance);
+    recordIataDeduction(val, balanceBefore, nextBalance);
+    setIataTicketValueInput("");
   };
 
   const persistHotelBookings = async (next) => {
@@ -2025,9 +2143,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     });
   };
 
-  // Opens a printable receipt for a single transfer booking in a new tab and
-  // triggers the browser print dialog automatically.
-  const handlePrintCar = (c) => {
+  // Shared layout for every printable receipt (transfers, hotels, visa). `sections` is
+  // an array of { heading, rows: [[label, value], ...] } — keeping this in one place
+  // means every service's receipt looks and behaves the same.
+  const buildReceiptHtml = (docTitle, subtitle, sections) => {
     const printedBy = currentUser?.name || "";
 
     const row = (label, value) =>
@@ -2035,12 +2154,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         ? ""
         : `<tr><td class="label">${label}</td><td class="value">${value}</td></tr>`;
 
-    const html = `
+    const sectionsHtml = sections
+      .map(
+        (s) => `
+          <h2>${s.heading}</h2>
+          <table>${s.rows.map(([label, value]) => row(label, value)).join("")}</table>`
+      )
+      .join("");
+
+    return `
       <!DOCTYPE html>
       <html>
         <head>
           <meta charset="utf-8" />
-          <title>Transfer Booking - ${c.customerName || ""}</title>
+          <title>${docTitle}</title>
           <style>
             * { box-sizing: border-box; }
             body { font-family: Arial, Helvetica, sans-serif; color: #292524; padding: 32px; }
@@ -2052,9 +2179,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             table { width: 100%; border-collapse: collapse; font-size: 13px; }
             td.label { padding: 6px 10px; color: #78716c; width: 40%; border-bottom: 1px solid #e7e5e4; }
             td.value { padding: 6px 10px; font-weight: 600; border-bottom: 1px solid #e7e5e4; }
-            .totals td { padding: 8px 10px; font-size: 14px; }
-            .totals td.value { text-align: right; }
-            .profit { color: #047857; }
             .footer { margin-top: 32px; font-size: 11px; color: #a8a29e; text-align: right; }
             @media print {
               body { padding: 0 24px; }
@@ -2065,45 +2189,140 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div class="header">
             <img src="${LOGO_DATA_URL}" alt="Perla Di Mare" />
             <div>
-              <h1>Transfer Booking Receipt</h1>
+              <h1>${subtitle}</h1>
               <p>Perla Di Mare</p>
             </div>
           </div>
-
-          <h2>Customer</h2>
-          <table>
-            ${row("Customer name", c.customerName || "-")}
-            ${row("Phone", c.phone || "-")}
-          </table>
-
-          <h2>Transfer details</h2>
-          <table>
-            ${row("Route", `${c.routeFrom || "-"} &rarr; ${c.routeTo || "-"}`)}
-            ${row("Car type", c.carType || "-")}
-            ${row("Trip", c.isRoundTrip ? "Round trip" : "One way")}
-            ${row("Waiting", c.hasWaiting ? `${c.waitingHours || 0} h` : "-")}
-            ${row("Flight number", c.startsAtAirport ? (c.flightNumber || "-") : "-")}
-            ${row("Booking date", c.bookingDate ? formatDisplayDate(c.bookingDate) : "-")}
-            ${row("Booking time", c.bookingTime || "-")}
-            ${row("Collection", c.collection ? `${fmt(parseFloat(c.collection) || 0)} ${c.currency}` : "-")}
-          </table>
-
+          ${sectionsHtml}
           <div class="footer">
             ${printedBy ? `Printed by ${printedBy} &middot; ` : ""}${new Date().toLocaleString()}
           </div>
         </body>
       </html>
     `;
+  };
 
-    const printWindow = window.open("", "_blank", "width=800,height=900");
-    if (!printWindow) return;
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.onload = () => {
-      printWindow.print();
-    };
+  // Opens the print preview popup (see printPreview state above) instead of a separate
+  // browser tab/window — this is the in-app "popup system" used for every printable
+  // receipt across all services.
+  const openPrintPreview = (docTitle, subtitle, sections) => {
+    setPrintPreview({ title: docTitle, html: buildReceiptHtml(docTitle, subtitle, sections) });
+  };
+
+  // Opens a printable receipt for a single transfer booking in the print preview popup.
+  const handlePrintCar = (c) => {
+    openPrintPreview(`Transfer Booking - ${c.customerName || ""}`, "Transfer Booking Receipt", [
+      {
+        heading: "Customer",
+        rows: [
+          ["Customer name", c.customerName || "-"],
+          ["Phone", c.phone || "-"],
+        ],
+      },
+      {
+        heading: "Transfer details",
+        rows: [
+          ["Route", `${c.routeFrom || "-"} \u2192 ${c.routeTo || "-"}`],
+          ["Car type", c.carType || "-"],
+          ["Supplier", c.supplier || "-"],
+          ["Trip", c.isRoundTrip ? "Round trip" : "One way"],
+          ["Waiting", c.hasWaiting ? `${c.waitingHours || 0} h` : "-"],
+          ["Flight number", c.startsAtAirport ? (c.flightNumber || "-") : "-"],
+          ["Booking date", c.bookingDate ? formatDisplayDate(c.bookingDate) : "-"],
+          ["Booking time", c.bookingTime || "-"],
+          ...(c.isRoundTrip
+            ? [
+                ["Return date", c.returnDate ? formatDisplayDate(c.returnDate) : "-"],
+                ["Return time", c.returnTime || "-"],
+              ]
+            : []),
+          ["Collection", c.collection ? `${fmt(parseFloat(c.collection) || 0)} ${c.currency}` : "-"],
+          ["Driver tip", c.driverTip ? `${fmt(parseFloat(c.driverTip) || 0)} ${c.currency}` : "-"],
+        ],
+      },
+    ]);
+  };
+
+  // Opens a printable receipt for a single hotel booking (all its room lines) in the
+  // print preview popup.
+  const handlePrintHotel = (h) => {
+    const roomSections = (h.roomLines || []).map((line, i) => {
+      const roomLabel = (ROOM_TYPES.find((r) => r.value === line.roomType) || {}).label || line.roomType || "-";
+      const mealLabel = (MEAL_PLANS.find((m) => m.value === line.mealPlan) || {}).label || line.mealPlan || "-";
+      const nights = roomLineNights(line, h);
+      const guestNames = (line.guests || []).map((g) => g.name).filter(Boolean).join(", ") || "-";
+      const childrenText =
+        (line.children || [])
+          .filter((ch) => ch.name)
+          .map((ch) => `${ch.name} (${ch.age !== "" && ch.age != null ? ch.age : "-"}y)`)
+          .join(", ") || "-";
+      return {
+        heading: `Room ${i + 1} \u2014 ${line.count || 1}x ${roomLabel}`,
+        rows: [
+          ["Meal plan", mealLabel],
+          ["Check-in", line.checkIn ? formatDisplayDate(line.checkIn) : "-"],
+          ["Check-out", line.checkOut ? formatDisplayDate(line.checkOut) : "-"],
+          ["Nights", nights],
+          ["Guests", guestNames],
+          ["Children", childrenText],
+          ["Net (per room/night)", `${fmt(hotelLineNetTotal(line, nights))} ${line.currency}`],
+          ["Sold (per room/night)", `${fmt(hotelLineSoldTotal(line, nights))} ${line.currency}`],
+        ],
+      };
+    });
+
+    openPrintPreview(`Hotel Booking - ${h.hotel || ""}`, "Hotel Booking Receipt", [
+      {
+        heading: "Booking",
+        rows: [
+          ["Company", h.customer && h.customer.trim() ? h.customer : "Individual"],
+          ["Hotel", h.hotel || "-"],
+          ["Supplier", h.supplier || "-"],
+          ["Booking date", h.bookingDate ? formatDisplayDate(h.bookingDate) : "-"],
+          ["Notes", h.notes || "-"],
+        ],
+      },
+      ...roomSections,
+      {
+        heading: "Totals",
+        rows: [
+          ["Net total", `${fmt(hotelNetTotal(h))} EGP`],
+          ["Sold total", `${fmt(hotelSoldTotal(h))} EGP`],
+          ["Profit", `${fmt(hotelProfitTotal(h))} EGP`],
+        ],
+      },
+    ]);
+  };
+
+  // Opens a printable receipt for a single visa booking in the print preview popup.
+  const handlePrintVisa = (v) => {
+    const customerNames = (v.customers || []).map((c) => c.name || "-").join(", ") || "-";
+    openPrintPreview(
+      `Visa Booking - ${(v.customers && v.customers[0] && v.customers[0].name) || ""}`,
+      "Visa Booking Receipt",
+      [
+        {
+          heading: "Visa details",
+          rows: [
+            ["Visa", v.visaType || "-"],
+            ["Supplier", v.supplier || "-"],
+            ["Booking date", v.bookingDate ? formatDisplayDate(v.bookingDate) : "-"],
+            ["Number of customers", (v.customers || []).length || 1],
+            ["Customers", customerNames],
+          ],
+        },
+        {
+          heading: "Pricing",
+          rows: [
+            ["Net (per person)", `${fmt(parseFloat(v.netPrice) || 0)} ${v.currency}`],
+            ["Sold (per person)", `${fmt(parseFloat(v.soldPrice) || 0)} ${v.currency}`],
+            ["Net total", `${fmt(visaNetTotal(v))} ${v.currency}`],
+            ["Sold total", `${fmt(visaSoldTotal(v))} ${v.currency}`],
+            ["Profit", `${fmt(visaProfitTotal(v))} ${v.currency}`],
+          ],
+        },
+      ]
+    );
   };
 
   // Registers a new supplier name in the Transfers page's OWN supplier list — kept
@@ -4153,13 +4372,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         key={`${t.id}-${i}`}
         onClick={() => openTicketDetail(t)}
         className={`border-t leading-tight cursor-pointer ${
-          nested
-            ? `border-dashed border-amber-200 bg-amber-50/50 hover:bg-amber-100/50 ${i > 0 ? "border-t-0" : ""}`
+          t.isReissued
+            ? `${nested ? "border-dashed" : ""} border-sky-200 bg-sky-50 hover:bg-sky-100 ${i > 0 ? "border-t-0" : ""}`
             : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-teal-50/60"}`
         }`}
       >
         <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
-          {nested && i === 0 && <span className="text-amber-500 mr-1">↳</span>}
+          {nested && i === 0 && <span className="text-sky-500 mr-1">↳</span>}
           {t.employee || "-"}
         </td>
         <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
@@ -4176,7 +4395,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {t.isReissued && (
               <span
                 title={`Exchanged from ${t.oldTicketNumber || "an older ticket"}`}
-                className="inline-flex items-center text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5"
+                className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5"
               >
                 Exchanged{t.oldTicketNumber ? ` (orig: ${t.oldTicketNumber})` : ""}
               </span>
@@ -5103,18 +5322,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               {!hasActiveFilter && "all months"}
             </span>
           </p>
-          <button
-            onClick={() => { if (hasActiveFilter) exportFiltered(); }}
-            disabled={!hasActiveFilter}
-            title={hasActiveFilter ? "" : "Select at least one filter (year, month, company, employee, supplier, or search) before exporting"}
-            className={`text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5 ${
-              hasActiveFilter
-                ? "text-teal-800 border border-teal-800 hover:bg-teal-50"
-                : "text-stone-400 border border-stone-200 cursor-not-allowed"
-            }`}
-          >
-            <Download size={14} /> {hasActiveFilter ? "Export filtered results to Excel" : "Select a filter to export"}
-          </button>
         </div>
         <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-6">
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
@@ -5702,6 +5909,58 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         </div>
         )}
 
+        {/* IATA balance tracker: the balance itself (editable directly, turns red when
+            negative) and a separate box for the value of each newly issued ticket —
+            entering a value there and pressing Enter subtracts it from the balance
+            above automatically (no separate Deduct button). The History button opens a
+            popup listing every amount deducted today — it resets empty at the start of
+            each new day. Both fields
+            live entirely in their own shared-storage keys (tickets:iataBalance /
+            tickets:iataHistory) — they never read from or write into tickets,
+            customers, or any other account/total elsewhere in the app. Number spin
+            arrows are removed from both via the shared .price-input class. */}
+        <div className="bg-white border border-stone-200 rounded-2xl p-3 sm:p-4 mb-3 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="text-xs text-stone-500 block mb-1">IATA balance</label>
+            <div className="relative">
+              <Wallet size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+              <input
+                type="number"
+                className={`price-input w-40 border rounded-xl pl-9 pr-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-teal-700 ${
+                  iataBalance !== null && iataBalance < 0
+                    ? "border-red-300 text-red-600 bg-red-50"
+                    : "border-stone-300 text-stone-800"
+                }`}
+                value={iataBalance ?? ""}
+                onChange={(e) => setIataBalance(e.target.value === "" ? null : parseFloat(e.target.value))}
+                onBlur={() => iataBalance !== null && !Number.isNaN(iataBalance) && persistIataBalance(iataBalance)}
+                placeholder="0"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-stone-500 block mb-1">Issued ticket value</label>
+            <div className="relative">
+              <Ticket size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+              <input
+                type="number"
+                className="price-input w-40 border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                value={iataTicketValueInput}
+                onChange={(e) => setIataTicketValueInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && applyIataTicketValue()}
+                placeholder="0"
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowIataHistory(true)}
+            className="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-teal-800 border border-teal-800 rounded-xl px-3 py-2 hover:bg-teal-50"
+          >
+            <History size={14} /> History
+          </button>
+        </div>
+
         {/* Search and filters — one unified card: search + a "Filters" toggle with a
             count badge, an optional expanded panel with the dropdowns, and a row of
             removable chips for whatever is currently active. */}
@@ -5731,6 +5990,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </span>
               )}
               <ChevronDown size={14} className={`transition-transform ${filtersOpen ? "rotate-180" : ""}`} />
+            </button>
+            <button
+              type="button"
+              onClick={() => { if (hasActiveFilter) exportFiltered(); }}
+              disabled={!hasActiveFilter}
+              title={hasActiveFilter ? "" : "Select at least one filter (year, month, company, employee, supplier, or search) before exporting"}
+              className={`shrink-0 flex items-center gap-1.5 border rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                hasActiveFilter
+                  ? "text-teal-800 border-teal-800 hover:bg-teal-50 bg-white"
+                  : "text-stone-400 border-stone-200 cursor-not-allowed bg-white"
+              }`}
+            >
+              <Download size={16} />
+              <span className="hidden sm:inline">{hasActiveFilter ? "Export to Excel" : "Select a filter to export"}</span>
             </button>
           </div>
 
@@ -6784,13 +7057,22 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     )}
                   </p>
                 </div>
-                <button
-                  onClick={() => setViewingHotelBooking(null)}
-                  className="text-stone-400 hover:text-stone-700"
-                  title="Close"
-                >
-                  <X size={20} />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => handlePrintHotel(viewingHotelBooking)}
+                    className="text-stone-400 hover:text-teal-800 p-1.5"
+                    title="Print"
+                  >
+                    <Printer size={18} />
+                  </button>
+                  <button
+                    onClick={() => setViewingHotelBooking(null)}
+                    className="text-stone-400 hover:text-stone-700 p-1.5"
+                    title="Close"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
@@ -7259,7 +7541,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     const sold = visaSoldTotal(v);
                     const profit = sold - net;
                     return (
-                      <tr key={v.id} className="hover:bg-stone-50">
+                      <tr
+                        key={v.id}
+                        className="hover:bg-stone-50 cursor-pointer"
+                        onClick={() => setViewingVisaBooking(v)}
+                      >
                         <td className="px-4 py-3 text-stone-700">{(v.customers || []).length}</td>
                         <td className="px-4 py-3 text-stone-700">
                           {(v.customers || []).map((c) => c.name || "-").join(", ")}
@@ -7272,7 +7558,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-4 py-3 text-right text-stone-700">{fmt(net)} {v.currency}</td>
                         <td className="px-4 py-3 text-right text-stone-700">{fmt(sold)} {v.currency}</td>
                         <td className="px-4 py-3 text-right font-semibold text-emerald-700">{fmt(profit)} {v.currency}</td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => setCopyPickerSource({ type: "visa", record: v })}
@@ -7306,6 +7592,82 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {viewingVisaBooking && (
+          <div
+            className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+            onClick={() => setViewingVisaBooking(null)}
+          >
+            <div
+              className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-stone-800">{viewingVisaBooking.visaType || "Visa"}</h3>
+                  <p className="text-sm text-stone-500">
+                    {(viewingVisaBooking.customers || []).length} customer
+                    {(viewingVisaBooking.customers || []).length === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => handlePrintVisa(viewingVisaBooking)}
+                    className="text-stone-400 hover:text-teal-800 p-1.5"
+                    title="Print"
+                  >
+                    <Printer size={18} />
+                  </button>
+                  <button
+                    onClick={() => setViewingVisaBooking(null)}
+                    className="text-stone-400 hover:text-stone-700 p-1.5"
+                    title="Close"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+                <div><span className="text-stone-500">Supplier: </span>{viewingVisaBooking.supplier || "-"}</div>
+                <div>
+                  <span className="text-stone-500">Booking date: </span>
+                  {viewingVisaBooking.bookingDate ? formatDisplayDate(viewingVisaBooking.bookingDate) : "-"}
+                </div>
+              </div>
+
+              <div className="border border-stone-200 rounded-xl p-3 mb-4">
+                <p className="text-xs text-stone-500 mb-1.5">Customers</p>
+                <div className="text-sm text-stone-700 space-y-1">
+                  {(viewingVisaBooking.customers || []).map((c, i) => (
+                    <div key={i}>{i + 1}. {c.name || "-"}</div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                  <p className="text-[11px] text-stone-500">Net total</p>
+                  <p className="text-sm font-bold text-stone-800">
+                    {fmt(visaNetTotal(viewingVisaBooking))} {viewingVisaBooking.currency}
+                  </p>
+                </div>
+                <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                  <p className="text-[11px] text-stone-500">Sold total</p>
+                  <p className="text-sm font-bold text-stone-800">
+                    {fmt(visaSoldTotal(viewingVisaBooking))} {viewingVisaBooking.currency}
+                  </p>
+                </div>
+                <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                  <p className="text-[11px] text-stone-500">Profit</p>
+                  <p className="text-sm font-bold text-emerald-700">
+                    {fmt(visaProfitTotal(viewingVisaBooking))} {viewingVisaBooking.currency}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -7848,7 +8210,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     const sold = parseFloat(c.soldPrice) || 0;
                     const profit = sold - net;
                     return (
-                      <tr key={c.id} className="leading-tight hover:bg-stone-50">
+                      <tr
+                        key={c.id}
+                        className="leading-tight hover:bg-stone-50 cursor-pointer"
+                        onClick={() => setViewingCarBooking(c)}
+                      >
                         <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">
                           {c.entryDate ? formatDisplayDate(c.entryDate) : "-"}
                         </td>
@@ -7882,15 +8248,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-2.5 py-1 text-right text-stone-700 whitespace-nowrap">{fmt(net)} {c.currency}</td>
                         <td className="px-2.5 py-1 text-right text-stone-700 whitespace-nowrap">{fmt(sold)} {c.currency}</td>
                         <td className="px-2.5 py-1 text-right font-semibold text-emerald-700 whitespace-nowrap">{fmt(profit)} {c.currency}</td>
-                        <td className="px-2.5 py-1 text-right whitespace-nowrap">
+                        <td
+                          className="px-2.5 py-1 text-right whitespace-nowrap"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <div className="flex items-center justify-end gap-0.5">
-                            <button
-                              onClick={() => handlePrintCar(c)}
-                              className="text-stone-400 hover:text-teal-800 p-0.5"
-                              title="Print"
-                            >
-                              <Printer size={13} />
-                            </button>
                             {canEditTickets && (
                               <button
                                 onClick={() => handleEditCarClick(c)}
@@ -7916,6 +8278,114 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {viewingCarBooking && (
+          <div
+            className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+            onClick={() => setViewingCarBooking(null)}
+          >
+            <div
+              className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-stone-800">{viewingCarBooking.customerName || "Transfer"}</h3>
+                  <p className="text-sm text-stone-500">{viewingCarBooking.phone || "-"}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => handlePrintCar(viewingCarBooking)}
+                    className="text-stone-400 hover:text-teal-800 p-1.5"
+                    title="Print"
+                  >
+                    <Printer size={18} />
+                  </button>
+                  <button
+                    onClick={() => setViewingCarBooking(null)}
+                    className="text-stone-400 hover:text-stone-700 p-1.5"
+                    title="Close"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+                <div>
+                  <span className="text-stone-500">Route: </span>
+                  {viewingCarBooking.routeFrom || "-"} → {viewingCarBooking.routeTo || "-"}
+                </div>
+                <div><span className="text-stone-500">Car type: </span>{viewingCarBooking.carType || "-"}</div>
+                <div><span className="text-stone-500">Supplier: </span>{viewingCarBooking.supplier || "-"}</div>
+                <div>
+                  <span className="text-stone-500">Trip: </span>
+                  {viewingCarBooking.isRoundTrip ? "Round trip" : "One way"}
+                </div>
+                <div>
+                  <span className="text-stone-500">Waiting: </span>
+                  {viewingCarBooking.hasWaiting ? `${viewingCarBooking.waitingHours || 0} h` : "-"}
+                </div>
+                <div>
+                  <span className="text-stone-500">Flight number: </span>
+                  {viewingCarBooking.startsAtAirport ? (viewingCarBooking.flightNumber || "-") : "-"}
+                </div>
+                <div>
+                  <span className="text-stone-500">Booking date: </span>
+                  {viewingCarBooking.bookingDate ? formatDisplayDate(viewingCarBooking.bookingDate) : "-"}
+                  {viewingCarBooking.bookingTime ? ` · ${viewingCarBooking.bookingTime}` : ""}
+                </div>
+                {viewingCarBooking.isRoundTrip && (
+                  <div>
+                    <span className="text-stone-500">Return: </span>
+                    {viewingCarBooking.returnDate ? formatDisplayDate(viewingCarBooking.returnDate) : "-"}
+                    {viewingCarBooking.returnTime ? ` · ${viewingCarBooking.returnTime}` : ""}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                  <p className="text-[11px] text-stone-500">Collection</p>
+                  <p className="text-sm font-bold text-stone-800">
+                    {viewingCarBooking.collection
+                      ? `${fmt(parseFloat(viewingCarBooking.collection) || 0)} ${viewingCarBooking.currency}`
+                      : "-"}
+                  </p>
+                </div>
+                <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                  <p className="text-[11px] text-stone-500">Driver tip</p>
+                  <p className="text-sm font-bold text-stone-800">
+                    {viewingCarBooking.driverTip
+                      ? `${fmt(parseFloat(viewingCarBooking.driverTip) || 0)} ${viewingCarBooking.currency}`
+                      : "-"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                  <p className="text-[11px] text-stone-500">Net</p>
+                  <p className="text-sm font-bold text-stone-800">
+                    {fmt(parseFloat(viewingCarBooking.netPrice) || 0)} {viewingCarBooking.currency}
+                  </p>
+                </div>
+                <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                  <p className="text-[11px] text-stone-500">Sold</p>
+                  <p className="text-sm font-bold text-stone-800">
+                    {fmt(parseFloat(viewingCarBooking.soldPrice) || 0)} {viewingCarBooking.currency}
+                  </p>
+                </div>
+                <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                  <p className="text-[11px] text-stone-500">Profit</p>
+                  <p className="text-sm font-bold text-emerald-700">
+                    {fmt((parseFloat(viewingCarBooking.soldPrice) || 0) - (parseFloat(viewingCarBooking.netPrice) || 0))} {viewingCarBooking.currency}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -8792,6 +9262,50 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         />
       )}
 
+      {showIataHistory && (
+        <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50" onClick={() => setShowIataHistory(false)}>
+          <div
+            className="bg-white rounded-2xl border border-stone-200 p-5 w-full max-w-sm max-h-[80vh] flex flex-col"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-semibold text-stone-900">IATA deduction history</h3>
+              <button onClick={() => setShowIataHistory(false)} className="text-stone-400 hover:text-stone-700 p-1">
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-xs text-stone-400 mb-3">Today only — resets empty at the start of each day</p>
+            <div className="flex-1 overflow-y-auto -mx-1 px-1">
+              {(!iataHistory || !iataHistory.deductions || iataHistory.deductions.length === 0) ? (
+                <p className="text-sm text-stone-400 text-center py-6">No deductions yet today</p>
+              ) : (
+                <div className="border border-stone-200 rounded-xl overflow-hidden">
+                  <div className="flex items-center justify-between bg-stone-50 px-3 py-2">
+                    <span className="text-xs font-semibold text-stone-600">{iataHistory.date}</span>
+                    <span className="text-xs font-semibold text-red-600">
+                      - {fmt(iataHistory.deductions.reduce((sum, d) => sum + d.amount, 0))}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-stone-100">
+                    {iataHistory.deductions.map((d, idx) => (
+                      <div key={idx} className="flex items-center justify-between px-3 py-1.5 text-xs gap-2">
+                        <span className="text-stone-400 shrink-0">
+                          {new Date(d.time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                        <span className="text-stone-500">{fmt(d.balanceBefore)}</span>
+                        <span className="text-stone-400">→</span>
+                        <span className="text-stone-600 font-semibold">{fmt(d.balanceAfter)}</span>
+                        <span className="text-red-600 shrink-0">- {fmt(d.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {copyPickerSource && (
         <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50" onClick={() => setCopyPickerSource(null)}>
           <div
@@ -8834,6 +9348,47 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 ))
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print preview popup — used by every service's Print button. Renders the receipt
+          into an iframe inside the app instead of opening a separate browser tab, so it
+          can't be blocked by a popup blocker and always looks like part of the app. */}
+      {printPreview && (
+        <div
+          className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50"
+          onClick={() => setPrintPreview(null)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-stone-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3 border-b border-stone-100 shrink-0">
+              <h3 className="text-sm font-bold text-stone-700">Print preview</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => printIframeRef.current && printIframeRef.current.contentWindow.print()}
+                  className="bg-gradient-to-b from-teal-700 to-teal-900 hover:brightness-110 text-white text-xs font-semibold rounded-xl px-3 py-1.5 inline-flex items-center gap-1.5"
+                >
+                  <Printer size={13} /> Print
+                </button>
+                <button
+                  onClick={() => setPrintPreview(null)}
+                  className="text-stone-400 hover:text-stone-700 p-1.5"
+                  title="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            <iframe
+              ref={printIframeRef}
+              title={printPreview.title}
+              srcDoc={printPreview.html}
+              className="flex-1 w-full"
+              style={{ border: "none", minHeight: "60vh" }}
+            />
           </div>
         </div>
       )}
