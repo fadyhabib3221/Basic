@@ -500,20 +500,23 @@ const sectionRolePreset = (section, tier) => {
 const EMPLOYEE_ROLES = [
   { value: "supervisor", label: "Supervisor" },
   { value: "employee", label: "Employee" },
-  { value: "accountant", label: "Accountant" },
   { value: "owner", label: "Owner" },
+  { value: "gm", label: "GM" },
+  { value: "accountant", label: "Accountant" },
   ...SECTIONS_WITH_EMPLOYEE_GRADE.map((s) => ({ value: `employee_${s}`, label: EMPLOYEE_GRADE_LABELS[s] || `${SECTION_ROLE_LABELS[s]} Employee` })),
   ...SECTIONS_WITH_SUPERVISOR_GRADE.map((s) => ({ value: `supervisor_${s}`, label: SUPERVISOR_GRADE_LABELS[s] || `${SECTION_ROLE_LABELS[s]} Supervisor` })),
   ...SECTIONS_WITH_MANAGER_GRADE.map((s) => ({ value: `manager_${s}`, label: MANAGER_GRADE_LABELS[s] || `${SECTION_ROLE_LABELS[s]} Manager` })),
 ];
 
 // Starting toggle values applied when a grade is picked. All toggles are then freely
-// editable by hand, independent of which grade is selected. "Owner" is a step above
-// the rest: full ticket/company access like the other grades below, PLUS admin-level
-// access to Manage employees and Backup/Restore (granted separately via isOwner,
-// checked alongside currentUser.isAdmin wherever those are gated) — the one thing an
-// Owner never gets is the License panel, which stays reserved for true main accounts.
-// The four original grades are explicitly all-section (sections + sectionPerms reset to
+// editable by hand, independent of which grade is selected. "Owner" and "GM" are a
+// step above the rest: full ticket/company access like the other grades below, PLUS
+// admin-level access to Manage employees and Backup/Restore (granted separately via
+// isOwner, checked alongside currentUser.isAdmin wherever those are gated) — the one
+// thing an Owner or GM never gets is the License panel, which stays reserved for true
+// main accounts. GM is defined as an exact copy of the Owner preset — same starting
+// permissions, same isOwner flag — it's simply a second, identically-privileged grade.
+// The five original grades are explicitly all-section (sections + sectionPerms reset to
 // full access) so switching *back* to one of them from a section-limited grade restores
 // every section, rather than leaving the old restriction in place.
 const ALL_SECTIONS_ON = { flights: true, hotels: true, visa: true, cars: true, files: true };
@@ -522,6 +525,7 @@ const ROLE_PRESETS = {
   employee: { canViewAll: false, canAdd: true, canEdit: false, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
   accountant: { canViewAll: true, canAdd: false, canEdit: false, canDelete: false, isAccounting: true, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
   owner: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: true, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
+  gm: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: true, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
   ...Object.fromEntries(SECTIONS_WITH_EMPLOYEE_GRADE.map((s) => [`employee_${s}`, sectionRolePreset(s, "employee")])),
   ...Object.fromEntries(SECTIONS_WITH_SUPERVISOR_GRADE.map((s) => [`supervisor_${s}`, sectionRolePreset(s, "supervisor")])),
   ...Object.fromEntries(SECTIONS_WITH_MANAGER_GRADE.map((s) => [`manager_${s}`, sectionRolePreset(s, "manager")])),
@@ -529,12 +533,12 @@ const ROLE_PRESETS = {
 
 const roleLabel = (value) => (EMPLOYEE_ROLES.find((r) => r.value === value) || {}).label || "Employee";
 
-// Grade picker on the Add employee page groups the 16 grades into three per-tier
+// Grade picker on the Add employee page groups the 17 grades into three per-tier
 // dropdowns (Manager / Supervisor / Employee). Supervisor and Employee each also hold
 // a general, all-section grade alongside their per-department variants; Manager no
 // longer has a general grade, so its dropdown holds only the four per-department
-// variants. Owner and Accountant stand alone next to the three dropdowns since
-// neither has department-specific variants.
+// variants. Owner, GM, and Accountant stand alone next to the three dropdowns since
+// none of them has department-specific variants.
 const MANAGER_GRADES = EMPLOYEE_ROLES.filter((r) => r.value === "manager" || r.value.startsWith("manager_"));
 const SUPERVISOR_GRADES = EMPLOYEE_ROLES.filter((r) => r.value === "supervisor" || r.value.startsWith("supervisor_"));
 const EMPLOYEE_GRADES = EMPLOYEE_ROLES.filter((r) => r.value === "employee" || r.value.startsWith("employee_"));
@@ -5337,8 +5341,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
               {/* Grade picker: one dropdown per tier (Manager / Supervisor / Employee),
                   each holding that tier's general grade plus its per-department variants.
-                  Owner and Accountant stand alone next to the three dropdowns since they
-                  have no per-department variants. Picking any option sets that grade's
+                  Owner, GM, and Accountant stand alone next to the three dropdowns since
+                  none of them has per-department variants. Picking any option sets that grade's
                   starting permissions on newEmployee and immediately closes its dropdown,
                   so the chosen grade shows outside/above the list. Name/username/password
                   above are never touched by any of this — they only get cleared once the
@@ -5398,9 +5402,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     );
                   })}
 
-                  {/* Owner and Accountant have no per-department variants, so they sit as
-                      standalone picks next to the three tier dropdowns rather than inside one. */}
-                  {["owner", "accountant"].map((value) => {
+                  {/* Owner, GM, and Accountant have no per-department variants, so they sit
+                      as standalone picks next to the three tier dropdowns rather than inside one. */}
+                  {["owner", "gm", "accountant"].map((value) => {
                     const selected = newEmployee.role === value;
                     return (
                       <button
