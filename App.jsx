@@ -2818,8 +2818,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const handleSubmit = () => {
     setError("");
     const customers = form.customers || [];
+    // A customer row normally needs a ticket number, but a filled-in PNR reference
+    // covers the same purpose (identifying the booking), so either one satisfies
+    // this check — the ticket number stops being mandatory once a PNR is entered.
     const customersValid =
-      customers.length > 0 && customers.every((c) => c.name.trim() && c.ticketNumber.trim());
+      customers.length > 0 &&
+      customers.every((c) => c.name.trim() && (c.ticketNumber.trim() || (c.pnrReference || "").trim()));
     // A multi-destination route needs at least two filled-in stops; a regular route
     // needs both From and To.
     const cleanDestinations = (form.destinations || []).map((d) => (d || "").trim()).filter(Boolean);
@@ -2827,7 +2831,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       ? cleanDestinations.length >= 2
       : form.from.trim() && form.to.trim();
     if (!customersValid || !routeValid || form.netPrice === "" || form.soldPrice === "") {
-      setError("Please enter at least the customer name(s), ticket number(s), destinations, and prices");
+      setError("Please enter at least the customer name(s), a ticket number or PNR reference for each, destinations, and prices");
       return;
     }
     // Keep the original owner when editing an existing ticket (so an admin editing someone
@@ -4770,21 +4774,34 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         </div>
 
         {showLicensePanel && currentUser.isAdmin && (
-          <div className="mb-6">
-            <button onClick={() => { setShowLicensePanel(false); setLicenseError(""); setLicenseInput(""); }}
-              className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
-              <ArrowLeft size={15} /> Back
-            </button>
-            <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6 max-w-sm">
-              <h2 className="font-semibold text-stone-900 mb-1 flex items-center gap-2">
-                <Lock size={16} className="text-teal-800" /> App license
-              </h2>
+          <div
+            className="fixed inset-0 z-50 bg-black/40 flex items-start md:items-center justify-center p-4 overflow-y-auto"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowLicensePanel(false);
+                setLicenseError("");
+                setLicenseInput("");
+              }
+            }}
+          >
+            <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 w-full max-w-sm my-8 md:my-0 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="font-semibold text-stone-900 flex items-center gap-2">
+                  <Lock size={16} className="text-teal-800" /> App license
+                </h2>
+                <button
+                  onClick={() => { setShowLicensePanel(false); setLicenseError(""); setLicenseInput(""); }}
+                  className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
               {isLicensed ? (
-                <div className="bg-emerald-50 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-4">
+                <div className="bg-emerald-50 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-4 mt-3">
                   Active{licenseRecord && licenseRecord.expiresAt ? ` — valid until ${licenseRecord.expiresAt}` : " — permanent license"}
                 </div>
               ) : (
-                <p className="text-xs text-stone-400 mb-4">
+                <p className="text-xs text-stone-400 mb-4 mt-3">
                   {licenseRecord ? "The current activation code has expired." : "The app is not activated yet."} Enter a valid activation code below — the app stays locked for every employee until this is done.
                 </p>
               )}
@@ -4816,12 +4833,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         )}
 
         {(showManage || showManageCompanies) && (
-          <div className="mb-6">
+          <div
+            className="fixed inset-0 z-50 bg-black/40 flex items-start md:items-center justify-center p-4 overflow-y-auto"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowManage(false);
+                setShowManageCompanies(false);
+              }
+            }}
+          >
+          <div className="bg-stone-50 rounded-2xl w-full max-w-3xl my-8 md:my-0 max-h-[90vh] overflow-y-auto p-1" onClick={(e) => e.stopPropagation()}>
         {showManage && currentUser.isAdmin && (
           <div className="bg-stone-50">
             <button onClick={() => setShowManage(false)}
               className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
-              <ArrowLeft size={15} /> Back
+              <X size={15} /> Close
             </button>
           <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
             <h2 className="font-semibold text-stone-900 mb-1">Employee accounts</h2>
@@ -5127,7 +5153,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="bg-stone-50">
             <button onClick={() => setShowManageCompanies(false)}
               className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
-              <ArrowLeft size={15} /> Back
+              <X size={15} /> Close
             </button>
           <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
             <h2 className="font-semibold text-stone-900 mb-1 flex items-center gap-2">
@@ -5249,6 +5275,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
           </div>
         )}
+          </div>
           </div>
         )}
 
