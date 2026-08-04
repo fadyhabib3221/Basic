@@ -8371,22 +8371,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             )}
 
-            {/* Driver tip */}
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div>
-                <label className="text-xs text-stone-500 block mb-1">Driver tip</label>
-                <input
-                  type="number"
-                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                  value={carForm.driverTip}
-                  onChange={(e) => setCarForm({ ...carForm, driverTip: e.target.value })}
-                  placeholder="0"
-                />
-              </div>
-            </div>
-
-            {/* Currency, amount to collect from the customer, and net/sold prices */}
-            <div className="grid grid-cols-4 gap-4 mb-4">
+            {/* Currency, amount to collect from the customer, net/sold prices, and driver tip */}
+            <div className="grid grid-cols-5 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Currency</label>
                 <select
@@ -8426,6 +8412,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={carForm.soldPrice}
                   onChange={(e) => setCarForm({ ...carForm, soldPrice: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Driver tip</label>
+                <input
+                  type="number"
+                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  value={carForm.driverTip}
+                  onChange={(e) => setCarForm({ ...carForm, driverTip: e.target.value })}
                   placeholder="0"
                 />
               </div>
