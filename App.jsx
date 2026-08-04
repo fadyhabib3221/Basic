@@ -1086,6 +1086,11 @@ const AIRPORTS = [
 ].map(([code, place]) => `${code} - ${place}`.toUpperCase());
 
 export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
+  // Keep the browser tab title in sync with the app's name.
+  useEffect(() => {
+    document.title = "Travel Agency Manager";
+  }, []);
+
   // ---------- License / activation ----------
   // Stored centrally (shared storage) so activation applies to every employee,
   // not just the browser it was entered on. null = not loaded from storage yet.
