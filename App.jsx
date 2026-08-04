@@ -725,7 +725,7 @@ const getAirlineNameByIata = (iata) => {
 // autocomplete suggestions on the From/To fields alongside previously typed values.
 const AIRPORTS = [
   ["CAI", "Cairo, Egypt"], ["HRG", "Hurghada, Egypt"], ["SSH", "Sharm El Sheikh, Egypt"],
-  ["LXR", "Luxor, Egypt"], ["ASW", "Aswan, Egypt"], ["HBE", "Alexandria, Egypt"],
+  ["LXR", "Luxor, Egypt"], ["ASW", "Aswan, Egypt"], ["ALY", "Borg El Arab, Alexandria, Egypt"],
   ["DXB", "Dubai, UAE"], ["AUH", "Abu Dhabi, UAE"], ["SHJ", "Sharjah, UAE"],
   ["DOH", "Doha, Qatar"], ["KWI", "Kuwait City, Kuwait"], ["RUH", "Riyadh, Saudi Arabia"],
   ["JED", "Jeddah, Saudi Arabia"], ["DMM", "Dammam, Saudi Arabia"], ["MED", "Medina, Saudi Arabia"],
@@ -5818,10 +5818,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     />
                     Conjunction
                   </label>
-                  <div className="w-full md:w-[20ch] md:shrink-0 flex items-center border border-stone-300 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-teal-700">
+                  <div className="w-full md:w-[24ch] md:shrink-0 flex items-center border border-stone-300 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-teal-700">
                     <input
                       className="min-w-0 text-sm outline-none bg-transparent flex-1"
-                      style={c.conjunction ? { flex: "0 0 auto", width: `${Math.max((c.ticketNumber || "").length, 3) + 1}ch` } : undefined}
+                      style={c.conjunction ? { flex: "0 0 auto", width: `${Math.max((c.ticketNumber || "").length, 20) + 1}ch` } : { width: "20ch" }}
                       value={c.ticketNumber}
                       onChange={(e) => handleCustomerFieldChange(i, "ticketNumber", e.target.value)}
                       onBlur={() => handleTicketNumberBlur(i)}
