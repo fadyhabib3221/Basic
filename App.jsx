@@ -8,7 +8,8 @@ import {
   Calendar, Download, Upload, Building2, Factory, Lock, LogOut, UserPlus, Users, Eye, EyeOff,
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
-  History, Bell, Send,
+  History, Bell, Send, Landmark, Receipt, PieChart, ArrowUpCircle, ArrowDownCircle,
+  Banknote, HandCoins, ClipboardList,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -188,6 +189,70 @@ const todayDateStr = () => {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 };
+
+// ============================================================
+// ---------- Accounts (accounting module) ----------
+// ============================================================
+// Expense categories offered on the expense form — covers the recurring cost lines a
+// travel agency typically tracks. "Other" always stays free-text via a separate field.
+const EXPENSE_CATEGORIES = [
+  "إيجار",
+  "مرتبات وعمولات",
+  "كهرباء ومياه",
+  "اتصالات وإنترنت",
+  "تسويق وإعلان",
+  "صيانة",
+  "ضرائب ورسوم حكومية",
+  "بنك وتحويلات",
+  "قرطاسية ومطبوعات",
+  "أخرى",
+];
+const TREASURY_ACCOUNT_TYPES = [
+  { value: "cash", label: "خزينة نقدية" },
+  { value: "bank", label: "حساب بنكي" },
+];
+// Categories for manual treasury entries (money moved without a linked customer/
+// supplier/expense record — capital injections, owner drawings, transfers, etc.).
+const TREASURY_ENTRY_CATEGORIES_IN = ["رأس مال / إيداع مالك", "تحويل من حساب آخر", "إيرادات أخرى"];
+const TREASURY_ENTRY_CATEGORIES_OUT = ["مسحوبات مالك", "تحويل إلى حساب آخر", "مصروفات أخرى"];
+
+const getEmptyExpenseForm = () => ({
+  id: null,
+  date: todayDateStr(),
+  category: EXPENSE_CATEGORIES[0],
+  description: "",
+  amount: "",
+  accountId: "",
+  note: "",
+});
+const getEmptyTreasuryAccountForm = () => ({ id: null, name: "", type: "cash", openingBalance: "" });
+const getEmptySupplierPaymentForm = () => ({
+  id: null,
+  date: todayDateStr(),
+  supplier: "",
+  amount: "",
+  accountId: "",
+  method: "cash",
+  note: "",
+});
+const getEmptyCustomerPaymentForm = () => ({
+  id: null,
+  date: todayDateStr(),
+  customer: "",
+  amount: "",
+  accountId: "",
+  method: "cash",
+  note: "",
+});
+const getEmptyTreasuryEntryForm = () => ({
+  id: null,
+  date: todayDateStr(),
+  accountId: "",
+  direction: "in",
+  category: TREASURY_ENTRY_CATEGORIES_IN[0],
+  amount: "",
+  note: "",
+});
 
 // A function (not a static object) so every new/reset ticket picks up TODAY'S date
 // at the moment it's created, rather than whatever date happened to be "today" when
@@ -1323,6 +1388,42 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [iataHistory, setIataHistory] = useState({ date: "", deductions: [] });
   const [showIataHistory, setShowIataHistory] = useState(false);
 
+  // ---------- Accounts (accounting module) ----------
+  const [expenses, setExpenses] = useState([]);
+  const [supplierPayments, setSupplierPayments] = useState([]);
+  const [customerPayments, setCustomerPayments] = useState([]);
+  const [treasuryAccounts, setTreasuryAccounts] = useState([]);
+  const [treasuryEntries, setTreasuryEntries] = useState([]);
+  // Which sub-tab of the Accounts section is showing.
+  const [accountsTab, setAccountsTab] = useState("overview");
+  const [accountsError, setAccountsError] = useState("");
+
+  const [expenseForm, setExpenseForm] = useState(getEmptyExpenseForm);
+  const [expenseEditingId, setExpenseEditingId] = useState(null);
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState("");
+
+  const [treasuryForm, setTreasuryForm] = useState(getEmptyTreasuryAccountForm);
+  const [showTreasuryAccountForm, setShowTreasuryAccountForm] = useState(false);
+  const [treasuryAccountEditingId, setTreasuryAccountEditingId] = useState(null);
+  const [treasuryEntryForm, setTreasuryEntryForm] = useState(getEmptyTreasuryEntryForm);
+  const [showTreasuryEntryForm, setShowTreasuryEntryForm] = useState(false);
+  const [treasuryFilterAccountId, setTreasuryFilterAccountId] = useState("");
+
+  // Supplier/customer ledgers are derived, not stored — drilling into one just
+  // remembers its name here so the detail panel knows which one to show.
+  const [viewingSupplier, setViewingSupplier] = useState(null);
+  const [viewingCustomer, setViewingCustomer] = useState(null);
+  const [supplierQuery, setSupplierQuery] = useState("");
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [supplierPaymentForm, setSupplierPaymentForm] = useState(getEmptySupplierPaymentForm);
+  const [customerPaymentForm, setCustomerPaymentForm] = useState(getEmptyCustomerPaymentForm);
+
+  // Date range for the Reports sub-tab: "today" | "month" | "custom".
+  const [reportsRange, setReportsRange] = useState("month");
+  const [reportsFrom, setReportsFrom] = useState("");
+  const [reportsTo, setReportsTo] = useState("");
+
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   // Clicking a ticket row opens a full detail view of that ticket (id stored here).
@@ -1405,7 +1506,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   useEffect(() => {
     (async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, sessionRes, suggestionsRes, setupRes, licenseRes, requestsRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, sessionRes, suggestionsRes, setupRes, licenseRes, requestsRes, expensesRes, supplierPaymentsRes, customerPaymentsRes, treasuryAccountsRes, treasuryEntriesRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:visas", true).catch(() => null),
@@ -1417,6 +1518,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           window.storage.get("tickets:setupComplete", true).catch(() => null),
           window.storage.get("tickets:license", true).catch(() => null),
           window.storage.get("tickets:requests", true).catch(() => null),
+          window.storage.get("tickets:expenses", true).catch(() => null),
+          window.storage.get("tickets:supplierPayments", true).catch(() => null),
+          window.storage.get("tickets:customerPayments", true).catch(() => null),
+          window.storage.get("tickets:treasuryAccounts", true).catch(() => null),
+          window.storage.get("tickets:treasuryEntries", true).catch(() => null),
         ]);
         const ticketsData = ticketsRes && ticketsRes.value ? JSON.parse(ticketsRes.value) : [];
         const hotelsData = hotelsRes && hotelsRes.value ? JSON.parse(hotelsRes.value) : [];
@@ -1432,6 +1538,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         setFiles(filesData);
         setEmployees(employeesData);
         setRequests(requestsData);
+        setExpenses(expensesRes && expensesRes.value ? JSON.parse(expensesRes.value) : []);
+        setSupplierPayments(supplierPaymentsRes && supplierPaymentsRes.value ? JSON.parse(supplierPaymentsRes.value) : []);
+        setCustomerPayments(customerPaymentsRes && customerPaymentsRes.value ? JSON.parse(customerPaymentsRes.value) : []);
+        setTreasuryAccounts(treasuryAccountsRes && treasuryAccountsRes.value ? JSON.parse(treasuryAccountsRes.value) : []);
+        setTreasuryEntries(treasuryEntriesRes && treasuryEntriesRes.value ? JSON.parse(treasuryEntriesRes.value) : []);
         requestsData.forEach((r) => seenRequestIdsRef.current.add(r.id));
         if (licenseRes && licenseRes.value) {
           try {
@@ -1499,7 +1610,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     let cancelled = false;
     const loadCoreData = async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, suggestionsRes, licenseRes, requestsRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, suggestionsRes, licenseRes, requestsRes, expensesRes, supplierPaymentsRes, customerPaymentsRes, treasuryAccountsRes, treasuryEntriesRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:visas", true).catch(() => null),
@@ -1509,8 +1620,28 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           window.storage.get("tickets:suggestions", true).catch(() => null),
           window.storage.get("tickets:license", true).catch(() => null),
           window.storage.get("tickets:requests", true).catch(() => null),
+          window.storage.get("tickets:expenses", true).catch(() => null),
+          window.storage.get("tickets:supplierPayments", true).catch(() => null),
+          window.storage.get("tickets:customerPayments", true).catch(() => null),
+          window.storage.get("tickets:treasuryAccounts", true).catch(() => null),
+          window.storage.get("tickets:treasuryEntries", true).catch(() => null),
         ]);
         if (cancelled) return;
+        if (expensesRes && expensesRes.value) {
+          try { setExpenses(JSON.parse(expensesRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
+        }
+        if (supplierPaymentsRes && supplierPaymentsRes.value) {
+          try { setSupplierPayments(JSON.parse(supplierPaymentsRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
+        }
+        if (customerPaymentsRes && customerPaymentsRes.value) {
+          try { setCustomerPayments(JSON.parse(customerPaymentsRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
+        }
+        if (treasuryAccountsRes && treasuryAccountsRes.value) {
+          try { setTreasuryAccounts(JSON.parse(treasuryAccountsRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
+        }
+        if (treasuryEntriesRes && treasuryEntriesRes.value) {
+          try { setTreasuryEntries(JSON.parse(treasuryEntriesRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
+        }
         if (ticketsRes && ticketsRes.value) {
           try {
             setTickets(JSON.parse(ticketsRes.value));
@@ -1641,6 +1772,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     if (activeSection === "cars") return "Cars";
     if (activeSection === "files") return "Files";
+    if (activeSection === "accounts") return "Accounts";
     // Flights (the default section)
     if (viewingTicketId) {
       const vt = tickets.find((x) => x.id === viewingTicketId);
@@ -2003,6 +2135,47 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       await window.storage.set("tickets:requests", JSON.stringify(next), true);
     } catch (e) {
       setRequestSendError("Could not save the request, please try again");
+    }
+  };
+
+  const persistExpenses = async (next) => {
+    setExpenses(next);
+    try {
+      await window.storage.set("tickets:expenses", JSON.stringify(next), true);
+    } catch (e) {
+      setAccountsError("Could not save data, please try again");
+    }
+  };
+  const persistSupplierPayments = async (next) => {
+    setSupplierPayments(next);
+    try {
+      await window.storage.set("tickets:supplierPayments", JSON.stringify(next), true);
+    } catch (e) {
+      setAccountsError("Could not save data, please try again");
+    }
+  };
+  const persistCustomerPayments = async (next) => {
+    setCustomerPayments(next);
+    try {
+      await window.storage.set("tickets:customerPayments", JSON.stringify(next), true);
+    } catch (e) {
+      setAccountsError("Could not save data, please try again");
+    }
+  };
+  const persistTreasuryAccounts = async (next) => {
+    setTreasuryAccounts(next);
+    try {
+      await window.storage.set("tickets:treasuryAccounts", JSON.stringify(next), true);
+    } catch (e) {
+      setAccountsError("Could not save data, please try again");
+    }
+  };
+  const persistTreasuryEntries = async (next) => {
+    setTreasuryEntries(next);
+    try {
+      await window.storage.set("tickets:treasuryEntries", JSON.stringify(next), true);
+    } catch (e) {
+      setAccountsError("Could not save data, please try again");
     }
   };
 
@@ -3761,16 +3934,32 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // The main account always has every section; everyone else is gated by their
   // individually-granted section access (defaulting to all-allowed for legacy records).
   const mySections = currentUser && currentUser.isAdmin ? DEFAULT_SECTIONS : employeeSections(currentEmployeeRecord);
+  // Accounts is a separate, financially-sensitive section that isn't part of the
+  // per-employee sections/ownership system above — it's reserved for the main account
+  // and any employee on the Owner/GM/Accountant grades (isOwner or isAccounting).
+  const canAccessAccounts =
+    !!currentUser &&
+    (currentUser.isAdmin || !!(currentEmployeeRecord && (currentEmployeeRecord.isOwner || currentEmployeeRecord.isAccounting)));
   // If the current section is no longer (or was never) allowed for this employee —
   // e.g. their access was just changed by the main account — bounce them to the first
   // section they do have access to, instead of leaving them stuck on a blocked one.
+  // Accounts is skipped here since it's gated by canAccessAccounts, not mySections.
   useEffect(() => {
     if (!currentUser) return;
+    if (activeSection === "accounts") return;
     if (mySections[activeSection]) return;
     const firstAllowed = SECTION_OPTIONS.find((s) => mySections[s.value]);
     if (firstAllowed) setActiveSection(firstAllowed.value);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, activeSection, mySections.flights, mySections.hotels, mySections.visa, mySections.cars, mySections.files]);
+  useEffect(() => {
+    if (!currentUser) return;
+    if (activeSection === "accounts" && !canAccessAccounts) {
+      const firstAllowed = SECTION_OPTIONS.find((s) => mySections[s.value]);
+      if (firstAllowed) setActiveSection(firstAllowed.value);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, activeSection, canAccessAccounts]);
   // View all / Edit / Delete, resolved independently for one section at a time. The main
   // account always gets everything; an accounting account gets view-all everywhere but
   // never edit/delete (their only allowed edit anywhere is the Notes field); everyone
@@ -4096,6 +4285,389 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // the "copy to a file" picker in Files only offers bookings this employee can already
   // see in the main Visa list — reusing the same permission-filtered list.
   const visibleVisaBookingsForFiles = visibleVisaBookings;
+
+  // ============================================================
+  // ---------- Accounts (accounting module) ----------
+  // ============================================================
+  // A flattened, EGP-normalized view of every booking across the four operational
+  // sections (ALL of them, not just the currently search-filtered/permission-visible
+  // lists above — the accounting module always needs the full financial picture).
+  // Each entry's net/sold is converted to EGP using the same hotelInEgp() convention
+  // already used for the cross-section totals above, so a supplier or customer who
+  // appears in more than one section (and currency) can be combined into one figure.
+  const acctBookings = [
+    ...tickets.map((t) => ({
+      key: `flights-${t.id}`,
+      section: "flights",
+      supplier: (t.supplier || "").trim(),
+      customers: getCustomers(t).map((c) => (c.name || "").trim()).filter(Boolean),
+      date: t.date || "",
+      net: netAfterRefund(t),
+      sold: soldAfterRefund(t),
+    })),
+    ...hotelBookings.map((h) => ({
+      key: `hotels-${h.id}`,
+      section: "hotels",
+      supplier: (h.supplier || "").trim(),
+      customers: [(h.customer || "").trim()].filter(Boolean),
+      date: h.bookingDate || "",
+      net: hotelNetTotal(h),
+      sold: hotelSoldTotal(h),
+    })),
+    ...visaBookings.map((v) => ({
+      key: `visa-${v.id}`,
+      section: "visa",
+      supplier: (v.supplier || "").trim(),
+      customers: (v.customers || []).map((c) => (c.name || "").trim()).filter(Boolean),
+      date: v.bookingDate || "",
+      net: hotelInEgp(visaNetTotal(v), v.currency),
+      sold: hotelInEgp(visaSoldTotal(v), v.currency),
+    })),
+    ...carBookings.map((c) => ({
+      key: `cars-${c.id}`,
+      section: "cars",
+      supplier: (c.supplier || "").trim(),
+      customers: [(c.customerName || "").trim()].filter(Boolean),
+      date: c.bookingDate || "",
+      net: hotelInEgp(parseFloat(c.netPrice) || 0, c.currency),
+      sold: hotelInEgp(parseFloat(c.soldPrice) || 0, c.currency),
+    })),
+  ];
+
+  const SECTION_LABELS_AR = { flights: "طيران", hotels: "فنادق", visa: "فيزا", cars: "ترانسفير" };
+
+  // Supplier ledger: every supplier that appears on at least one booking, with the
+  // total amount owed to them (net price, our cost) minus everything already paid via
+  // recorded supplier payments.
+  const supplierLedger = (() => {
+    const map = {};
+    acctBookings.forEach((b) => {
+      const name = b.supplier;
+      if (!name) return;
+      if (!map[name]) map[name] = { supplier: name, sections: new Set(), totalOwed: 0, bookingsCount: 0 };
+      map[name].sections.add(b.section);
+      map[name].totalOwed += b.net;
+      map[name].bookingsCount += 1;
+    });
+    const paidMap = {};
+    supplierPayments.forEach((p) => {
+      const name = (p.supplier || "").trim();
+      if (!name) return;
+      paidMap[name] = (paidMap[name] || 0) + (parseFloat(p.amount) || 0);
+    });
+    // Suppliers who've only ever received a payment with no booking on file yet still
+    // show up, so a stray/advance payment isn't silently dropped from the ledger.
+    Object.keys(paidMap).forEach((name) => {
+      if (!map[name]) map[name] = { supplier: name, sections: new Set(), totalOwed: 0, bookingsCount: 0 };
+    });
+    return Object.values(map)
+      .map((s) => {
+        const paid = paidMap[s.supplier] || 0;
+        return { ...s, sections: Array.from(s.sections), paid, balance: s.totalOwed - paid };
+      })
+      .sort((a, b) => b.balance - a.balance);
+  })();
+
+  // Customer ledger: every customer name across all bookings, with the total sold
+  // amount owed BY them (split evenly across co-customers on the same booking, the
+  // same way per-customer ticket totals are already split elsewhere in the app) minus
+  // everything already collected via recorded customer payments.
+  const customerLedger = (() => {
+    const map = {};
+    acctBookings.forEach((b) => {
+      const names = b.customers.length ? b.customers : [];
+      if (!names.length) return;
+      const share = b.sold / names.length;
+      names.forEach((name) => {
+        if (!map[name]) map[name] = { customer: name, sections: new Set(), totalDue: 0, bookingsCount: 0 };
+        map[name].sections.add(b.section);
+        map[name].totalDue += share;
+        map[name].bookingsCount += 1;
+      });
+    });
+    const paidMap = {};
+    customerPayments.forEach((p) => {
+      const name = (p.customer || "").trim();
+      if (!name) return;
+      paidMap[name] = (paidMap[name] || 0) + (parseFloat(p.amount) || 0);
+    });
+    Object.keys(paidMap).forEach((name) => {
+      if (!map[name]) map[name] = { customer: name, sections: new Set(), totalDue: 0, bookingsCount: 0 };
+    });
+    return Object.values(map)
+      .map((c) => {
+        const paid = paidMap[c.customer] || 0;
+        return { ...c, sections: Array.from(c.sections), paid, balance: c.totalDue - paid };
+      })
+      .sort((a, b) => b.balance - a.balance);
+  })();
+
+  // Current balance of one treasury account: its opening balance, plus every customer
+  // receipt and manual "in" entry posted to it, minus every supplier payment, expense,
+  // and manual "out" entry posted to it. Everything in the Accounts module is tracked
+  // in EGP (matching the EGP-normalized ledgers above), so this is a plain sum.
+  const treasuryBalance = (accountId) => {
+    const acc = treasuryAccounts.find((a) => a.id === accountId);
+    if (!acc) return 0;
+    const opening = parseFloat(acc.openingBalance) || 0;
+    const inFromCustomers = customerPayments
+      .filter((p) => p.accountId === accountId)
+      .reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    const outToSuppliers = supplierPayments
+      .filter((p) => p.accountId === accountId)
+      .reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    const outExpenses = expenses
+      .filter((e) => e.accountId === accountId)
+      .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const manualIn = treasuryEntries
+      .filter((e) => e.accountId === accountId && e.direction === "in")
+      .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const manualOut = treasuryEntries
+      .filter((e) => e.accountId === accountId && e.direction === "out")
+      .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    return opening + inFromCustomers + manualIn - outToSuppliers - outExpenses - manualOut;
+  };
+  const totalTreasuryBalance = treasuryAccounts.reduce((sum, a) => sum + treasuryBalance(a.id), 0);
+
+  // A single chronological transactions feed for the Treasury tab, merging customer
+  // receipts, supplier payments, expenses, and manual entries into one shape.
+  const treasuryTransactions = [
+    ...customerPayments.map((p) => ({
+      id: `cp-${p.id}`, date: p.date, accountId: p.accountId, direction: "in",
+      label: `تحصيل من ${p.customer || "-"}`, note: p.note, amount: parseFloat(p.amount) || 0,
+    })),
+    ...supplierPayments.map((p) => ({
+      id: `sp-${p.id}`, date: p.date, accountId: p.accountId, direction: "out",
+      label: `دفعة لـ ${p.supplier || "-"}`, note: p.note, amount: parseFloat(p.amount) || 0,
+    })),
+    ...expenses.map((e) => ({
+      id: `ex-${e.id}`, date: e.date, accountId: e.accountId, direction: "out",
+      label: e.category + (e.description ? ` - ${e.description}` : ""), note: e.note, amount: parseFloat(e.amount) || 0,
+    })),
+    ...treasuryEntries.map((e) => ({
+      id: `te-${e.id}`, date: e.date, accountId: e.accountId, direction: e.direction,
+      label: e.category, note: e.note, amount: parseFloat(e.amount) || 0,
+    })),
+  ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+  // Date-range predicate for the Reports tab: "today" | "month" (current calendar
+  // month) | "custom" (reportsFrom/reportsTo, either end optional).
+  const inReportsRange = (dateStr) => {
+    if (!dateStr) return false;
+    if (reportsRange === "today") return dateStr === todayDateStr();
+    if (reportsRange === "month") return dateStr.slice(0, 7) === todayDateStr().slice(0, 7);
+    if (reportsFrom && dateStr < reportsFrom) return false;
+    if (reportsTo && dateStr > reportsTo) return false;
+    return true;
+  };
+  const reportRevenueBySection = {
+    flights: tickets.filter((t) => inReportsRange(t.date)).reduce((s, t) => s + profitAfterRefund(t), 0),
+    hotels: hotelBookings.filter((h) => inReportsRange(h.bookingDate)).reduce((s, h) => s + hotelProfitTotal(h), 0),
+    visa: visaBookings
+      .filter((v) => inReportsRange(v.bookingDate))
+      .reduce((s, v) => s + hotelInEgp(visaProfitTotal(v), v.currency), 0),
+    cars: carBookings
+      .filter((c) => inReportsRange(c.bookingDate))
+      .reduce((s, c) => s + hotelInEgp((parseFloat(c.soldPrice) || 0) - (parseFloat(c.netPrice) || 0), c.currency), 0),
+  };
+  const reportTotalRevenue = Object.values(reportRevenueBySection).reduce((a, b) => a + b, 0);
+  const reportExpensesByCategory = {};
+  expenses
+    .filter((e) => inReportsRange(e.date))
+    .forEach((e) => {
+      const cat = e.category || "أخرى";
+      reportExpensesByCategory[cat] = (reportExpensesByCategory[cat] || 0) + (parseFloat(e.amount) || 0);
+    });
+  const reportTotalExpenses = Object.values(reportExpensesByCategory).reduce((a, b) => a + b, 0);
+  const reportNetProfit = reportTotalRevenue - reportTotalExpenses;
+  const reportBookingsCount = {
+    flights: tickets.filter((t) => inReportsRange(t.date)).length,
+    hotels: hotelBookings.filter((h) => inReportsRange(h.bookingDate)).length,
+    visa: visaBookings.filter((v) => inReportsRange(v.bookingDate)).length,
+    cars: carBookings.filter((c) => inReportsRange(c.bookingDate)).length,
+  };
+
+  // This month's totals, used on the Overview cards regardless of whatever range is
+  // currently selected on the Reports tab.
+  const thisMonthPrefix = todayDateStr().slice(0, 7);
+  const monthRevenue =
+    tickets.filter((t) => (t.date || "").slice(0, 7) === thisMonthPrefix).reduce((s, t) => s + profitAfterRefund(t), 0) +
+    hotelBookings.filter((h) => (h.bookingDate || "").slice(0, 7) === thisMonthPrefix).reduce((s, h) => s + hotelProfitTotal(h), 0) +
+    visaBookings
+      .filter((v) => (v.bookingDate || "").slice(0, 7) === thisMonthPrefix)
+      .reduce((s, v) => s + hotelInEgp(visaProfitTotal(v), v.currency), 0) +
+    carBookings
+      .filter((c) => (c.bookingDate || "").slice(0, 7) === thisMonthPrefix)
+      .reduce((s, c) => s + hotelInEgp((parseFloat(c.soldPrice) || 0) - (parseFloat(c.netPrice) || 0), c.currency), 0);
+  const monthExpenses = expenses
+    .filter((e) => (e.date || "").slice(0, 7) === thisMonthPrefix)
+    .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  const totalSupplierBalance = supplierLedger.reduce((s, x) => s + x.balance, 0);
+  const totalCustomerBalance = customerLedger.reduce((s, x) => s + x.balance, 0);
+
+  const filteredSupplierLedger = supplierLedger.filter((s) =>
+    s.supplier.toLowerCase().includes(supplierQuery.trim().toLowerCase())
+  );
+  const filteredCustomerLedger = customerLedger.filter((c) =>
+    c.customer.toLowerCase().includes(customerQuery.trim().toLowerCase())
+  );
+  const filteredExpenses = expenses
+    .filter((e) => !expenseCategoryFilter || e.category === expenseCategoryFilter)
+    .slice()
+    .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const filteredTreasuryTransactions = treasuryTransactions.filter(
+    (tx) => !treasuryFilterAccountId || tx.accountId === treasuryFilterAccountId
+  );
+
+  const genId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const handleSaveExpense = () => {
+    if (!expenseForm.date || !expenseForm.category || expenseForm.amount === "" || !expenseForm.accountId) {
+      setAccountsError("من فضلك أكمل التاريخ والتصنيف والمبلغ والخزينة/الحساب");
+      return;
+    }
+    setAccountsError("");
+    const record = { ...expenseForm, id: expenseForm.id || genId() };
+    const next = expenseEditingId
+      ? expenses.map((e) => (e.id === expenseEditingId ? record : e))
+      : [record, ...expenses];
+    persistExpenses(next);
+    setExpenseForm(getEmptyExpenseForm());
+    setExpenseEditingId(null);
+    setShowExpenseForm(false);
+  };
+  const handleEditExpenseClick = (e) => {
+    setExpenseForm({ ...e });
+    setExpenseEditingId(e.id);
+    setShowExpenseForm(true);
+  };
+  const handleDeleteExpense = (id) => {
+    requestConfirm("هل تريد حذف هذا المصروف؟", () => {
+      persistExpenses(expenses.filter((e) => e.id !== id));
+    });
+  };
+
+  const handleSaveTreasuryAccount = () => {
+    if (!treasuryForm.name.trim()) {
+      setAccountsError("من فضلك اكتب اسم الحساب/الخزينة");
+      return;
+    }
+    setAccountsError("");
+    const record = { ...treasuryForm, id: treasuryForm.id || genId() };
+    const next = treasuryAccountEditingId
+      ? treasuryAccounts.map((a) => (a.id === treasuryAccountEditingId ? record : a))
+      : [...treasuryAccounts, record];
+    persistTreasuryAccounts(next);
+    setTreasuryForm(getEmptyTreasuryAccountForm());
+    setTreasuryAccountEditingId(null);
+    setShowTreasuryAccountForm(false);
+  };
+  const handleEditTreasuryAccountClick = (a) => {
+    setTreasuryForm({ ...a });
+    setTreasuryAccountEditingId(a.id);
+    setShowTreasuryAccountForm(true);
+  };
+  const handleDeleteTreasuryAccount = (id) => {
+    requestConfirm("هل تريد حذف هذا الحساب؟ لن يتم حذف الحركات المسجلة عليه من قبل.", () => {
+      persistTreasuryAccounts(treasuryAccounts.filter((a) => a.id !== id));
+    });
+  };
+
+  const handleSaveTreasuryEntry = () => {
+    if (!treasuryEntryForm.accountId || treasuryEntryForm.amount === "") {
+      setAccountsError("من فضلك اختر الحساب واكتب المبلغ");
+      return;
+    }
+    setAccountsError("");
+    const record = { ...treasuryEntryForm, id: genId() };
+    persistTreasuryEntries([record, ...treasuryEntries]);
+    setTreasuryEntryForm(getEmptyTreasuryEntryForm());
+    setShowTreasuryEntryForm(false);
+  };
+  const handleDeleteTreasuryEntry = (id) => {
+    requestConfirm("هل تريد حذف هذا القيد؟", () => {
+      persistTreasuryEntries(treasuryEntries.filter((e) => e.id !== id));
+    });
+  };
+
+  const handleSaveSupplierPayment = () => {
+    if (!supplierPaymentForm.supplier || supplierPaymentForm.amount === "" || !supplierPaymentForm.accountId) {
+      setAccountsError("من فضلك اختر المورد والخزينة/الحساب واكتب المبلغ");
+      return;
+    }
+    setAccountsError("");
+    const record = { ...supplierPaymentForm, id: genId() };
+    persistSupplierPayments([record, ...supplierPayments]);
+    setSupplierPaymentForm({ ...getEmptySupplierPaymentForm(), supplier: supplierPaymentForm.supplier });
+  };
+  const handleDeleteSupplierPayment = (id) => {
+    requestConfirm("هل تريد حذف هذه الدفعة؟", () => {
+      persistSupplierPayments(supplierPayments.filter((p) => p.id !== id));
+    });
+  };
+
+  const handleSaveCustomerPayment = () => {
+    if (!customerPaymentForm.customer || customerPaymentForm.amount === "" || !customerPaymentForm.accountId) {
+      setAccountsError("من فضلك اختر العميل والخزينة/الحساب واكتب المبلغ");
+      return;
+    }
+    setAccountsError("");
+    const record = { ...customerPaymentForm, id: genId() };
+    persistCustomerPayments([record, ...customerPayments]);
+    setCustomerPaymentForm({ ...getEmptyCustomerPaymentForm(), customer: customerPaymentForm.customer });
+  };
+  const handleDeleteCustomerPayment = (id) => {
+    requestConfirm("هل تريد حذف هذا التحصيل؟", () => {
+      persistCustomerPayments(customerPayments.filter((p) => p.id !== id));
+    });
+  };
+
+  // Exports the currently selected report range to an Excel workbook — revenue by
+  // section, expenses by category, and the net profit summary — following the same
+  // XLSX.utils/writeFile pattern used by the other sections' exports in this file.
+  const handleExportAccountsReport = () => {
+    const wb = XLSX.utils.book_new();
+    const summaryRows = [
+      { "البند": "إيرادات الطيران", "المبلغ (ج.م)": Math.round(reportRevenueBySection.flights * 100) / 100 },
+      { "البند": "إيرادات الفنادق", "المبلغ (ج.م)": Math.round(reportRevenueBySection.hotels * 100) / 100 },
+      { "البند": "إيرادات الفيزا", "المبلغ (ج.م)": Math.round(reportRevenueBySection.visa * 100) / 100 },
+      { "البند": "إيرادات الترانسفير", "المبلغ (ج.م)": Math.round(reportRevenueBySection.cars * 100) / 100 },
+      { "البند": "إجمالي الإيرادات", "المبلغ (ج.م)": Math.round(reportTotalRevenue * 100) / 100 },
+      { "البند": "إجمالي المصروفات", "المبلغ (ج.م)": Math.round(reportTotalExpenses * 100) / 100 },
+      { "البند": "صافي الربح", "المبلغ (ج.م)": Math.round(reportNetProfit * 100) / 100 },
+    ];
+    const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
+    XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+    const expenseRows = Object.entries(reportExpensesByCategory).map(([cat, amt]) => ({
+      "التصنيف": cat,
+      "المبلغ (ج.م)": Math.round(amt * 100) / 100,
+    }));
+    if (expenseRows.length) {
+      const expenseSheet = XLSX.utils.json_to_sheet(expenseRows);
+      XLSX.utils.book_append_sheet(wb, expenseSheet, "Expenses");
+    }
+    const supplierRows = supplierLedger.map((s) => ({
+      "المورد": s.supplier,
+      "إجمالى المستحق": Math.round(s.totalOwed * 100) / 100,
+      "المدفوع": Math.round(s.paid * 100) / 100,
+      "المتبقى": Math.round(s.balance * 100) / 100,
+    }));
+    if (supplierRows.length) {
+      const supplierSheet = XLSX.utils.json_to_sheet(supplierRows);
+      XLSX.utils.book_append_sheet(wb, supplierSheet, "Suppliers");
+    }
+    const customerRows = customerLedger.map((c) => ({
+      "العميل": c.customer,
+      "إجمالى المستحق": Math.round(c.totalDue * 100) / 100,
+      "المحصل": Math.round(c.paid * 100) / 100,
+      "المتبقى": Math.round(c.balance * 100) / 100,
+    }));
+    if (customerRows.length) {
+      const customerSheet = XLSX.utils.json_to_sheet(customerRows);
+      XLSX.utils.book_append_sheet(wb, customerSheet, "Customers");
+    }
+    XLSX.writeFile(wb, `accounts_report_${todayDateStr()}.xlsx`);
+  };
 
   // ---------- Files ----------
   const visibleFiles = (
@@ -5809,6 +6381,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           >
             <FileText size={22} />
             Files
+          </button>
+          )}
+          {canAccessAccounts && (
+          <button
+            onClick={() => setActiveSection("accounts")}
+            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+              activeSection === "accounts"
+                ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
+                : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
+            }`}
+          >
+            <Wallet size={22} />
+            الحسابات
           </button>
           )}
         </div>
@@ -9537,6 +10122,440 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             )}
           </>
         )}
+
+        {activeSection === "accounts" && canAccessAccounts && (
+        <>
+        {accountsError && (
+          <div className="text-sm rounded-xl px-3 py-2 mb-4 bg-red-50 text-red-700">{accountsError}</div>
+        )}
+
+        {/* Accounts sub-tab switcher */}
+        <div className="flex items-center gap-2 mb-5 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+          {[
+            { key: "overview", label: "نظرة عامة", icon: PieChart },
+            { key: "suppliers", label: "الموردين", icon: Building2 },
+            { key: "customers", label: "العملاء", icon: Users },
+            { key: "treasury", label: "الخزينة والبنوك", icon: Landmark },
+            { key: "expenses", label: "المصروفات", icon: Receipt },
+            { key: "reports", label: "التقارير المالية", icon: ClipboardList },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setAccountsTab(tab.key)}
+              className={`shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-semibold transition-colors ${
+                accountsTab === tab.key
+                  ? "bg-teal-800 text-white border-teal-800"
+                  : "bg-white text-stone-500 border-stone-200 hover:border-teal-300 hover:text-teal-800"
+              }`}
+            >
+              <tab.icon size={15} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ---------- Overview ---------- */}
+        {accountsTab === "overview" && (
+          <div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <p className="text-xs text-stone-500 mb-1">أرباح الشهر الحالى</p>
+                <p className="text-lg font-bold text-emerald-700">{fmt(monthRevenue)} ج.م</p>
+              </div>
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <p className="text-xs text-stone-500 mb-1">مصروفات الشهر الحالى</p>
+                <p className="text-lg font-bold text-red-600">{fmt(monthExpenses)} ج.م</p>
+              </div>
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <p className="text-xs text-stone-500 mb-1">صافى ربح الشهر</p>
+                <p className={`text-lg font-bold ${monthRevenue - monthExpenses >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                  {fmt(monthRevenue - monthExpenses)} ج.م
+                </p>
+              </div>
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <p className="text-xs text-stone-500 mb-1">إجمالى رصيد الخزينة والبنوك</p>
+                <p className="text-lg font-bold text-teal-800">{fmt(totalTreasuryBalance)} ج.م</p>
+              </div>
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <p className="text-xs text-stone-500 mb-1">مستحق للموردين</p>
+                <p className="text-lg font-bold text-amber-700">{fmt(totalSupplierBalance)} ج.م</p>
+              </div>
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <p className="text-xs text-stone-500 mb-1">مستحق من العملاء</p>
+                <p className="text-lg font-bold text-amber-700">{fmt(totalCustomerBalance)} ج.م</p>
+              </div>
+            </div>
+
+            <h3 className="text-sm font-bold text-stone-700 mb-2">أرباح الشهر حسب القسم</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {["flights", "hotels", "visa", "cars"].map((sec) => {
+                const val =
+                  sec === "flights"
+                    ? tickets.filter((t) => (t.date || "").slice(0, 7) === thisMonthPrefix).reduce((s, t) => s + profitAfterRefund(t), 0)
+                    : sec === "hotels"
+                    ? hotelBookings.filter((h) => (h.bookingDate || "").slice(0, 7) === thisMonthPrefix).reduce((s, h) => s + hotelProfitTotal(h), 0)
+                    : sec === "visa"
+                    ? visaBookings.filter((v) => (v.bookingDate || "").slice(0, 7) === thisMonthPrefix).reduce((s, v) => s + hotelInEgp(visaProfitTotal(v), v.currency), 0)
+                    : carBookings.filter((c) => (c.bookingDate || "").slice(0, 7) === thisMonthPrefix).reduce((s, c) => s + hotelInEgp((parseFloat(c.soldPrice) || 0) - (parseFloat(c.netPrice) || 0), c.currency), 0);
+                return (
+                  <div key={sec} className="bg-white rounded-2xl border border-stone-200 p-4">
+                    <p className="text-xs text-stone-500 mb-1">{SECTION_LABELS_AR[sec]}</p>
+                    <p className="text-base font-bold text-emerald-700">{fmt(val)} ج.م</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ---------- Suppliers ---------- */}
+        {accountsTab === "suppliers" && (
+          <div>
+            <div className="relative mb-4">
+              <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input
+                value={supplierQuery}
+                onChange={(e) => setSupplierQuery(e.target.value)}
+                placeholder="ابحث عن مورد..."
+                className="w-full border border-stone-300 rounded-xl pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              />
+            </div>
+            <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-stone-50 text-stone-500 text-xs">
+                  <tr>
+                    <th className="text-right px-3 py-2 font-medium">المورد</th>
+                    <th className="text-right px-3 py-2 font-medium">الأقسام</th>
+                    <th className="text-right px-3 py-2 font-medium">إجمالى المستحق</th>
+                    <th className="text-right px-3 py-2 font-medium">المدفوع</th>
+                    <th className="text-right px-3 py-2 font-medium">المتبقى</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {filteredSupplierLedger.length === 0 ? (
+                    <tr><td colSpan={5} className="text-center text-stone-400 py-6">لا يوجد موردون</td></tr>
+                  ) : (
+                    filteredSupplierLedger.map((s) => (
+                      <tr
+                        key={s.supplier}
+                        onClick={() => setViewingSupplier(s.supplier)}
+                        className="hover:bg-teal-50 cursor-pointer"
+                      >
+                        <td className="px-3 py-2 font-semibold text-stone-800">{s.supplier}</td>
+                        <td className="px-3 py-2 text-stone-500 text-xs">{s.sections.map((x) => SECTION_LABELS_AR[x]).join("، ") || "-"}</td>
+                        <td className="px-3 py-2 text-stone-700">{fmt(s.totalOwed)}</td>
+                        <td className="px-3 py-2 text-emerald-700">{fmt(s.paid)}</td>
+                        <td className={`px-3 py-2 font-bold ${s.balance > 0 ? "text-red-600" : "text-stone-400"}`}>{fmt(s.balance)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ---------- Customers ---------- */}
+        {accountsTab === "customers" && (
+          <div>
+            <div className="relative mb-4">
+              <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input
+                value={customerQuery}
+                onChange={(e) => setCustomerQuery(e.target.value)}
+                placeholder="ابحث عن عميل..."
+                className="w-full border border-stone-300 rounded-xl pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              />
+            </div>
+            <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-stone-50 text-stone-500 text-xs">
+                  <tr>
+                    <th className="text-right px-3 py-2 font-medium">العميل</th>
+                    <th className="text-right px-3 py-2 font-medium">الأقسام</th>
+                    <th className="text-right px-3 py-2 font-medium">إجمالى المستحق</th>
+                    <th className="text-right px-3 py-2 font-medium">المحصل</th>
+                    <th className="text-right px-3 py-2 font-medium">المتبقى</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {filteredCustomerLedger.length === 0 ? (
+                    <tr><td colSpan={5} className="text-center text-stone-400 py-6">لا يوجد عملاء</td></tr>
+                  ) : (
+                    filteredCustomerLedger.map((c) => (
+                      <tr
+                        key={c.customer}
+                        onClick={() => setViewingCustomer(c.customer)}
+                        className="hover:bg-teal-50 cursor-pointer"
+                      >
+                        <td className="px-3 py-2 font-semibold text-stone-800">{c.customer}</td>
+                        <td className="px-3 py-2 text-stone-500 text-xs">{c.sections.map((x) => SECTION_LABELS_AR[x]).join("، ") || "-"}</td>
+                        <td className="px-3 py-2 text-stone-700">{fmt(c.totalDue)}</td>
+                        <td className="px-3 py-2 text-emerald-700">{fmt(c.paid)}</td>
+                        <td className={`px-3 py-2 font-bold ${c.balance > 0 ? "text-red-600" : "text-stone-400"}`}>{fmt(c.balance)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ---------- Treasury ---------- */}
+        {accountsTab === "treasury" && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-stone-700">الحسابات والخزائن</h3>
+              <button
+                onClick={() => { setTreasuryForm(getEmptyTreasuryAccountForm()); setTreasuryAccountEditingId(null); setShowTreasuryAccountForm(true); }}
+                className="flex items-center gap-1 text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-lg px-3 py-1.5"
+              >
+                <Plus size={14} /> إضافة حساب
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+              {treasuryAccounts.length === 0 && (
+                <p className="text-sm text-stone-400 col-span-full">لا توجد حسابات بعد. أضف خزينة نقدية أو حساب بنكى للبدء.</p>
+              )}
+              {treasuryAccounts.map((a) => (
+                <div key={a.id} className="bg-white rounded-2xl border border-stone-200 p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5 text-stone-800 font-semibold text-sm">
+                      {a.type === "bank" ? <Landmark size={16} /> : <Banknote size={16} />}
+                      {a.name}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => handleEditTreasuryAccountClick(a)} className="text-stone-400 hover:text-teal-700"><Pencil size={14} /></button>
+                      <button onClick={() => handleDeleteTreasuryAccount(a.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-stone-400 mb-2">{TREASURY_ACCOUNT_TYPES.find((t) => t.value === a.type)?.label}</p>
+                  <p className={`text-lg font-bold ${treasuryBalance(a.id) >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                    {fmt(treasuryBalance(a.id))} ج.م
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <h3 className="text-sm font-bold text-stone-700">حركة الخزينة</h3>
+              <div className="flex items-center gap-2">
+                <select
+                  value={treasuryFilterAccountId}
+                  onChange={(e) => setTreasuryFilterAccountId(e.target.value)}
+                  className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs"
+                >
+                  <option value="">كل الحسابات</option>
+                  {treasuryAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => { setTreasuryEntryForm(getEmptyTreasuryEntryForm()); setShowTreasuryEntryForm(true); }}
+                  className="flex items-center gap-1 text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-lg px-3 py-1.5"
+                >
+                  <Plus size={14} /> قيد يدوى
+                </button>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-stone-50 text-stone-500 text-xs">
+                  <tr>
+                    <th className="text-right px-3 py-2 font-medium">التاريخ</th>
+                    <th className="text-right px-3 py-2 font-medium">الحساب</th>
+                    <th className="text-right px-3 py-2 font-medium">البيان</th>
+                    <th className="text-right px-3 py-2 font-medium">المبلغ</th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {filteredTreasuryTransactions.length === 0 ? (
+                    <tr><td colSpan={5} className="text-center text-stone-400 py-6">لا توجد حركات</td></tr>
+                  ) : (
+                    filteredTreasuryTransactions.map((tx) => {
+                      const [prefix, rawId] = tx.id.split(/-(.+)/);
+                      return (
+                        <tr key={tx.id}>
+                          <td className="px-3 py-2 text-stone-500 text-xs whitespace-nowrap">{tx.date ? formatDisplayDate(tx.date) : "-"}</td>
+                          <td className="px-3 py-2 text-stone-600 text-xs">{treasuryAccounts.find((a) => a.id === tx.accountId)?.name || "-"}</td>
+                          <td className="px-3 py-2 text-stone-800 flex items-center gap-1.5">
+                            {tx.direction === "in" ? <ArrowDownCircle size={14} className="text-emerald-600 shrink-0" /> : <ArrowUpCircle size={14} className="text-red-500 shrink-0" />}
+                            {tx.label}
+                          </td>
+                          <td className={`px-3 py-2 font-semibold whitespace-nowrap ${tx.direction === "in" ? "text-emerald-700" : "text-red-600"}`}>
+                            {tx.direction === "in" ? "+" : "-"}{fmt(tx.amount)}
+                          </td>
+                          <td className="px-3 py-2">
+                            {prefix === "te" && (
+                              <button onClick={() => handleDeleteTreasuryEntry(rawId)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                            )}
+                            {prefix === "sp" && (
+                              <button onClick={() => handleDeleteSupplierPayment(rawId)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                            )}
+                            {prefix === "cp" && (
+                              <button onClick={() => handleDeleteCustomerPayment(rawId)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                            )}
+                            {prefix === "ex" && (
+                              <button onClick={() => handleDeleteExpense(rawId)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ---------- Expenses ---------- */}
+        {accountsTab === "expenses" && (
+          <div>
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <select
+                value={expenseCategoryFilter}
+                onChange={(e) => setExpenseCategoryFilter(e.target.value)}
+                className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs"
+              >
+                <option value="">كل التصنيفات</option>
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => { setExpenseForm(getEmptyExpenseForm()); setExpenseEditingId(null); setShowExpenseForm(true); }}
+                className="flex items-center gap-1 text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-lg px-3 py-1.5"
+              >
+                <Plus size={14} /> إضافة مصروف
+              </button>
+            </div>
+            <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-stone-50 text-stone-500 text-xs">
+                  <tr>
+                    <th className="text-right px-3 py-2 font-medium">التاريخ</th>
+                    <th className="text-right px-3 py-2 font-medium">التصنيف</th>
+                    <th className="text-right px-3 py-2 font-medium">الوصف</th>
+                    <th className="text-right px-3 py-2 font-medium">الحساب</th>
+                    <th className="text-right px-3 py-2 font-medium">المبلغ</th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {filteredExpenses.length === 0 ? (
+                    <tr><td colSpan={6} className="text-center text-stone-400 py-6">لا توجد مصروفات</td></tr>
+                  ) : (
+                    filteredExpenses.map((e) => (
+                      <tr key={e.id}>
+                        <td className="px-3 py-2 text-stone-500 text-xs whitespace-nowrap">{e.date ? formatDisplayDate(e.date) : "-"}</td>
+                        <td className="px-3 py-2 text-stone-700">{e.category}</td>
+                        <td className="px-3 py-2 text-stone-500 text-xs">{e.description || "-"}</td>
+                        <td className="px-3 py-2 text-stone-500 text-xs">{treasuryAccounts.find((a) => a.id === e.accountId)?.name || "-"}</td>
+                        <td className="px-3 py-2 font-semibold text-red-600 whitespace-nowrap">{fmt(parseFloat(e.amount) || 0)}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1.5 justify-end">
+                            <button onClick={() => handleEditExpenseClick(e)} className="text-stone-400 hover:text-teal-700"><Pencil size={14} /></button>
+                            <button onClick={() => handleDeleteExpense(e.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ---------- Reports ---------- */}
+        {accountsTab === "reports" && (
+          <div>
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              {[
+                { key: "today", label: "اليوم" },
+                { key: "month", label: "الشهر الحالى" },
+                { key: "custom", label: "مخصص" },
+              ].map((r) => (
+                <button
+                  key={r.key}
+                  onClick={() => setReportsRange(r.key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
+                    reportsRange === r.key ? "bg-teal-800 text-white border-teal-800" : "bg-white text-stone-500 border-stone-200"
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+              {reportsRange === "custom" && (
+                <>
+                  <input type="date" value={reportsFrom} onChange={(e) => setReportsFrom(e.target.value)} className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs" />
+                  <span className="text-xs text-stone-400">إلى</span>
+                  <input type="date" value={reportsTo} onChange={(e) => setReportsTo(e.target.value)} className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs" />
+                </>
+              )}
+              <button
+                onClick={handleExportAccountsReport}
+                className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-white bg-gradient-to-b from-teal-700 to-teal-900 rounded-lg px-3 py-1.5"
+              >
+                <Download size={14} /> تصدير Excel
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+              {["flights", "hotels", "visa", "cars"].map((sec) => (
+                <div key={sec} className="bg-white rounded-2xl border border-stone-200 p-4">
+                  <p className="text-xs text-stone-500 mb-1">إيرادات {SECTION_LABELS_AR[sec]}</p>
+                  <p className="text-base font-bold text-emerald-700">{fmt(reportRevenueBySection[sec])} ج.م</p>
+                  <p className="text-[11px] text-stone-400 mt-0.5">{reportBookingsCount[sec]} حجز</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <p className="text-xs text-stone-500 mb-1">إجمالى الإيرادات</p>
+                <p className="text-lg font-bold text-emerald-700">{fmt(reportTotalRevenue)} ج.م</p>
+              </div>
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <p className="text-xs text-stone-500 mb-1">إجمالى المصروفات</p>
+                <p className="text-lg font-bold text-red-600">{fmt(reportTotalExpenses)} ج.م</p>
+              </div>
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <p className="text-xs text-stone-500 mb-1">صافى الربح</p>
+                <p className={`text-lg font-bold ${reportNetProfit >= 0 ? "text-emerald-700" : "text-red-600"}`}>{fmt(reportNetProfit)} ج.م</p>
+              </div>
+            </div>
+
+            <h3 className="text-sm font-bold text-stone-700 mb-2">المصروفات حسب التصنيف</h3>
+            <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-stone-50 text-stone-500 text-xs">
+                  <tr>
+                    <th className="text-right px-3 py-2 font-medium">التصنيف</th>
+                    <th className="text-right px-3 py-2 font-medium">المبلغ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {Object.keys(reportExpensesByCategory).length === 0 ? (
+                    <tr><td colSpan={2} className="text-center text-stone-400 py-6">لا توجد مصروفات فى هذه الفترة</td></tr>
+                  ) : (
+                    Object.entries(reportExpensesByCategory).map(([cat, amt]) => (
+                      <tr key={cat}>
+                        <td className="px-3 py-2 text-stone-700">{cat}</td>
+                        <td className="px-3 py-2 font-semibold text-red-600">{fmt(amt)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        </>
+        )}
         </>
         ) : (
           <div className="bg-white rounded-2xl border border-stone-200 p-8 text-center max-w-sm mx-auto">
@@ -10155,6 +11174,307 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               className="flex-1 w-full"
               style={{ border: "none", minHeight: "60vh" }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Accounts: expense form modal ---------- */}
+      {showExpenseForm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowExpenseForm(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md p-5" onClick={(ev) => ev.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-stone-800">{expenseEditingId ? "تعديل مصروف" : "إضافة مصروف"}</h3>
+              <button onClick={() => setShowExpenseForm(false)} className="text-stone-400 hover:text-stone-700"><X size={18} /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">التاريخ</label>
+                <input type="date" value={expenseForm.date} onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">التصنيف</label>
+                <select value={expenseForm.category} onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm">
+                  {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">الوصف (اختيارى)</label>
+                <input value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">المبلغ (ج.م)</label>
+                <input type="number" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">صرف من (خزينة/حساب)</label>
+                <select value={expenseForm.accountId} onChange={(e) => setExpenseForm({ ...expenseForm, accountId: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm">
+                  <option value="">اختر حساب</option>
+                  {treasuryAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">ملاحظات</label>
+                <textarea value={expenseForm.note} onChange={(e) => setExpenseForm({ ...expenseForm, note: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" rows={2} />
+              </div>
+            </div>
+            <button onClick={handleSaveExpense} className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl py-2.5">
+              {expenseEditingId ? "حفظ التعديل" : "إضافة المصروف"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Accounts: treasury account form modal ---------- */}
+      {showTreasuryAccountForm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowTreasuryAccountForm(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md p-5" onClick={(ev) => ev.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-stone-800">{treasuryAccountEditingId ? "تعديل حساب" : "إضافة حساب/خزينة"}</h3>
+              <button onClick={() => setShowTreasuryAccountForm(false)} className="text-stone-400 hover:text-stone-700"><X size={18} /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">اسم الحساب</label>
+                <input value={treasuryForm.name} onChange={(e) => setTreasuryForm({ ...treasuryForm, name: e.target.value })} placeholder="مثال: خزينة المكتب، حساب بنك مصر" className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">النوع</label>
+                <select value={treasuryForm.type} onChange={(e) => setTreasuryForm({ ...treasuryForm, type: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm">
+                  {TREASURY_ACCOUNT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">الرصيد الافتتاحى (ج.م)</label>
+                <input type="number" value={treasuryForm.openingBalance} onChange={(e) => setTreasuryForm({ ...treasuryForm, openingBalance: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
+              </div>
+            </div>
+            <button onClick={handleSaveTreasuryAccount} className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl py-2.5">
+              {treasuryAccountEditingId ? "حفظ التعديل" : "إضافة الحساب"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Accounts: manual treasury entry modal ---------- */}
+      {showTreasuryEntryForm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowTreasuryEntryForm(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md p-5" onClick={(ev) => ev.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-stone-800">قيد يدوى</h3>
+              <button onClick={() => setShowTreasuryEntryForm(false)} className="text-stone-400 hover:text-stone-700"><X size={18} /></button>
+            </div>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setTreasuryEntryForm({ ...treasuryEntryForm, direction: "in", category: TREASURY_ENTRY_CATEGORIES_IN[0] })}
+                  className={`flex-1 rounded-xl py-2 text-xs font-semibold border ${treasuryEntryForm.direction === "in" ? "bg-emerald-600 text-white border-emerald-600" : "bg-white border-stone-300 text-stone-500"}`}
+                >
+                  وارد (+)
+                </button>
+                <button
+                  onClick={() => setTreasuryEntryForm({ ...treasuryEntryForm, direction: "out", category: TREASURY_ENTRY_CATEGORIES_OUT[0] })}
+                  className={`flex-1 rounded-xl py-2 text-xs font-semibold border ${treasuryEntryForm.direction === "out" ? "bg-red-600 text-white border-red-600" : "bg-white border-stone-300 text-stone-500"}`}
+                >
+                  منصرف (-)
+                </button>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">التاريخ</label>
+                <input type="date" value={treasuryEntryForm.date} onChange={(e) => setTreasuryEntryForm({ ...treasuryEntryForm, date: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">الحساب</label>
+                <select value={treasuryEntryForm.accountId} onChange={(e) => setTreasuryEntryForm({ ...treasuryEntryForm, accountId: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm">
+                  <option value="">اختر حساب</option>
+                  {treasuryAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">البند</label>
+                <select value={treasuryEntryForm.category} onChange={(e) => setTreasuryEntryForm({ ...treasuryEntryForm, category: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm">
+                  {(treasuryEntryForm.direction === "in" ? TREASURY_ENTRY_CATEGORIES_IN : TREASURY_ENTRY_CATEGORIES_OUT).map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">المبلغ (ج.م)</label>
+                <input type="number" value={treasuryEntryForm.amount} onChange={(e) => setTreasuryEntryForm({ ...treasuryEntryForm, amount: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">ملاحظات</label>
+                <input value={treasuryEntryForm.note} onChange={(e) => setTreasuryEntryForm({ ...treasuryEntryForm, note: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
+              </div>
+            </div>
+            <button onClick={handleSaveTreasuryEntry} className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl py-2.5">
+              حفظ القيد
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Accounts: supplier detail drawer ---------- */}
+      {viewingSupplier && (
+        <div className="fixed inset-0 bg-white z-40 overflow-y-auto">
+          <div className="max-w-2xl mx-auto p-4 md:p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h1 className="text-lg md:text-xl font-bold text-stone-900" style={{ fontFamily: "'Fraunces', serif" }}>{viewingSupplier}</h1>
+              <button onClick={() => setViewingSupplier(null)} className="text-stone-400 hover:text-stone-700 p-1.5"><X size={18} /></button>
+            </div>
+            {(() => {
+              const s = supplierLedger.find((x) => x.supplier === viewingSupplier) || { totalOwed: 0, paid: 0, balance: 0 };
+              const bookings = acctBookings.filter((b) => b.supplier === viewingSupplier).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+              const payments = supplierPayments.filter((p) => p.supplier === viewingSupplier).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+              return (
+                <>
+                  <div className="grid grid-cols-3 gap-3 mb-6">
+                    <div className="bg-stone-50 rounded-xl p-3 text-center">
+                      <p className="text-[11px] text-stone-500 mb-1">إجمالى المستحق</p>
+                      <p className="font-bold text-stone-800">{fmt(s.totalOwed)}</p>
+                    </div>
+                    <div className="bg-stone-50 rounded-xl p-3 text-center">
+                      <p className="text-[11px] text-stone-500 mb-1">المدفوع</p>
+                      <p className="font-bold text-emerald-700">{fmt(s.paid)}</p>
+                    </div>
+                    <div className="bg-stone-50 rounded-xl p-3 text-center">
+                      <p className="text-[11px] text-stone-500 mb-1">المتبقى</p>
+                      <p className={`font-bold ${s.balance > 0 ? "text-red-600" : "text-stone-500"}`}>{fmt(s.balance)}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-teal-50/60 border border-teal-100 rounded-2xl p-4 mb-6">
+                    <h3 className="text-xs font-bold text-teal-900 mb-3">تسجيل دفعة جديدة</h3>
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <input type="date" value={supplierPaymentForm.date} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, date: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
+                      <input type="number" placeholder="المبلغ" value={supplierPaymentForm.amount} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, amount: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
+                      <select value={supplierPaymentForm.accountId} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, accountId: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm col-span-2">
+                        <option value="">ادفع من (خزينة/حساب)</option>
+                        {treasuryAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                      <input placeholder="ملاحظات (اختيارى)" value={supplierPaymentForm.note} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, note: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm col-span-2" />
+                    </div>
+                    <button onClick={handleSaveSupplierPayment} className="w-full bg-teal-800 hover:bg-teal-900 text-white text-xs font-semibold rounded-lg py-2">تسجيل الدفعة</button>
+                  </div>
+
+                  <h3 className="text-xs font-bold text-stone-600 mb-2">سجل المدفوعات</h3>
+                  <div className="space-y-2 mb-6">
+                    {payments.length === 0 ? (
+                      <p className="text-xs text-stone-400">لا توجد مدفوعات مسجلة</p>
+                    ) : (
+                      payments.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm">
+                          <div>
+                            <p className="font-semibold text-stone-800">{fmt(parseFloat(p.amount) || 0)} ج.م</p>
+                            <p className="text-[11px] text-stone-400">{p.date ? formatDisplayDate(p.date) : "-"} · {treasuryAccounts.find((a) => a.id === p.accountId)?.name || "-"}{p.note ? ` · ${p.note}` : ""}</p>
+                          </div>
+                          <button onClick={() => handleDeleteSupplierPayment(p.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <h3 className="text-xs font-bold text-stone-600 mb-2">الحجوزات المرتبطة</h3>
+                  <div className="space-y-2">
+                    {bookings.length === 0 ? (
+                      <p className="text-xs text-stone-400">لا توجد حجوزات</p>
+                    ) : (
+                      bookings.map((b) => (
+                        <div key={b.key} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm">
+                          <div>
+                            <p className="font-semibold text-stone-800">{SECTION_LABELS_AR[b.section]} · {b.customers.join(", ") || "-"}</p>
+                            <p className="text-[11px] text-stone-400">{b.date ? formatDisplayDate(b.date) : "-"}</p>
+                          </div>
+                          <p className="font-semibold text-stone-700">{fmt(b.net)} ج.م</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Accounts: customer detail drawer ---------- */}
+      {viewingCustomer && (
+        <div className="fixed inset-0 bg-white z-40 overflow-y-auto">
+          <div className="max-w-2xl mx-auto p-4 md:p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h1 className="text-lg md:text-xl font-bold text-stone-900" style={{ fontFamily: "'Fraunces', serif" }}>{viewingCustomer}</h1>
+              <button onClick={() => setViewingCustomer(null)} className="text-stone-400 hover:text-stone-700 p-1.5"><X size={18} /></button>
+            </div>
+            {(() => {
+              const c = customerLedger.find((x) => x.customer === viewingCustomer) || { totalDue: 0, paid: 0, balance: 0 };
+              const bookings = acctBookings.filter((b) => b.customers.includes(viewingCustomer)).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+              const payments = customerPayments.filter((p) => p.customer === viewingCustomer).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+              return (
+                <>
+                  <div className="grid grid-cols-3 gap-3 mb-6">
+                    <div className="bg-stone-50 rounded-xl p-3 text-center">
+                      <p className="text-[11px] text-stone-500 mb-1">إجمالى المستحق</p>
+                      <p className="font-bold text-stone-800">{fmt(c.totalDue)}</p>
+                    </div>
+                    <div className="bg-stone-50 rounded-xl p-3 text-center">
+                      <p className="text-[11px] text-stone-500 mb-1">المحصل</p>
+                      <p className="font-bold text-emerald-700">{fmt(c.paid)}</p>
+                    </div>
+                    <div className="bg-stone-50 rounded-xl p-3 text-center">
+                      <p className="text-[11px] text-stone-500 mb-1">المتبقى</p>
+                      <p className={`font-bold ${c.balance > 0 ? "text-red-600" : "text-stone-500"}`}>{fmt(c.balance)}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-teal-50/60 border border-teal-100 rounded-2xl p-4 mb-6">
+                    <h3 className="text-xs font-bold text-teal-900 mb-3">تسجيل تحصيل جديد</h3>
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <input type="date" value={customerPaymentForm.date} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, date: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
+                      <input type="number" placeholder="المبلغ" value={customerPaymentForm.amount} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, amount: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
+                      <select value={customerPaymentForm.accountId} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, accountId: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm col-span-2">
+                        <option value="">التحصيل فى (خزينة/حساب)</option>
+                        {treasuryAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                      <input placeholder="ملاحظات (اختيارى)" value={customerPaymentForm.note} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, note: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm col-span-2" />
+                    </div>
+                    <button onClick={handleSaveCustomerPayment} className="w-full bg-teal-800 hover:bg-teal-900 text-white text-xs font-semibold rounded-lg py-2">تسجيل التحصيل</button>
+                  </div>
+
+                  <h3 className="text-xs font-bold text-stone-600 mb-2">سجل التحصيلات</h3>
+                  <div className="space-y-2 mb-6">
+                    {payments.length === 0 ? (
+                      <p className="text-xs text-stone-400">لا توجد تحصيلات مسجلة</p>
+                    ) : (
+                      payments.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm">
+                          <div>
+                            <p className="font-semibold text-stone-800">{fmt(parseFloat(p.amount) || 0)} ج.م</p>
+                            <p className="text-[11px] text-stone-400">{p.date ? formatDisplayDate(p.date) : "-"} · {treasuryAccounts.find((a) => a.id === p.accountId)?.name || "-"}{p.note ? ` · ${p.note}` : ""}</p>
+                          </div>
+                          <button onClick={() => handleDeleteCustomerPayment(p.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <h3 className="text-xs font-bold text-stone-600 mb-2">الحجوزات المرتبطة</h3>
+                  <div className="space-y-2">
+                    {bookings.length === 0 ? (
+                      <p className="text-xs text-stone-400">لا توجد حجوزات</p>
+                    ) : (
+                      bookings.map((b) => (
+                        <div key={b.key} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm">
+                          <div>
+                            <p className="font-semibold text-stone-800">{SECTION_LABELS_AR[b.section]}</p>
+                            <p className="text-[11px] text-stone-400">{b.date ? formatDisplayDate(b.date) : "-"}</p>
+                          </div>
+                          <p className="font-semibold text-stone-700">{fmt(b.sold / (b.customers.length || 1))} ج.م</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
