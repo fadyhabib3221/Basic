@@ -8,7 +8,7 @@ import {
   Calendar, Download, Upload, Building2, Factory, Lock, LogOut, UserPlus, Users, Eye, EyeOff,
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
-  History, Bell, Send, RotateCcw,
+  History, Bell, Send,
 } from "lucide-react";
 
 // ---------- Global animation styles ----------
@@ -2016,16 +2016,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setIataTicketValueInput("");
   };
 
-  // Resets both the IATA balance and the "Issued ticket value" box back to empty.
-  // Restricted to Flights managers, Accounts, GM, and Owner (see canResetIataBalance
-  // below) — asks for confirmation first since it wipes the running balance.
-  const resetIataBalanceFields = () => {
-    requestConfirm("Reset the IATA balance and issued ticket value to 0? This cannot be undone.", () => {
-      persistIataBalance(0);
-      setIataTicketValueInput("");
-    });
-  };
-
   const persistHotelBookings = async (next) => {
     setHotelBookings(next);
     try {
@@ -3900,14 +3890,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const isOwnerUser =
     !!currentUser && !currentUser.isAdmin && !!(currentEmployeeRecord && currentEmployeeRecord.isOwner);
   const hasAdminAccess = !!currentUser && (currentUser.isAdmin || isOwnerUser);
-  // Who can reset the IATA balance / issued ticket value fields: Flights managers (full
-  // edit + delete rights on the Flights section), Accounts, GM, and Owner. isOwnerUser
-  // already covers both Owner and GM grades (GM is a copy of the Owner preset), and a
-  // true main account (currentUser.isAdmin) is a superset of Owner, so it's included too.
-  const canResetIataBalance =
-    !!currentUser &&
-    (currentUser.isAdmin || isOwnerUser || isAccountingUser || (flightsPerm.canEdit && flightsPerm.canDelete));
-
   const myPendingRequestsCount = (requests || []).filter(
     (r) => currentUser && r.toUsername === currentUser.username && r.status === "pending"
   ).length;
@@ -6615,15 +6597,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           >
             <History size={14} /> History
           </button>
-          {canResetIataBalance && (
-            <button
-              type="button"
-              onClick={resetIataBalanceFields}
-              className="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 border border-red-200 rounded-xl px-3 py-2 hover:bg-red-50"
-            >
-              <RotateCcw size={14} /> Reset
-            </button>
-          )}
         </div>
 
         {/* Search and filters — one unified card: search + a "Filters" toggle with a
