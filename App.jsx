@@ -5683,6 +5683,37 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         .anim-spin-slow { animation: pdmSpin 1.4s linear infinite; }
 
         @media (prefers-reduced-motion: no-preference) {
+          /* The three "Totals" summary cards (Tickets / Total sales / Total profit,
+             and their equivalents on the other tabs) slide up into place whenever
+             the tab is switched or the filters change, and lift slightly on hover
+             so the page feels a little more alive. */
+          div[class*="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0"] {
+            animation: pdmSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+          }
+          div[class*="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0"]:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px -8px rgba(15, 118, 110, 0.25);
+          }
+          /* Stagger the three cards slightly so they don't all pop in at once */
+          div[class*="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0"]:nth-child(2) {
+            animation-delay: 0.05s;
+          }
+          div[class*="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0"]:nth-child(3) {
+            animation-delay: 0.1s;
+          }
+
+          /* Section tabs (Flights/Hotels/Visa/...) lift gently on hover */
+          button[class*="shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border"] {
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+          }
+          button[class*="shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 14px -6px rgba(15, 118, 110, 0.3);
+          }
+        }
+
+        @media (prefers-reduced-motion: no-preference) {
           /* Any full-screen overlay (modal backdrops and full-page panels) fades in */
           div[class*="fixed inset-0"] {
             animation: pdmFadeIn 0.18s ease-out both;
@@ -10631,7 +10662,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       {hasAdminAccess && (
         <div className="hidden xl:block w-64 shrink-0 pt-4 md:pt-6">
           {showOnlineList && (
-          <div className="sticky top-4 flex flex-col max-h-[calc(100vh-2rem)] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-30">
+          <div className="sticky top-4 flex flex-col max-h-[calc(100vh-2rem)] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-30 anim-slide-up">
             <div className="flex items-center justify-between px-1 pb-1 mb-1 border-b border-stone-100">
               <p className="text-xs font-semibold text-stone-600">{visibleOnlineUsernames.length} online now</p>
               <button onClick={() => setShowOnlineList(false)} className="text-stone-400 hover:text-stone-700 p-0.5">
