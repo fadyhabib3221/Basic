@@ -9,7 +9,7 @@ import {
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
   History, Bell, Send, Landmark, Receipt, PieChart, ArrowUpCircle, ArrowDownCircle,
-  Banknote, HandCoins, ClipboardList,
+  Banknote, HandCoins, ClipboardList, Globe,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -215,6 +215,112 @@ const TREASURY_ACCOUNT_TYPES = [
 // supplier/expense record — capital injections, owner drawings, transfers, etc.).
 const TREASURY_ENTRY_CATEGORIES_IN = ["رأس مال / إيداع مالك", "تحويل من حساب آخر", "إيرادات أخرى"];
 const TREASURY_ENTRY_CATEGORIES_OUT = ["مسحوبات مالك", "تحويل إلى حساب آخر", "مصروفات أخرى"];
+
+// ---------- Accounts section English translations ----------
+// The Accounts module supports an Arabic/English display toggle. Underlying stored
+// values (expense categories, treasury entry categories, etc.) stay in Arabic for data
+// consistency; these maps only translate what's shown on screen.
+const EXPENSE_CATEGORY_LABELS_EN = {
+  "إيجار": "Rent",
+  "مرتبات وعمولات": "Salaries & Commissions",
+  "كهرباء ومياه": "Electricity & Water",
+  "اتصالات وإنترنت": "Communications & Internet",
+  "تسويق وإعلان": "Marketing & Advertising",
+  "صيانة": "Maintenance",
+  "ضرائب ورسوم حكومية": "Taxes & Government Fees",
+  "بنك وتحويلات": "Bank & Transfers",
+  "قرطاسية ومطبوعات": "Stationery & Printing",
+  "أخرى": "Other",
+};
+const TREASURY_ACCOUNT_TYPE_LABELS_EN = { cash: "Cash Treasury", bank: "Bank Account" };
+const TREASURY_ENTRY_CATEGORY_LABELS_EN = {
+  "رأس مال / إيداع مالك": "Capital / Owner Deposit",
+  "تحويل من حساب آخر": "Transfer From Another Account",
+  "إيرادات أخرى": "Other Income",
+  "مسحوبات مالك": "Owner Withdrawals",
+  "تحويل إلى حساب آخر": "Transfer To Another Account",
+  "مصروفات أخرى": "Other Expenses",
+};
+const ACCOUNTS_I18N = {
+  ar: {
+    tabOverview: "نظرة عامة", tabSuppliers: "الموردين", tabCustomers: "العملاء",
+    tabTreasury: "الخزينة والبنوك", tabExpenses: "المصروفات", tabReports: "التقارير المالية",
+    monthRevenue: "أرباح الشهر الحالى", monthExpenses: "مصروفات الشهر الحالى",
+    monthNetProfit: "صافى ربح الشهر", totalTreasuryBalance: "إجمالى رصيد الخزينة والبنوك",
+    totalOwedSuppliers: "مستحق للموردين", totalOwedCustomers: "مستحق من العملاء",
+    profitBySection: "أرباح الشهر حسب القسم",
+    searchSupplier: "ابحث عن مورد...", searchCustomer: "ابحث عن عميل...",
+    colSupplier: "المورد", colCustomer: "العميل", colSections: "الأقسام",
+    colTotalOwed: "إجمالى المستحق", colTotalDue: "إجمالى المستحق",
+    colPaid: "المدفوع", colCollected: "المحصل", colRemaining: "المتبقى",
+    noSuppliers: "لا يوجد موردون", noCustomers: "لا يوجد عملاء",
+    accountsAndTreasuries: "الحسابات والخزائن", addAccount: "إضافة حساب",
+    noAccountsYet: "لا توجد حسابات بعد. أضف خزينة نقدية أو حساب بنكى للبدء.",
+    treasuryMovement: "حركة الخزينة", allAccounts: "كل الحسابات", manualEntry: "قيد يدوى",
+    colDate: "التاريخ", colAccount: "الحساب", colStatement: "البيان", colAmount: "المبلغ",
+    noTransactions: "لا توجد حركات", allCategories: "كل التصنيفات", addExpense: "إضافة مصروف",
+    colCategory: "التصنيف", colDescription: "الوصف", noExpenses: "لا توجد مصروفات",
+    rangeToday: "اليوم", rangeMonth: "الشهر الحالى", rangeCustom: "مخصص", to: "إلى",
+    exportExcel: "تصدير Excel", revenueOf: (s) => `إيرادات ${s}`, bookingsCount: "حجز",
+    totalRevenue: "إجمالى الإيرادات", totalExpenses: "إجمالى المصروفات", netProfit: "صافى الربح",
+    expensesByCategory: "المصروفات حسب التصنيف", noExpensesInPeriod: "لا توجد مصروفات فى هذه الفترة",
+    editExpense: "تعديل مصروف", descriptionOptional: "الوصف (اختيارى)", amountEgp: "المبلغ (ج.م)",
+    payFromAccount: "صرف من (خزينة/حساب)", selectAccount: "اختر حساب", notes: "ملاحظات",
+    saveChanges: "حفظ التعديل",
+    editAccount: "تعديل حساب", addAccountTreasury: "إضافة حساب/خزينة", accountName: "اسم الحساب",
+    accountNamePlaceholder: "مثال: خزينة المكتب، حساب بنك مصر", type: "النوع",
+    openingBalance: "الرصيد الافتتاحى (ج.م)",
+    manualEntryTitle: "قيد يدوى", directionIn: "وارد (+)", directionOut: "منصرف (-)",
+    item: "البند", saveEntry: "حفظ القيد",
+    recordNewPayment: "تسجيل دفعة جديدة", payFrom: "ادفع من (خزينة/حساب)",
+    notesOptional: "ملاحظات (اختيارى)", recordPayment: "تسجيل الدفعة",
+    paymentHistory: "سجل المدفوعات", noPaymentsRecorded: "لا توجد مدفوعات مسجلة",
+    relatedBookings: "الحجوزات المرتبطة", noBookings: "لا توجد حجوزات",
+    recordNewCollection: "تسجيل تحصيل جديد", collectInto: "التحصيل فى (خزينة/حساب)",
+    recordCollection: "تسجيل التحصيل", collectionHistory: "سجل التحصيلات",
+    noCollectionsRecorded: "لا توجد تحصيلات مسجلة",
+    currency: "ج.م",
+  },
+  en: {
+    tabOverview: "Overview", tabSuppliers: "Suppliers", tabCustomers: "Customers",
+    tabTreasury: "Treasury & Banks", tabExpenses: "Expenses", tabReports: "Financial Reports",
+    monthRevenue: "This Month's Profit", monthExpenses: "This Month's Expenses",
+    monthNetProfit: "Net Profit This Month", totalTreasuryBalance: "Total Treasury & Bank Balance",
+    totalOwedSuppliers: "Owed to Suppliers", totalOwedCustomers: "Owed by Customers",
+    profitBySection: "This Month's Profit by Section",
+    searchSupplier: "Search suppliers...", searchCustomer: "Search customers...",
+    colSupplier: "Supplier", colCustomer: "Customer", colSections: "Sections",
+    colTotalOwed: "Total Owed", colTotalDue: "Total Due",
+    colPaid: "Paid", colCollected: "Collected", colRemaining: "Remaining",
+    noSuppliers: "No suppliers found", noCustomers: "No customers found",
+    accountsAndTreasuries: "Accounts & Treasuries", addAccount: "Add Account",
+    noAccountsYet: "No accounts yet. Add a cash treasury or bank account to get started.",
+    treasuryMovement: "Treasury Transactions", allAccounts: "All Accounts", manualEntry: "Manual Entry",
+    colDate: "Date", colAccount: "Account", colStatement: "Description", colAmount: "Amount",
+    noTransactions: "No transactions found", allCategories: "All Categories", addExpense: "Add Expense",
+    colCategory: "Category", colDescription: "Description", noExpenses: "No expenses found",
+    rangeToday: "Today", rangeMonth: "This Month", rangeCustom: "Custom", to: "to",
+    exportExcel: "Export Excel", revenueOf: (s) => `${s} Revenue`, bookingsCount: "bookings",
+    totalRevenue: "Total Revenue", totalExpenses: "Total Expenses", netProfit: "Net Profit",
+    expensesByCategory: "Expenses by Category", noExpensesInPeriod: "No expenses in this period",
+    editExpense: "Edit Expense", descriptionOptional: "Description (optional)", amountEgp: "Amount (EGP)",
+    payFromAccount: "Paid From (Treasury/Account)", selectAccount: "Select account", notes: "Notes",
+    saveChanges: "Save Changes",
+    editAccount: "Edit Account", addAccountTreasury: "Add Account/Treasury", accountName: "Account Name",
+    accountNamePlaceholder: "e.g. Office Treasury, Bank Misr Account", type: "Type",
+    openingBalance: "Opening Balance (EGP)",
+    manualEntryTitle: "Manual Entry", directionIn: "In (+)", directionOut: "Out (-)",
+    item: "Item", saveEntry: "Save Entry",
+    recordNewPayment: "Record New Payment", payFrom: "Pay From (Treasury/Account)",
+    notesOptional: "Notes (optional)", recordPayment: "Record Payment",
+    paymentHistory: "Payment History", noPaymentsRecorded: "No payments recorded",
+    relatedBookings: "Related Bookings", noBookings: "No bookings",
+    recordNewCollection: "Record New Collection", collectInto: "Collect Into (Treasury/Account)",
+    recordCollection: "Record Collection", collectionHistory: "Collection History",
+    noCollectionsRecorded: "No collections recorded",
+    currency: "EGP",
+  },
+};
 
 const getEmptyExpenseForm = () => ({
   id: null,
@@ -1414,6 +1520,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Which sub-tab of the Accounts section is showing.
   const [accountsTab, setAccountsTab] = useState("overview");
   const [accountsError, setAccountsError] = useState("");
+  // Display-language toggle for the Accounts section only (Arabic/English). Stored
+  // values (expense categories, entry categories, etc.) always stay in Arabic — this
+  // only controls what's shown on screen.
+  const [accountsLang, setAccountsLang] = useState("ar");
+  const at = (key) => {
+    const val = ACCOUNTS_I18N[accountsLang][key];
+    return val === undefined ? key : val;
+  };
+  const acctCurrency = ACCOUNTS_I18N[accountsLang].currency;
+  const expenseCategoryLabel = (cat) => (accountsLang === "en" ? (EXPENSE_CATEGORY_LABELS_EN[cat] || cat) : cat);
+  const treasuryAccountTypeLabel = (val) => (accountsLang === "en" ? (TREASURY_ACCOUNT_TYPE_LABELS_EN[val] || val) : val);
+  const treasuryEntryCategoryLabel = (cat) => (accountsLang === "en" ? (TREASURY_ENTRY_CATEGORY_LABELS_EN[cat] || cat) : cat);
 
   const [expenseForm, setExpenseForm] = useState(getEmptyExpenseForm);
   const [expenseEditingId, setExpenseEditingId] = useState(null);
@@ -4363,6 +4481,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   ];
 
   const SECTION_LABELS_AR = { flights: "طيران", hotels: "فنادق", visa: "فيزا", cars: "ترانسفير" };
+  const SECTION_LABELS_EN = { flights: "Flights", hotels: "Hotels", visa: "Visa", cars: "Transportation" };
+  const sectionLabel = (sec) => (accountsLang === "en" ? SECTION_LABELS_EN[sec] : SECTION_LABELS_AR[sec]);
 
   // Supplier ledger: every supplier that appears on at least one booking, with the
   // total amount owed to them (net price, our cost) minus everything already paid via
@@ -10212,12 +10332,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         {/* Accounts sub-tab switcher */}
         <div className="flex items-center gap-2 mb-5 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
           {[
-            { key: "overview", label: "نظرة عامة", icon: PieChart },
-            { key: "suppliers", label: "الموردين", icon: Building2 },
-            { key: "customers", label: "العملاء", icon: Users },
-            { key: "treasury", label: "الخزينة والبنوك", icon: Landmark },
-            { key: "expenses", label: "المصروفات", icon: Receipt },
-            { key: "reports", label: "التقارير المالية", icon: ClipboardList },
+            { key: "overview", label: at("tabOverview"), icon: PieChart },
+            { key: "suppliers", label: at("tabSuppliers"), icon: Building2 },
+            { key: "customers", label: at("tabCustomers"), icon: Users },
+            { key: "treasury", label: at("tabTreasury"), icon: Landmark },
+            { key: "expenses", label: at("tabExpenses"), icon: Receipt },
+            { key: "reports", label: at("tabReports"), icon: ClipboardList },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -10232,6 +10352,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               {tab.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setAccountsLang((l) => (l === "ar" ? "en" : "ar"))}
+            title={accountsLang === "ar" ? "Switch to English" : "التحويل للعربية"}
+            className="shrink-0 mr-auto flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold bg-white text-stone-500 border-stone-200 hover:border-teal-300 hover:text-teal-800 transition-colors"
+          >
+            <Globe size={15} />
+            {accountsLang === "ar" ? "EN" : "AR"}
+          </button>
         </div>
 
         {/* ---------- Overview ---------- */}
@@ -10239,34 +10368,34 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
               <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                <p className="text-xs text-stone-500 mb-1">أرباح الشهر الحالى</p>
-                <p className="text-lg font-bold text-emerald-700">{fmt(monthRevenue)} ج.م</p>
+                <p className="text-xs text-stone-500 mb-1">{at("monthRevenue")}</p>
+                <p className="text-lg font-bold text-emerald-700">{fmt(monthRevenue)} {acctCurrency}</p>
               </div>
               <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                <p className="text-xs text-stone-500 mb-1">مصروفات الشهر الحالى</p>
-                <p className="text-lg font-bold text-red-600">{fmt(monthExpenses)} ج.م</p>
+                <p className="text-xs text-stone-500 mb-1">{at("monthExpenses")}</p>
+                <p className="text-lg font-bold text-red-600">{fmt(monthExpenses)} {acctCurrency}</p>
               </div>
               <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                <p className="text-xs text-stone-500 mb-1">صافى ربح الشهر</p>
+                <p className="text-xs text-stone-500 mb-1">{at("monthNetProfit")}</p>
                 <p className={`text-lg font-bold ${monthRevenue - monthExpenses >= 0 ? "text-emerald-700" : "text-red-600"}`}>
-                  {fmt(monthRevenue - monthExpenses)} ج.م
+                  {fmt(monthRevenue - monthExpenses)} {acctCurrency}
                 </p>
               </div>
               <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                <p className="text-xs text-stone-500 mb-1">إجمالى رصيد الخزينة والبنوك</p>
-                <p className="text-lg font-bold text-teal-800">{fmt(totalTreasuryBalance)} ج.م</p>
+                <p className="text-xs text-stone-500 mb-1">{at("totalTreasuryBalance")}</p>
+                <p className="text-lg font-bold text-teal-800">{fmt(totalTreasuryBalance)} {acctCurrency}</p>
               </div>
               <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                <p className="text-xs text-stone-500 mb-1">مستحق للموردين</p>
-                <p className="text-lg font-bold text-amber-700">{fmt(totalSupplierBalance)} ج.م</p>
+                <p className="text-xs text-stone-500 mb-1">{at("totalOwedSuppliers")}</p>
+                <p className="text-lg font-bold text-amber-700">{fmt(totalSupplierBalance)} {acctCurrency}</p>
               </div>
               <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                <p className="text-xs text-stone-500 mb-1">مستحق من العملاء</p>
-                <p className="text-lg font-bold text-amber-700">{fmt(totalCustomerBalance)} ج.م</p>
+                <p className="text-xs text-stone-500 mb-1">{at("totalOwedCustomers")}</p>
+                <p className="text-lg font-bold text-amber-700">{fmt(totalCustomerBalance)} {acctCurrency}</p>
               </div>
             </div>
 
-            <h3 className="text-sm font-bold text-stone-700 mb-2">أرباح الشهر حسب القسم</h3>
+            <h3 className="text-sm font-bold text-stone-700 mb-2">{at("profitBySection")}</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {["flights", "hotels", "visa", "cars"].map((sec) => {
                 const val =
@@ -10279,8 +10408,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     : carBookings.filter((c) => (c.bookingDate || "").slice(0, 7) === thisMonthPrefix).reduce((s, c) => s + hotelInEgp((parseFloat(c.soldPrice) || 0) - (parseFloat(c.netPrice) || 0), c.currency), 0);
                 return (
                   <div key={sec} className="bg-white rounded-2xl border border-stone-200 p-4">
-                    <p className="text-xs text-stone-500 mb-1">{SECTION_LABELS_AR[sec]}</p>
-                    <p className="text-base font-bold text-emerald-700">{fmt(val)} ج.م</p>
+                    <p className="text-xs text-stone-500 mb-1">{sectionLabel(sec)}</p>
+                    <p className="text-base font-bold text-emerald-700">{fmt(val)} {acctCurrency}</p>
                   </div>
                 );
               })}
@@ -10296,7 +10425,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <input
                 value={supplierQuery}
                 onChange={(e) => setSupplierQuery(e.target.value)}
-                placeholder="ابحث عن مورد..."
+                placeholder={at("searchSupplier")}
                 className="w-full border border-stone-300 rounded-xl pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
               />
             </div>
@@ -10304,16 +10433,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
-                    <th className="text-right px-3 py-2 font-medium">المورد</th>
-                    <th className="text-right px-3 py-2 font-medium">الأقسام</th>
-                    <th className="text-right px-3 py-2 font-medium">إجمالى المستحق</th>
-                    <th className="text-right px-3 py-2 font-medium">المدفوع</th>
-                    <th className="text-right px-3 py-2 font-medium">المتبقى</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colSupplier")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colSections")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colTotalOwed")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colPaid")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colRemaining")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {filteredSupplierLedger.length === 0 ? (
-                    <tr><td colSpan={5} className="text-center text-stone-400 py-6">لا يوجد موردون</td></tr>
+                    <tr><td colSpan={5} className="text-center text-stone-400 py-6">{at("noSuppliers")}</td></tr>
                   ) : (
                     filteredSupplierLedger.map((s) => (
                       <tr
@@ -10322,7 +10451,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         className="hover:bg-teal-50 cursor-pointer"
                       >
                         <td className="px-3 py-2 font-semibold text-stone-800">{s.supplier}</td>
-                        <td className="px-3 py-2 text-stone-500 text-xs">{s.sections.map((x) => SECTION_LABELS_AR[x]).join("، ") || "-"}</td>
+                        <td className="px-3 py-2 text-stone-500 text-xs">{s.sections.map((x) => sectionLabel(x)).join(accountsLang === "en" ? ", " : "، ") || "-"}</td>
                         <td className="px-3 py-2 text-stone-700">{fmt(s.totalOwed)}</td>
                         <td className="px-3 py-2 text-emerald-700">{fmt(s.paid)}</td>
                         <td className={`px-3 py-2 font-bold ${s.balance > 0 ? "text-red-600" : "text-stone-400"}`}>{fmt(s.balance)}</td>
@@ -10343,7 +10472,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <input
                 value={customerQuery}
                 onChange={(e) => setCustomerQuery(e.target.value)}
-                placeholder="ابحث عن عميل..."
+                placeholder={at("searchCustomer")}
                 className="w-full border border-stone-300 rounded-xl pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
               />
             </div>
@@ -10351,16 +10480,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
-                    <th className="text-right px-3 py-2 font-medium">العميل</th>
-                    <th className="text-right px-3 py-2 font-medium">الأقسام</th>
-                    <th className="text-right px-3 py-2 font-medium">إجمالى المستحق</th>
-                    <th className="text-right px-3 py-2 font-medium">المحصل</th>
-                    <th className="text-right px-3 py-2 font-medium">المتبقى</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colCustomer")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colSections")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colTotalDue")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colCollected")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colRemaining")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {filteredCustomerLedger.length === 0 ? (
-                    <tr><td colSpan={5} className="text-center text-stone-400 py-6">لا يوجد عملاء</td></tr>
+                    <tr><td colSpan={5} className="text-center text-stone-400 py-6">{at("noCustomers")}</td></tr>
                   ) : (
                     filteredCustomerLedger.map((c) => (
                       <tr
@@ -10369,7 +10498,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         className="hover:bg-teal-50 cursor-pointer"
                       >
                         <td className="px-3 py-2 font-semibold text-stone-800">{c.customer}</td>
-                        <td className="px-3 py-2 text-stone-500 text-xs">{c.sections.map((x) => SECTION_LABELS_AR[x]).join("، ") || "-"}</td>
+                        <td className="px-3 py-2 text-stone-500 text-xs">{c.sections.map((x) => sectionLabel(x)).join(accountsLang === "en" ? ", " : "، ") || "-"}</td>
                         <td className="px-3 py-2 text-stone-700">{fmt(c.totalDue)}</td>
                         <td className="px-3 py-2 text-emerald-700">{fmt(c.paid)}</td>
                         <td className={`px-3 py-2 font-bold ${c.balance > 0 ? "text-red-600" : "text-stone-400"}`}>{fmt(c.balance)}</td>
@@ -10386,17 +10515,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         {accountsTab === "treasury" && (
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-stone-700">الحسابات والخزائن</h3>
+              <h3 className="text-sm font-bold text-stone-700">{at("accountsAndTreasuries")}</h3>
               <button
                 onClick={() => { setTreasuryForm(getEmptyTreasuryAccountForm()); setTreasuryAccountEditingId(null); setShowTreasuryAccountForm(true); }}
                 className="flex items-center gap-1 text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-lg px-3 py-1.5"
               >
-                <Plus size={14} /> إضافة حساب
+                <Plus size={14} /> {at("addAccount")}
               </button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-6">
               {treasuryAccounts.length === 0 && (
-                <p className="text-sm text-stone-400 col-span-full">لا توجد حسابات بعد. أضف خزينة نقدية أو حساب بنكى للبدء.</p>
+                <p className="text-sm text-stone-400 col-span-full">{at("noAccountsYet")}</p>
               )}
               {treasuryAccounts.map((a) => (
                 <div key={a.id} className="bg-white rounded-2xl border border-stone-200 p-4">
@@ -10410,23 +10539,23 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <button onClick={() => handleDeleteTreasuryAccount(a.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
                     </div>
                   </div>
-                  <p className="text-xs text-stone-400 mb-2">{TREASURY_ACCOUNT_TYPES.find((t) => t.value === a.type)?.label}</p>
+                  <p className="text-xs text-stone-400 mb-2">{treasuryAccountTypeLabel(a.type)}</p>
                   <p className={`text-lg font-bold ${treasuryBalance(a.id) >= 0 ? "text-emerald-700" : "text-red-600"}`}>
-                    {fmt(treasuryBalance(a.id))} ج.م
+                    {fmt(treasuryBalance(a.id))} {acctCurrency}
                   </p>
                 </div>
               ))}
             </div>
 
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-              <h3 className="text-sm font-bold text-stone-700">حركة الخزينة</h3>
+              <h3 className="text-sm font-bold text-stone-700">{at("treasuryMovement")}</h3>
               <div className="flex items-center gap-2">
                 <select
                   value={treasuryFilterAccountId}
                   onChange={(e) => setTreasuryFilterAccountId(e.target.value)}
                   className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs"
                 >
-                  <option value="">كل الحسابات</option>
+                  <option value="">{at("allAccounts")}</option>
                   {treasuryAccounts.map((a) => (
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
@@ -10435,7 +10564,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   onClick={() => { setTreasuryEntryForm(getEmptyTreasuryEntryForm()); setShowTreasuryEntryForm(true); }}
                   className="flex items-center gap-1 text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-lg px-3 py-1.5"
                 >
-                  <Plus size={14} /> قيد يدوى
+                  <Plus size={14} /> {at("manualEntry")}
                 </button>
               </div>
             </div>
@@ -10443,16 +10572,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
-                    <th className="text-right px-3 py-2 font-medium">التاريخ</th>
-                    <th className="text-right px-3 py-2 font-medium">الحساب</th>
-                    <th className="text-right px-3 py-2 font-medium">البيان</th>
-                    <th className="text-right px-3 py-2 font-medium">المبلغ</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colDate")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colAccount")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colStatement")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colAmount")}</th>
                     <th className="px-3 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {filteredTreasuryTransactions.length === 0 ? (
-                    <tr><td colSpan={5} className="text-center text-stone-400 py-6">لا توجد حركات</td></tr>
+                    <tr><td colSpan={5} className="text-center text-stone-400 py-6">{at("noTransactions")}</td></tr>
                   ) : (
                     filteredTreasuryTransactions.map((tx) => {
                       const [prefix, rawId] = tx.id.split(/-(.+)/);
@@ -10500,38 +10629,38 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 onChange={(e) => setExpenseCategoryFilter(e.target.value)}
                 className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs"
               >
-                <option value="">كل التصنيفات</option>
+                <option value="">{at("allCategories")}</option>
                 {EXPENSE_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
+                  <option key={c} value={c}>{expenseCategoryLabel(c)}</option>
                 ))}
               </select>
               <button
                 onClick={() => { setExpenseForm(getEmptyExpenseForm()); setExpenseEditingId(null); setShowExpenseForm(true); }}
                 className="flex items-center gap-1 text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-lg px-3 py-1.5"
               >
-                <Plus size={14} /> إضافة مصروف
+                <Plus size={14} /> {at("addExpense")}
               </button>
             </div>
             <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
-                    <th className="text-right px-3 py-2 font-medium">التاريخ</th>
-                    <th className="text-right px-3 py-2 font-medium">التصنيف</th>
-                    <th className="text-right px-3 py-2 font-medium">الوصف</th>
-                    <th className="text-right px-3 py-2 font-medium">الحساب</th>
-                    <th className="text-right px-3 py-2 font-medium">المبلغ</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colDate")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colCategory")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colDescription")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colAccount")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colAmount")}</th>
                     <th className="px-3 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {filteredExpenses.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center text-stone-400 py-6">لا توجد مصروفات</td></tr>
+                    <tr><td colSpan={6} className="text-center text-stone-400 py-6">{at("noExpenses")}</td></tr>
                   ) : (
                     filteredExpenses.map((e) => (
                       <tr key={e.id}>
                         <td className="px-3 py-2 text-stone-500 text-xs whitespace-nowrap">{e.date ? formatDisplayDate(e.date) : "-"}</td>
-                        <td className="px-3 py-2 text-stone-700">{e.category}</td>
+                        <td className="px-3 py-2 text-stone-700">{expenseCategoryLabel(e.category)}</td>
                         <td className="px-3 py-2 text-stone-500 text-xs">{e.description || "-"}</td>
                         <td className="px-3 py-2 text-stone-500 text-xs">{treasuryAccounts.find((a) => a.id === e.accountId)?.name || "-"}</td>
                         <td className="px-3 py-2 font-semibold text-red-600 whitespace-nowrap">{fmt(parseFloat(e.amount) || 0)}</td>
@@ -10555,9 +10684,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div>
             <div className="flex items-center gap-2 mb-4 flex-wrap">
               {[
-                { key: "today", label: "اليوم" },
-                { key: "month", label: "الشهر الحالى" },
-                { key: "custom", label: "مخصص" },
+                { key: "today", label: at("rangeToday") },
+                { key: "month", label: at("rangeMonth") },
+                { key: "custom", label: at("rangeCustom") },
               ].map((r) => (
                 <button
                   key={r.key}
@@ -10572,7 +10701,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               {reportsRange === "custom" && (
                 <>
                   <input type="date" value={reportsFrom} onChange={(e) => setReportsFrom(e.target.value)} className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs" />
-                  <span className="text-xs text-stone-400">إلى</span>
+                  <span className="text-xs text-stone-400">{at("to")}</span>
                   <input type="date" value={reportsTo} onChange={(e) => setReportsTo(e.target.value)} className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs" />
                 </>
               )}
@@ -10580,51 +10709,51 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 onClick={handleExportAccountsReport}
                 className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-white bg-gradient-to-b from-teal-700 to-teal-900 rounded-lg px-3 py-1.5"
               >
-                <Download size={14} /> تصدير Excel
+                <Download size={14} /> {at("exportExcel")}
               </button>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
               {["flights", "hotels", "visa", "cars"].map((sec) => (
                 <div key={sec} className="bg-white rounded-2xl border border-stone-200 p-4">
-                  <p className="text-xs text-stone-500 mb-1">إيرادات {SECTION_LABELS_AR[sec]}</p>
-                  <p className="text-base font-bold text-emerald-700">{fmt(reportRevenueBySection[sec])} ج.م</p>
-                  <p className="text-[11px] text-stone-400 mt-0.5">{reportBookingsCount[sec]} حجز</p>
+                  <p className="text-xs text-stone-500 mb-1">{at("revenueOf")(sectionLabel(sec))}</p>
+                  <p className="text-base font-bold text-emerald-700">{fmt(reportRevenueBySection[sec])} {acctCurrency}</p>
+                  <p className="text-[11px] text-stone-400 mt-0.5">{reportBookingsCount[sec]} {at("bookingsCount")}</p>
                 </div>
               ))}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
               <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                <p className="text-xs text-stone-500 mb-1">إجمالى الإيرادات</p>
-                <p className="text-lg font-bold text-emerald-700">{fmt(reportTotalRevenue)} ج.م</p>
+                <p className="text-xs text-stone-500 mb-1">{at("totalRevenue")}</p>
+                <p className="text-lg font-bold text-emerald-700">{fmt(reportTotalRevenue)} {acctCurrency}</p>
               </div>
               <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                <p className="text-xs text-stone-500 mb-1">إجمالى المصروفات</p>
-                <p className="text-lg font-bold text-red-600">{fmt(reportTotalExpenses)} ج.م</p>
+                <p className="text-xs text-stone-500 mb-1">{at("totalExpenses")}</p>
+                <p className="text-lg font-bold text-red-600">{fmt(reportTotalExpenses)} {acctCurrency}</p>
               </div>
               <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                <p className="text-xs text-stone-500 mb-1">صافى الربح</p>
-                <p className={`text-lg font-bold ${reportNetProfit >= 0 ? "text-emerald-700" : "text-red-600"}`}>{fmt(reportNetProfit)} ج.م</p>
+                <p className="text-xs text-stone-500 mb-1">{at("netProfit")}</p>
+                <p className={`text-lg font-bold ${reportNetProfit >= 0 ? "text-emerald-700" : "text-red-600"}`}>{fmt(reportNetProfit)} {acctCurrency}</p>
               </div>
             </div>
 
-            <h3 className="text-sm font-bold text-stone-700 mb-2">المصروفات حسب التصنيف</h3>
+            <h3 className="text-sm font-bold text-stone-700 mb-2">{at("expensesByCategory")}</h3>
             <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
-                    <th className="text-right px-3 py-2 font-medium">التصنيف</th>
-                    <th className="text-right px-3 py-2 font-medium">المبلغ</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colCategory")}</th>
+                    <th className="text-right px-3 py-2 font-medium">{at("colAmount")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {Object.keys(reportExpensesByCategory).length === 0 ? (
-                    <tr><td colSpan={2} className="text-center text-stone-400 py-6">لا توجد مصروفات فى هذه الفترة</td></tr>
+                    <tr><td colSpan={2} className="text-center text-stone-400 py-6">{at("noExpensesInPeriod")}</td></tr>
                   ) : (
                     Object.entries(reportExpensesByCategory).map(([cat, amt]) => (
                       <tr key={cat}>
-                        <td className="px-3 py-2 text-stone-700">{cat}</td>
+                        <td className="px-3 py-2 text-stone-700">{expenseCategoryLabel(cat)}</td>
                         <td className="px-3 py-2 font-semibold text-red-600">{fmt(amt)}</td>
                       </tr>
                     ))
@@ -11311,42 +11440,42 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowExpenseForm(false)}>
           <div className="bg-white rounded-2xl w-full max-w-md p-5" onClick={(ev) => ev.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-stone-800">{expenseEditingId ? "تعديل مصروف" : "إضافة مصروف"}</h3>
+              <h3 className="text-sm font-bold text-stone-800">{expenseEditingId ? at("editExpense") : at("addExpense")}</h3>
               <button onClick={() => setShowExpenseForm(false)} className="text-stone-400 hover:text-stone-700"><X size={18} /></button>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-stone-500 block mb-1">التاريخ</label>
+                <label className="text-xs text-stone-500 block mb-1">{at("colDate")}</label>
                 <input type="date" value={expenseForm.date} onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">التصنيف</label>
+                <label className="text-xs text-stone-500 block mb-1">{at("colCategory")}</label>
                 <select value={expenseForm.category} onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm">
-                  {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{expenseCategoryLabel(c)}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">الوصف (اختيارى)</label>
+                <label className="text-xs text-stone-500 block mb-1">{at("descriptionOptional")}</label>
                 <input value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">المبلغ (ج.م)</label>
+                <label className="text-xs text-stone-500 block mb-1">{at("amountEgp")}</label>
                 <input type="number" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">صرف من (خزينة/حساب)</label>
+                <label className="text-xs text-stone-500 block mb-1">{at("payFromAccount")}</label>
                 <select value={expenseForm.accountId} onChange={(e) => setExpenseForm({ ...expenseForm, accountId: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm">
-                  <option value="">اختر حساب</option>
+                  <option value="">{at("selectAccount")}</option>
                   {treasuryAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">ملاحظات</label>
+                <label className="text-xs text-stone-500 block mb-1">{at("notes")}</label>
                 <textarea value={expenseForm.note} onChange={(e) => setExpenseForm({ ...expenseForm, note: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" rows={2} />
               </div>
             </div>
             <button onClick={handleSaveExpense} className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl py-2.5">
-              {expenseEditingId ? "حفظ التعديل" : "إضافة المصروف"}
+              {expenseEditingId ? at("saveChanges") : at("addExpense")}
             </button>
           </div>
         </div>
@@ -11357,27 +11486,27 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowTreasuryAccountForm(false)}>
           <div className="bg-white rounded-2xl w-full max-w-md p-5" onClick={(ev) => ev.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-stone-800">{treasuryAccountEditingId ? "تعديل حساب" : "إضافة حساب/خزينة"}</h3>
+              <h3 className="text-sm font-bold text-stone-800">{treasuryAccountEditingId ? at("editAccount") : at("addAccountTreasury")}</h3>
               <button onClick={() => setShowTreasuryAccountForm(false)} className="text-stone-400 hover:text-stone-700"><X size={18} /></button>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-stone-500 block mb-1">اسم الحساب</label>
-                <input value={treasuryForm.name} onChange={(e) => setTreasuryForm({ ...treasuryForm, name: e.target.value })} placeholder="مثال: خزينة المكتب، حساب بنك مصر" className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
+                <label className="text-xs text-stone-500 block mb-1">{at("accountName")}</label>
+                <input value={treasuryForm.name} onChange={(e) => setTreasuryForm({ ...treasuryForm, name: e.target.value })} placeholder={at("accountNamePlaceholder")} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">النوع</label>
+                <label className="text-xs text-stone-500 block mb-1">{at("type")}</label>
                 <select value={treasuryForm.type} onChange={(e) => setTreasuryForm({ ...treasuryForm, type: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm">
-                  {TREASURY_ACCOUNT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  {TREASURY_ACCOUNT_TYPES.map((t) => <option key={t.value} value={t.value}>{treasuryAccountTypeLabel(t.value)}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">الرصيد الافتتاحى (ج.م)</label>
+                <label className="text-xs text-stone-500 block mb-1">{at("openingBalance")}</label>
                 <input type="number" value={treasuryForm.openingBalance} onChange={(e) => setTreasuryForm({ ...treasuryForm, openingBalance: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
               </div>
             </div>
             <button onClick={handleSaveTreasuryAccount} className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl py-2.5">
-              {treasuryAccountEditingId ? "حفظ التعديل" : "إضافة الحساب"}
+              {treasuryAccountEditingId ? at("saveChanges") : at("addAccount")}
             </button>
           </div>
         </div>
@@ -11388,7 +11517,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowTreasuryEntryForm(false)}>
           <div className="bg-white rounded-2xl w-full max-w-md p-5" onClick={(ev) => ev.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-stone-800">قيد يدوى</h3>
+              <h3 className="text-sm font-bold text-stone-800">{at("manualEntryTitle")}</h3>
               <button onClick={() => setShowTreasuryEntryForm(false)} className="text-stone-400 hover:text-stone-700"><X size={18} /></button>
             </div>
             <div className="space-y-3">
@@ -11397,45 +11526,45 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   onClick={() => setTreasuryEntryForm({ ...treasuryEntryForm, direction: "in", category: TREASURY_ENTRY_CATEGORIES_IN[0] })}
                   className={`flex-1 rounded-xl py-2 text-xs font-semibold border ${treasuryEntryForm.direction === "in" ? "bg-emerald-600 text-white border-emerald-600" : "bg-white border-stone-300 text-stone-500"}`}
                 >
-                  وارد (+)
+                  {at("directionIn")}
                 </button>
                 <button
                   onClick={() => setTreasuryEntryForm({ ...treasuryEntryForm, direction: "out", category: TREASURY_ENTRY_CATEGORIES_OUT[0] })}
                   className={`flex-1 rounded-xl py-2 text-xs font-semibold border ${treasuryEntryForm.direction === "out" ? "bg-red-600 text-white border-red-600" : "bg-white border-stone-300 text-stone-500"}`}
                 >
-                  منصرف (-)
+                  {at("directionOut")}
                 </button>
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">التاريخ</label>
+                <label className="text-xs text-stone-500 block mb-1">{at("colDate")}</label>
                 <input type="date" value={treasuryEntryForm.date} onChange={(e) => setTreasuryEntryForm({ ...treasuryEntryForm, date: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">الحساب</label>
+                <label className="text-xs text-stone-500 block mb-1">{at("colAccount")}</label>
                 <select value={treasuryEntryForm.accountId} onChange={(e) => setTreasuryEntryForm({ ...treasuryEntryForm, accountId: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm">
-                  <option value="">اختر حساب</option>
+                  <option value="">{at("selectAccount")}</option>
                   {treasuryAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">البند</label>
+                <label className="text-xs text-stone-500 block mb-1">{at("item")}</label>
                 <select value={treasuryEntryForm.category} onChange={(e) => setTreasuryEntryForm({ ...treasuryEntryForm, category: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm">
                   {(treasuryEntryForm.direction === "in" ? TREASURY_ENTRY_CATEGORIES_IN : TREASURY_ENTRY_CATEGORIES_OUT).map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                    <option key={c} value={c}>{treasuryEntryCategoryLabel(c)}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">المبلغ (ج.م)</label>
+                <label className="text-xs text-stone-500 block mb-1">{at("amountEgp")}</label>
                 <input type="number" value={treasuryEntryForm.amount} onChange={(e) => setTreasuryEntryForm({ ...treasuryEntryForm, amount: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">ملاحظات</label>
+                <label className="text-xs text-stone-500 block mb-1">{at("notes")}</label>
                 <input value={treasuryEntryForm.note} onChange={(e) => setTreasuryEntryForm({ ...treasuryEntryForm, note: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
               </div>
             </div>
             <button onClick={handleSaveTreasuryEntry} className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl py-2.5">
-              حفظ القيد
+              {at("saveEntry")}
             </button>
           </div>
         </div>
@@ -11457,42 +11586,42 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <>
                   <div className="grid grid-cols-3 gap-3 mb-6">
                     <div className="bg-stone-50 rounded-xl p-3 text-center">
-                      <p className="text-[11px] text-stone-500 mb-1">إجمالى المستحق</p>
+                      <p className="text-[11px] text-stone-500 mb-1">{at("colTotalOwed")}</p>
                       <p className="font-bold text-stone-800">{fmt(s.totalOwed)}</p>
                     </div>
                     <div className="bg-stone-50 rounded-xl p-3 text-center">
-                      <p className="text-[11px] text-stone-500 mb-1">المدفوع</p>
+                      <p className="text-[11px] text-stone-500 mb-1">{at("colPaid")}</p>
                       <p className="font-bold text-emerald-700">{fmt(s.paid)}</p>
                     </div>
                     <div className="bg-stone-50 rounded-xl p-3 text-center">
-                      <p className="text-[11px] text-stone-500 mb-1">المتبقى</p>
+                      <p className="text-[11px] text-stone-500 mb-1">{at("colRemaining")}</p>
                       <p className={`font-bold ${s.balance > 0 ? "text-red-600" : "text-stone-500"}`}>{fmt(s.balance)}</p>
                     </div>
                   </div>
 
                   <div className="bg-teal-50/60 border border-teal-100 rounded-2xl p-4 mb-6">
-                    <h3 className="text-xs font-bold text-teal-900 mb-3">تسجيل دفعة جديدة</h3>
+                    <h3 className="text-xs font-bold text-teal-900 mb-3">{at("recordNewPayment")}</h3>
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <input type="date" value={supplierPaymentForm.date} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, date: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
-                      <input type="number" placeholder="المبلغ" value={supplierPaymentForm.amount} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, amount: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
+                      <input type="number" placeholder={at("colAmount")} value={supplierPaymentForm.amount} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, amount: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
                       <select value={supplierPaymentForm.accountId} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, accountId: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm col-span-2">
-                        <option value="">ادفع من (خزينة/حساب)</option>
+                        <option value="">{at("payFrom")}</option>
                         {treasuryAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                       </select>
-                      <input placeholder="ملاحظات (اختيارى)" value={supplierPaymentForm.note} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, note: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm col-span-2" />
+                      <input placeholder={at("notesOptional")} value={supplierPaymentForm.note} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, note: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm col-span-2" />
                     </div>
-                    <button onClick={handleSaveSupplierPayment} className="w-full bg-teal-800 hover:bg-teal-900 text-white text-xs font-semibold rounded-lg py-2">تسجيل الدفعة</button>
+                    <button onClick={handleSaveSupplierPayment} className="w-full bg-teal-800 hover:bg-teal-900 text-white text-xs font-semibold rounded-lg py-2">{at("recordPayment")}</button>
                   </div>
 
-                  <h3 className="text-xs font-bold text-stone-600 mb-2">سجل المدفوعات</h3>
+                  <h3 className="text-xs font-bold text-stone-600 mb-2">{at("paymentHistory")}</h3>
                   <div className="space-y-2 mb-6">
                     {payments.length === 0 ? (
-                      <p className="text-xs text-stone-400">لا توجد مدفوعات مسجلة</p>
+                      <p className="text-xs text-stone-400">{at("noPaymentsRecorded")}</p>
                     ) : (
                       payments.map((p) => (
                         <div key={p.id} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm">
                           <div>
-                            <p className="font-semibold text-stone-800">{fmt(parseFloat(p.amount) || 0)} ج.م</p>
+                            <p className="font-semibold text-stone-800">{fmt(parseFloat(p.amount) || 0)} {acctCurrency}</p>
                             <p className="text-[11px] text-stone-400">{p.date ? formatDisplayDate(p.date) : "-"} · {treasuryAccounts.find((a) => a.id === p.accountId)?.name || "-"}{p.note ? ` · ${p.note}` : ""}</p>
                           </div>
                           <button onClick={() => handleDeleteSupplierPayment(p.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
@@ -11501,18 +11630,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     )}
                   </div>
 
-                  <h3 className="text-xs font-bold text-stone-600 mb-2">الحجوزات المرتبطة</h3>
+                  <h3 className="text-xs font-bold text-stone-600 mb-2">{at("relatedBookings")}</h3>
                   <div className="space-y-2">
                     {bookings.length === 0 ? (
-                      <p className="text-xs text-stone-400">لا توجد حجوزات</p>
+                      <p className="text-xs text-stone-400">{at("noBookings")}</p>
                     ) : (
                       bookings.map((b) => (
                         <div key={b.key} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm">
                           <div>
-                            <p className="font-semibold text-stone-800">{SECTION_LABELS_AR[b.section]} · {b.customers.join(", ") || "-"}</p>
+                            <p className="font-semibold text-stone-800">{sectionLabel(b.section)} · {b.customers.join(", ") || "-"}</p>
                             <p className="text-[11px] text-stone-400">{b.date ? formatDisplayDate(b.date) : "-"}</p>
                           </div>
-                          <p className="font-semibold text-stone-700">{fmt(b.net)} ج.م</p>
+                          <p className="font-semibold text-stone-700">{fmt(b.net)} {acctCurrency}</p>
                         </div>
                       ))
                     )}
@@ -11540,42 +11669,42 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <>
                   <div className="grid grid-cols-3 gap-3 mb-6">
                     <div className="bg-stone-50 rounded-xl p-3 text-center">
-                      <p className="text-[11px] text-stone-500 mb-1">إجمالى المستحق</p>
+                      <p className="text-[11px] text-stone-500 mb-1">{at("colTotalDue")}</p>
                       <p className="font-bold text-stone-800">{fmt(c.totalDue)}</p>
                     </div>
                     <div className="bg-stone-50 rounded-xl p-3 text-center">
-                      <p className="text-[11px] text-stone-500 mb-1">المحصل</p>
+                      <p className="text-[11px] text-stone-500 mb-1">{at("colCollected")}</p>
                       <p className="font-bold text-emerald-700">{fmt(c.paid)}</p>
                     </div>
                     <div className="bg-stone-50 rounded-xl p-3 text-center">
-                      <p className="text-[11px] text-stone-500 mb-1">المتبقى</p>
+                      <p className="text-[11px] text-stone-500 mb-1">{at("colRemaining")}</p>
                       <p className={`font-bold ${c.balance > 0 ? "text-red-600" : "text-stone-500"}`}>{fmt(c.balance)}</p>
                     </div>
                   </div>
 
                   <div className="bg-teal-50/60 border border-teal-100 rounded-2xl p-4 mb-6">
-                    <h3 className="text-xs font-bold text-teal-900 mb-3">تسجيل تحصيل جديد</h3>
+                    <h3 className="text-xs font-bold text-teal-900 mb-3">{at("recordNewCollection")}</h3>
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <input type="date" value={customerPaymentForm.date} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, date: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
-                      <input type="number" placeholder="المبلغ" value={customerPaymentForm.amount} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, amount: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
+                      <input type="number" placeholder={at("colAmount")} value={customerPaymentForm.amount} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, amount: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
                       <select value={customerPaymentForm.accountId} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, accountId: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm col-span-2">
-                        <option value="">التحصيل فى (خزينة/حساب)</option>
+                        <option value="">{at("collectInto")}</option>
                         {treasuryAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                       </select>
-                      <input placeholder="ملاحظات (اختيارى)" value={customerPaymentForm.note} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, note: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm col-span-2" />
+                      <input placeholder={at("notesOptional")} value={customerPaymentForm.note} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, note: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm col-span-2" />
                     </div>
-                    <button onClick={handleSaveCustomerPayment} className="w-full bg-teal-800 hover:bg-teal-900 text-white text-xs font-semibold rounded-lg py-2">تسجيل التحصيل</button>
+                    <button onClick={handleSaveCustomerPayment} className="w-full bg-teal-800 hover:bg-teal-900 text-white text-xs font-semibold rounded-lg py-2">{at("recordCollection")}</button>
                   </div>
 
-                  <h3 className="text-xs font-bold text-stone-600 mb-2">سجل التحصيلات</h3>
+                  <h3 className="text-xs font-bold text-stone-600 mb-2">{at("collectionHistory")}</h3>
                   <div className="space-y-2 mb-6">
                     {payments.length === 0 ? (
-                      <p className="text-xs text-stone-400">لا توجد تحصيلات مسجلة</p>
+                      <p className="text-xs text-stone-400">{at("noCollectionsRecorded")}</p>
                     ) : (
                       payments.map((p) => (
                         <div key={p.id} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm">
                           <div>
-                            <p className="font-semibold text-stone-800">{fmt(parseFloat(p.amount) || 0)} ج.م</p>
+                            <p className="font-semibold text-stone-800">{fmt(parseFloat(p.amount) || 0)} {acctCurrency}</p>
                             <p className="text-[11px] text-stone-400">{p.date ? formatDisplayDate(p.date) : "-"} · {treasuryAccounts.find((a) => a.id === p.accountId)?.name || "-"}{p.note ? ` · ${p.note}` : ""}</p>
                           </div>
                           <button onClick={() => handleDeleteCustomerPayment(p.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
@@ -11584,18 +11713,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     )}
                   </div>
 
-                  <h3 className="text-xs font-bold text-stone-600 mb-2">الحجوزات المرتبطة</h3>
+                  <h3 className="text-xs font-bold text-stone-600 mb-2">{at("relatedBookings")}</h3>
                   <div className="space-y-2">
                     {bookings.length === 0 ? (
-                      <p className="text-xs text-stone-400">لا توجد حجوزات</p>
+                      <p className="text-xs text-stone-400">{at("noBookings")}</p>
                     ) : (
                       bookings.map((b) => (
                         <div key={b.key} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm">
                           <div>
-                            <p className="font-semibold text-stone-800">{SECTION_LABELS_AR[b.section]}</p>
+                            <p className="font-semibold text-stone-800">{sectionLabel(b.section)}</p>
                             <p className="text-[11px] text-stone-400">{b.date ? formatDisplayDate(b.date) : "-"}</p>
                           </div>
-                          <p className="font-semibold text-stone-700">{fmt(b.sold / (b.customers.length || 1))} ج.م</p>
+                          <p className="font-semibold text-stone-700">{fmt(b.sold / (b.customers.length || 1))} {acctCurrency}</p>
                         </div>
                       ))
                     )}
