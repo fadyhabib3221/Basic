@@ -5306,8 +5306,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   if (loading || setupComplete === null) {
     return (
       <div className="w-full min-h-screen bg-gradient-to-br from-teal-50 via-stone-50 to-white flex items-center justify-center">
-        <p className="text-teal-800/60 text-sm flex items-center gap-2">
-          <Plane size={16} className="rotate-45 animate-pulse" /> Loading...
+        <style>{`@keyframes pdmFadeIn{from{opacity:0}to{opacity:1}} @keyframes pdmFly{0%{transform:translateX(-6px) rotate(45deg)}50%{transform:translateX(6px) rotate(45deg)}100%{transform:translateX(-6px) rotate(45deg)}}`}</style>
+        <p className="text-teal-800/60 text-sm flex items-center gap-2" style={{ animation: "pdmFadeIn .3s ease-out both" }}>
+          <Plane size={16} className="rotate-45" style={{ animation: "pdmFly 1.4s ease-in-out infinite" }} /> Loading...
         </p>
       </div>
     );
@@ -5317,7 +5318,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   if (employees && employees.length === 0 && !setupComplete) {
     return (
       <div className="w-full min-h-screen bg-gradient-to-br from-teal-50 via-stone-50 to-white flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl border border-stone-200 p-6 w-full max-w-sm shadow-xl shadow-teal-900/5">
+        <style>{`@keyframes pdmPopIn{from{opacity:0;transform:translateY(10px) scale(0.96)}to{opacity:1;transform:translateY(0) scale(1)}}`}</style>
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 w-full max-w-sm shadow-xl shadow-teal-900/5" style={{ animation: "pdmPopIn .3s cubic-bezier(0.16,1,0.3,1) both" }}>
           <div className="flex items-center gap-2 mb-1">
             <div className="bg-teal-800/10 text-teal-800 rounded-xl p-1.5">
               <Lock size={16} />
@@ -5380,7 +5382,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   if (!currentUser) {
     return (
       <div className="w-full min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-teal-900 via-teal-800 to-[#0d3b3e]" style={{ fontFamily: "'Inter', sans-serif" }}>
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');`}</style>
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');
+          @keyframes pdmFadeIn { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes pdmPopIn { from { opacity: 0; transform: translateY(18px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+          @keyframes pdmFlyAcross { from { opacity: 0; transform: translateX(-40px) rotate(45deg); } to { opacity: 0.7; transform: translateX(0) rotate(45deg); } }
+          @media (prefers-reduced-motion: no-preference) {
+            button:not(:disabled) { transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease !important; }
+            button:not(:disabled):active { transform: scale(0.97); }
+            input { transition: box-shadow .15s ease, border-color .15s ease; }
+          }
+        `}</style>
         {/* Decorative sky + route backdrop */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div
@@ -5399,10 +5410,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <path d="M10 120 C 160 20, 380 20, 560 60" stroke="#C9973B" strokeWidth="2" strokeDasharray="6 8" strokeLinecap="round" />
             <circle cx="10" cy="120" r="4" fill="#C9973B" />
           </svg>
-          <Plane size={26} className="absolute top-[15%] right-[10%] text-white/70 rotate-45 animate-pulse" />
+          <Plane size={26} className="absolute top-[15%] right-[10%] text-white/70 rotate-45 animate-pulse" style={{ animation: "pdmFlyAcross 1.1s ease-out both, pulse 2.5s ease-in-out infinite 1.1s" }} />
         </div>
 
-        <div className="relative w-full max-w-sm">
+        <div className="relative w-full max-w-sm" style={{ animation: "pdmFadeIn .4s ease-out both" }}>
           {/* Eyebrow route strip */}
           <div className="flex items-center justify-center gap-2 mb-4 text-amber-300/90 text-[11px] font-semibold tracking-[0.2em] uppercase">
             <Sparkles size={12} />
@@ -5411,7 +5422,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
 
           {/* Boarding-pass card */}
-          <div className="relative bg-white rounded-3xl shadow-2xl shadow-black/30 overflow-hidden">
+          <div className="relative bg-white rounded-3xl shadow-2xl shadow-black/30 overflow-hidden" style={{ animation: "pdmPopIn .45s cubic-bezier(0.16,1,0.3,1) .1s both" }}>
             {/* Branded stub */}
             <div className="relative bg-gradient-to-r from-teal-800 to-teal-900 px-6 pt-9 pb-8 text-center overflow-hidden">
               <Plane size={90} className="absolute -bottom-4 -left-6 text-white/10 rotate-12" />
@@ -5620,7 +5631,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   return (
     <div
       dir="ltr"
-      className="w-full min-h-screen bg-gradient-to-b from-stone-50 via-white to-teal-50/50 text-stone-800"
+      className="w-full min-h-screen bg-gradient-to-b from-stone-50 via-white to-teal-50/50 text-stone-800 anim-fade-in"
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');
@@ -5631,6 +5642,64 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         }
         .price-input[type=number] {
           -moz-appearance: textfield;
+        }
+
+        /* ---------- Global app animations ---------- */
+        @keyframes pdmFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes pdmPopIn {
+          from { opacity: 0; transform: translateY(10px) scale(0.96); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes pdmSlideUp {
+          from { opacity: 0; transform: translateY(16px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pdmSlideRight {
+          from { opacity: 0; transform: translateX(24px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes pdmSpin { to { transform: rotate(360deg); } }
+
+        .anim-fade-in { animation: pdmFadeIn 0.35s ease-out both; }
+        .anim-slide-up { animation: pdmSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        .anim-slide-right { animation: pdmSlideRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        .anim-spin-slow { animation: pdmSpin 1.4s linear infinite; }
+
+        @media (prefers-reduced-motion: no-preference) {
+          /* Any full-screen overlay (modal backdrops and full-page panels) fades in */
+          div[class*="fixed inset-0"] {
+            animation: pdmFadeIn 0.18s ease-out both;
+          }
+          /* The modal card itself (always the overlay's first child) pops/slides in */
+          div[class*="fixed inset-0"][class*="bg-black/40"] > div:first-child,
+          div[class*="fixed inset-0"][class*="bg-stone-900/40"] > div:first-child {
+            animation: pdmPopIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+          }
+
+          /* Buttons and clickable controls get soft press/hover feedback */
+          button:not(:disabled),
+          [role="button"] {
+            transition: transform 0.15s ease, box-shadow 0.15s ease,
+              background-color 0.15s ease, border-color 0.15s ease,
+              color 0.15s ease, opacity 0.15s ease !important;
+          }
+          button:not(:disabled):active,
+          [role="button"]:active {
+            transform: scale(0.96);
+          }
+
+          /* Inputs animate their focus ring smoothly */
+          input, select, textarea {
+            transition: box-shadow 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          *, *::before, *::after {
+            animation-duration: 0.001ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.001ms !important;
+          }
         }
       `}</style>
       <div className="max-w-5xl mx-auto p-4 md:p-6">
