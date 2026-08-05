@@ -5649,11 +5649,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       {roleLabel(currentEmployeeRecord.role)}
                     </span>
                   )}
-                  {!currentUser.isAdmin && SECTIONS_WITH_OWNERSHIP.includes(activeSection) && !sectionPermFor(activeSection).canViewAll && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-100 bg-white/10 border border-white/20 rounded-full px-2 py-0.5">
-                      Your own records only
-                    </span>
-                  )}
                   {hasAdminAccess && isAccountingUser && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-100 bg-amber-500/20 border border-amber-300/30 rounded-full px-2 py-0.5">
                       Accounting — view only
