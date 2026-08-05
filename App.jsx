@@ -5702,7 +5702,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           }
         }
       `}</style>
-      <div className="max-w-5xl mx-auto p-4 md:p-6">
+      <div className="relative max-w-5xl mx-auto p-4 md:p-6">
         {/* Boarding-pass style banner */}
         <div className="relative rounded-2xl bg-gradient-to-r from-teal-800 via-teal-800 to-teal-900 shadow-lg shadow-teal-900/20 overflow-hidden mb-0">
           <Plane size={140} className="pointer-events-none absolute -bottom-8 -right-6 text-white/[0.06] rotate-45" />
@@ -5843,7 +5843,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </header>
         </div>
         {hasAdminAccess && showOnlineList && (
-          <div className="hidden 2xl:flex flex-col fixed top-64 right-8 w-64 max-h-[340px] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-20">
+          <div className="hidden min-[1680px]:flex flex-col absolute top-4 md:top-6 left-full ml-6 w-64 max-h-[340px] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-20">
             <div className="flex items-center justify-between px-1 pb-1 mb-1 border-b border-stone-100">
               <p className="text-xs font-semibold text-stone-600">{visibleOnlineUsernames.length} online now</p>
               <button onClick={() => setShowOnlineList(false)} className="text-stone-400 hover:text-stone-700 p-0.5">
