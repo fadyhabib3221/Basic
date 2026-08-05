@@ -6187,7 +6187,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   name once they've been added. */}
               <div className="mt-3">
                 <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
-                <div className="flex flex-nowrap items-start gap-1.5 overflow-x-auto pb-1">
+                <div className="flex flex-wrap items-start gap-1.5 pb-1">
                   {GRADE_TIER_GROUPS.map((group) => {
                     const selectedInGroup = group.roles.find((r) => r.value === newEmployee.role);
                     const isOpen = newEmployeeGradeOpen === group.key;
