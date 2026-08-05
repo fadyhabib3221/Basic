@@ -5843,58 +5843,33 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </header>
         </div>
         {hasAdminAccess && showOnlineList && (
-          <div className="hidden 2xl:flex flex-col fixed top-8 right-8 w-56 max-h-[340px] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-20">
+          <div className="hidden 2xl:flex flex-col fixed top-8 right-8 w-64 max-h-[340px] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-20">
+            <div className="flex items-center justify-between px-1 pb-1 mb-1 border-b border-stone-100">
+              <p className="text-xs font-semibold text-stone-600">{visibleOnlineUsernames.length} online now</p>
+              <button onClick={() => setShowOnlineList(false)} className="text-stone-400 hover:text-stone-700 p-0.5">
+                <X size={14} />
+              </button>
+            </div>
             {employeeRoster.length === 0 ? (
               <p className="text-[11px] text-stone-400 px-1">No employees yet</p>
             ) : (
               <ul className="space-y-0.5">
                 {employeeRoster.map((e) => {
                   const online = onlineUsernames.includes(e.username);
+                  const activity = online && presenceMap[e.username] && presenceMap[e.username].activity;
                   return (
-                    <li key={e.username} className="flex items-center gap-1.5 px-1 py-0.5 text-[11px] text-stone-600">
+                    <li key={e.username} className="flex items-center gap-1.5 px-1 py-1 text-[11px] text-stone-600">
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${online ? "bg-emerald-500" : "bg-stone-300"}`} />
-                      <span className="truncate">{e.name}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        )}
-        {hasAdminAccess && showOnlineList && (
-          <>
-            <div className="fixed inset-0 z-30" onClick={() => setShowOnlineList(false)} />
-            <div className="fixed z-40 top-24 left-4 right-4 md:left-auto md:right-6 md:w-72 bg-white border border-stone-300 rounded-2xl shadow-lg p-2">
-              <div className="flex items-center justify-between px-1 pb-1 mb-1 border-b border-stone-100">
-                <p className="text-xs font-semibold text-stone-600">{visibleOnlineUsernames.length} online now</p>
-                <button onClick={() => setShowOnlineList(false)} className="text-stone-400 hover:text-stone-700 p-0.5">
-                  <X size={14} />
-                </button>
-              </div>
-              {visibleOnlineUsernames.length === 0 ? (
-                <p className="text-xs text-stone-400 px-1 py-1">No one online right now</p>
-              ) : (
-                <ul className="space-y-1 max-h-72 overflow-y-auto">
-                  {visibleOnlineUsernames.map((u) => {
-                    const emp = (employees || []).find((e) => e.username === u);
-                    const activity = presenceMap[u] && presenceMap[u].activity;
-                    return (
-                      <li key={u} className="flex items-center gap-1.5 text-xs text-stone-700 px-1 py-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                        <span className="flex-1 truncate">
-                          {emp ? emp.name : u}
-                          {emp && emp.isAdmin && (
-                            <span className="text-[9px] text-teal-700 font-semibold"> (main)</span>
-                          )}
-                          {activity && (
-                            <span className="block text-[10px] text-stone-400 truncate">{activity}</span>
-                          )}
-                        </span>
+                      <span className="flex-1 min-w-0 truncate">
+                        {e.name}
+                        {activity && <span className="block text-[10px] text-stone-400 truncate">{activity}</span>}
+                      </span>
+                      {online && (
                         <button
                           type="button"
                           onClick={() => {
-                            requestConfirm(`Sign out ${emp ? emp.name : u} now?`, () => {
-                              handleForceSignOut(u);
+                            requestConfirm(`Sign out ${e.name} now?`, () => {
+                              handleForceSignOut(e.username);
                             });
                           }}
                           title="Sign out this employee"
@@ -5902,13 +5877,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         >
                           <LogOut size={10} /> Sign out
                         </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          </>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         )}
         {/* Perforated tear line, like separating a boarding-pass stub from the rest */}
         <div className="relative h-6 mb-4">
