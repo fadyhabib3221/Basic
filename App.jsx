@@ -1163,6 +1163,23 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     link.href = href;
   }, []);
 
+  // Stop the mouse scroll wheel from changing the value of any number input across the
+  // app. Browsers bump a focused <input type="number"> up/down on wheel by default,
+  // which is easy to trigger by accident while scrolling the page — this blurs the
+  // input the instant a wheel event reaches it, so the value stays put and the page
+  // just scrolls normally. Applies globally, so it also covers any number input added
+  // later without needing a change on that input itself.
+  useEffect(() => {
+    const handleWheel = (e) => {
+      const el = e.target;
+      if (el && el.tagName === "INPUT" && el.type === "number" && document.activeElement === el) {
+        el.blur();
+      }
+    };
+    document.addEventListener("wheel", handleWheel, { passive: true });
+    return () => document.removeEventListener("wheel", handleWheel);
+  }, []);
+
   // ---------- License / activation ----------
   // Stored centrally (shared storage) so activation applies to every employee,
   // not just the browser it was entered on. null = not loaded from storage yet.
