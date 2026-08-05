@@ -11,63 +11,6 @@ import {
   History, Bell, Send,
 } from "lucide-react";
 
-// ---------- Global animation styles ----------
-// A single shared stylesheet, injected once per screen, that brings the whole app to life:
-// entrance animations for the app shell/cards, an automatic fade+rise for every overlay
-// that follows the app's "fixed inset-0 ... z-*" modal pattern (so new modals get it for
-// free, with no per-modal edits needed), a corner-toast slide-in, and smooth, subtle
-// transitions on buttons, inputs, rounded cards, and table rows. Respects
-// prefers-reduced-motion for anyone who has that turned on.
-const ANIMATIONS_CSS = `
-  @keyframes anim-fade-in { from { opacity: 0; } to { opacity: 1; } }
-  @keyframes anim-rise {
-    from { opacity: 0; transform: translateY(14px) scale(0.98); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
-  }
-  @keyframes anim-slide-down {
-    from { opacity: 0; transform: translateY(-14px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .anim-app { animation: anim-rise 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
-  .anim-card { animation: anim-rise 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
-  .anim-toast { animation: anim-slide-down 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
-
-  /* Any overlay/modal/full-screen panel following the app's "fixed inset-0 ... z-*"
-     pattern animates automatically — the backdrop fades in, the panel fades and rises. */
-  [class*="fixed"][class*="inset-0"][class*="z-"] {
-    animation: anim-fade-in 0.15s ease-out both;
-  }
-  [class*="fixed"][class*="inset-0"][class*="z-"] > div {
-    animation: anim-rise 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-
-  button:not(:disabled) {
-    transition: transform 0.12s ease, box-shadow 0.15s ease, background-color 0.15s ease,
-      opacity 0.15s ease, color 0.15s ease;
-  }
-  button:not(:disabled):active { transform: scale(0.96); }
-
-  a, input, select, textarea {
-    transition: box-shadow 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
-  }
-
-  .rounded-xl, .rounded-2xl {
-    transition: box-shadow 0.2s ease, border-color 0.2s ease;
-  }
-
-  tbody tr { transition: background-color 0.15s ease; }
-
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-      animation-duration: 0.001ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.001ms !important;
-      scroll-behavior: auto !important;
-    }
-  }
-`;
-
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
 // by hand since lucide-react has no built-in "passport" glyph. Mirrors the sizing/stroke
 // conventions of the lucide icons it sits alongside (accepts size + className props).
@@ -1161,23 +1104,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     link.type = "image/svg+xml";
     link.href = href;
-  }, []);
-
-  // Stop the mouse scroll wheel from changing the value of any number input across the
-  // app. Browsers bump a focused <input type="number"> up/down on wheel by default,
-  // which is easy to trigger by accident while scrolling the page — this blurs the
-  // input the instant a wheel event reaches it, so the value stays put and the page
-  // just scrolls normally. Applies globally, so it also covers any number input added
-  // later without needing a change on that input itself.
-  useEffect(() => {
-    const handleWheel = (e) => {
-      const el = e.target;
-      if (el && el.tagName === "INPUT" && el.type === "number" && document.activeElement === el) {
-        el.blur();
-      }
-    };
-    document.addEventListener("wheel", handleWheel, { passive: true });
-    return () => document.removeEventListener("wheel", handleWheel);
   }, []);
 
   // ---------- License / activation ----------
@@ -4797,7 +4723,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   if (loading || setupComplete === null) {
     return (
       <div className="w-full min-h-screen bg-gradient-to-br from-teal-50 via-stone-50 to-white flex items-center justify-center">
-        <style>{ANIMATIONS_CSS}</style>
         <p className="text-teal-800/60 text-sm flex items-center gap-2">
           <Plane size={16} className="rotate-45 animate-pulse" /> Loading...
         </p>
@@ -4809,8 +4734,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   if (employees && employees.length === 0 && !setupComplete) {
     return (
       <div className="w-full min-h-screen bg-gradient-to-br from-teal-50 via-stone-50 to-white flex items-center justify-center p-4">
-        <style>{ANIMATIONS_CSS}</style>
-        <div className="anim-card bg-white rounded-2xl border border-stone-200 p-6 w-full max-w-sm shadow-xl shadow-teal-900/5">
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 w-full max-w-sm shadow-xl shadow-teal-900/5">
           <div className="flex items-center gap-2 mb-1">
             <div className="bg-teal-800/10 text-teal-800 rounded-xl p-1.5">
               <Lock size={16} />
@@ -4858,8 +4782,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   if (employees && employees.length === 0 && setupComplete) {
     return (
       <div className="w-full min-h-screen bg-gradient-to-br from-teal-50 via-stone-50 to-white flex items-center justify-center p-4">
-        <style>{ANIMATIONS_CSS}</style>
-        <div className="anim-card bg-white rounded-2xl border border-stone-200 p-6 w-full max-w-sm text-center shadow-xl shadow-teal-900/5">
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 w-full max-w-sm text-center shadow-xl shadow-teal-900/5">
           <Lock size={22} className="text-stone-400 mx-auto mb-2" />
           <h1 className="font-bold text-stone-900 mb-1">No accounts available</h1>
           <p className="text-xs text-stone-500">
@@ -4875,7 +4798,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return (
       <div className="w-full min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-teal-900 via-teal-800 to-[#0d3b3e]" style={{ fontFamily: "'Inter', sans-serif" }}>
         <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');`}</style>
-        <style>{ANIMATIONS_CSS}</style>
         {/* Decorative sky + route backdrop */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div
@@ -4897,7 +4819,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <Plane size={26} className="absolute top-[15%] right-[10%] text-white/70 rotate-45 animate-pulse" />
         </div>
 
-        <div className="anim-card relative w-full max-w-sm">
+        <div className="relative w-full max-w-sm">
           {/* Eyebrow route strip */}
           <div className="flex items-center justify-center gap-2 mb-4 text-amber-300/90 text-[11px] font-semibold tracking-[0.2em] uppercase">
             <Sparkles size={12} />
@@ -5128,8 +5050,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           -moz-appearance: textfield;
         }
       `}</style>
-      <style>{ANIMATIONS_CSS}</style>
-      <div className="anim-app max-w-5xl mx-auto p-4 md:p-6">
+      <div className="max-w-5xl mx-auto p-4 md:p-6">
         {/* Boarding-pass style banner */}
         <div className="relative rounded-2xl bg-gradient-to-r from-teal-800 via-teal-800 to-teal-900 shadow-lg shadow-teal-900/20 overflow-hidden mb-0">
           <Plane size={140} className="pointer-events-none absolute -bottom-8 -right-6 text-white/[0.06] rotate-45" />
@@ -10046,7 +9967,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       {/* Incoming-request notification popup — floats in the corner without blocking the
           rest of the app, so it works as a lightweight "you've got a new request" alert. */}
       {incomingRequestPopup && (
-        <div className="anim-toast fixed top-4 right-4 z-50 w-full max-w-xs bg-white rounded-2xl border border-teal-200 shadow-xl shadow-black/10 p-4">
+        <div className="fixed top-4 right-4 z-50 w-full max-w-xs bg-white rounded-2xl border border-teal-200 shadow-xl shadow-black/10 p-4">
           <div className="flex items-start justify-between gap-2 mb-1">
             <p className="text-sm font-semibold text-stone-900 flex items-center gap-1.5">
               <Bell size={14} className="text-teal-800" /> New request
