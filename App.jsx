@@ -10628,8 +10628,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         </>
         )}
       </div>
-      {hasAdminAccess && showOnlineList && (
+      {hasAdminAccess && (
         <div className="hidden xl:block w-64 shrink-0 pt-4 md:pt-6">
+          {showOnlineList && (
           <div className="sticky top-4 flex flex-col max-h-[calc(100vh-2rem)] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-30">
             <div className="flex items-center justify-between px-1 pb-1 mb-1 border-b border-stone-100">
               <p className="text-xs font-semibold text-stone-600">{visibleOnlineUsernames.length} online now</p>
@@ -10671,6 +10672,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </ul>
             )}
           </div>
+          )}
         </div>
       )}
       </div>
