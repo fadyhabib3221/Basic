@@ -5747,25 +5747,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </p>
               </div>
             </div>
-            {hasAdminAccess && (
-              <div className="hidden lg:flex flex-col self-stretch w-56 bg-white/10 border border-white/15 rounded-2xl p-2 overflow-y-auto shrink-0">
-                {employeeRoster.length === 0 ? (
-                  <p className="text-[11px] text-teal-100/60 px-1">No employees yet</p>
-                ) : (
-                  <ul className="space-y-0.5">
-                    {employeeRoster.map((e) => {
-                      const online = onlineUsernames.includes(e.username);
-                      return (
-                        <li key={e.username} className="flex items-center gap-1.5 px-1 py-0.5 text-[11px] text-white">
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${online ? "bg-emerald-400" : "bg-white/25"}`} />
-                          <span className="truncate">{e.name}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            )}
             <div className="flex items-center gap-2 flex-wrap">
               {hasAdminAccess && (
                 <button onClick={handleBackup} title="Backup"
@@ -5861,6 +5842,25 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </header>
         </div>
+        {hasAdminAccess && (
+          <div className="hidden 2xl:flex flex-col fixed top-8 right-8 w-56 max-h-[340px] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-20">
+            {employeeRoster.length === 0 ? (
+              <p className="text-[11px] text-stone-400 px-1">No employees yet</p>
+            ) : (
+              <ul className="space-y-0.5">
+                {employeeRoster.map((e) => {
+                  const online = onlineUsernames.includes(e.username);
+                  return (
+                    <li key={e.username} className="flex items-center gap-1.5 px-1 py-0.5 text-[11px] text-stone-600">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${online ? "bg-emerald-500" : "bg-stone-300"}`} />
+                      <span className="truncate">{e.name}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
         {hasAdminAccess && showOnlineList && (
           <>
             <div className="fixed inset-0 z-30" onClick={() => setShowOnlineList(false)} />
