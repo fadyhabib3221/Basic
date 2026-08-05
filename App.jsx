@@ -5843,7 +5843,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </header>
         </div>
         {hasAdminAccess && showOnlineList && (
-          <div className="flex flex-col absolute top-16 md:top-20 right-2 md:right-4 w-64 max-h-[340px] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-20">
+          <div className="flex justify-end mt-0">
+          <div className="flex flex-col w-64 max-h-[340px] bg-white border border-stone-200 rounded-b-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto">
             <div className="flex items-center justify-between px-1 pb-1 mb-1 border-b border-stone-100">
               <p className="text-xs font-semibold text-stone-600">{visibleOnlineUsernames.length} online now</p>
               <button onClick={() => setShowOnlineList(false)} className="text-stone-400 hover:text-stone-700 p-0.5">
@@ -5883,6 +5884,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 })}
               </ul>
             )}
+          </div>
           </div>
         )}
         {/* Perforated tear line, like separating a boarding-pass stub from the rest */}
