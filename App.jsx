@@ -6866,13 +6866,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       placeholder={`Ticket number ${i + 1}`}
                     />
                     {c.conjunction && (c.ticketNumber || "").replace(/[^A-Z0-9]/g, "").length >= 13 && (
-                      <input
-                        className="min-w-0 text-sm outline-none bg-transparent text-stone-600 -ml-2.5"
-                        style={{ flex: "0 0 auto", width: `${Math.max((c.ticketNumber2 || "").length, 1) + 1}ch` }}
-                        value={c.ticketNumber2 || ""}
-                        onChange={(e) => handleCustomerFieldChange(i, "ticketNumber2", e.target.value)}
-                        placeholder="-891"
-                      />
+                      <>
+                        <span className="text-stone-500 font-semibold mx-0.5 select-none">-</span>
+                        <input
+                          className="min-w-0 text-sm outline-none bg-transparent text-stone-600"
+                          style={{ flex: "0 0 auto", width: `${Math.max((c.ticketNumber2 || "").replace(/^-/, "").length, 1) + 1}ch` }}
+                          value={(c.ticketNumber2 || "").replace(/^-/, "")}
+                          onChange={(e) => handleCustomerFieldChange(i, "ticketNumber2", `-${e.target.value.replace(/^-/, "")}`)}
+                          placeholder="891"
+                        />
+                      </>
                     )}
                   </div>
                   <input
