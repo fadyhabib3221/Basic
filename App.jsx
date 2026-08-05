@@ -5719,7 +5719,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           }
         }
       `}</style>
-      <div className="xl:flex xl:justify-center xl:items-start xl:gap-4">
+      <div className="xl:flex xl:justify-center xl:gap-4">
       <div className="relative max-w-5xl mx-auto xl:mx-0 xl:w-[64rem] xl:shrink-0 p-4 md:p-6">
         {/* Boarding-pass style banner */}
         <div className="relative rounded-2xl bg-gradient-to-r from-teal-800 via-teal-800 to-teal-900 shadow-lg shadow-teal-900/20 overflow-hidden mb-0">
