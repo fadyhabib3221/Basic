@@ -5843,7 +5843,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </header>
         </div>
         {hasAdminAccess && showOnlineList && (
-          <div className="hidden 2xl:flex flex-col absolute top-4 md:top-6 left-full ml-2 w-64 max-h-[340px] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-20">
+          <div className="flex flex-col absolute top-16 md:top-20 right-2 md:right-4 w-64 max-h-[340px] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-20">
             <div className="flex items-center justify-between px-1 pb-1 mb-1 border-b border-stone-100">
               <p className="text-xs font-semibold text-stone-600">{visibleOnlineUsernames.length} online now</p>
               <button onClick={() => setShowOnlineList(false)} className="text-stone-400 hover:text-stone-700 p-0.5">
