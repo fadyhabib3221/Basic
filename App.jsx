@@ -1151,6 +1151,23 @@ const AIRPORTS = [
 ].map(([code, place]) => `${code} - ${place}`.toUpperCase());
 
 export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
+  // Prevent the mouse/trackpad scroll wheel from changing the value of a focused
+  // number input. Browsers normally let scrolling over a focused number field
+  // bump its value up/down, which is easy to trigger by accident while scrolling
+  // the page. Blurring the field on wheel (while it's focused) stops that, and
+  // since blur only fires when the field actually has focus, normal page
+  // scrolling elsewhere is completely unaffected.
+  useEffect(() => {
+    const handleWheelOnNumberInput = (e) => {
+      const active = document.activeElement;
+      if (active && active.tagName === "INPUT" && active.type === "number") {
+        active.blur();
+      }
+    };
+    document.addEventListener("wheel", handleWheelOnNumberInput, { passive: true });
+    return () => document.removeEventListener("wheel", handleWheelOnNumberInput);
+  }, []);
+
   // Keep the browser tab title and icon in sync with the app's name/branding.
   useEffect(() => {
     document.title = "Travel Agency Manager";
@@ -5702,7 +5719,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           }
         }
       `}</style>
-      <div className="relative max-w-5xl mx-auto xl:ml-[calc((100vw-64rem)/2-4rem)] xl:mr-[calc((100vw-64rem)/2+4rem)] p-4 md:p-6">
+      <div className="xl:flex xl:justify-center xl:items-start xl:gap-4">
+      <div className="relative max-w-5xl mx-auto xl:mx-0 xl:w-[64rem] xl:shrink-0 p-4 md:p-6">
         {/* Boarding-pass style banner */}
         <div className="relative rounded-2xl bg-gradient-to-r from-teal-800 via-teal-800 to-teal-900 shadow-lg shadow-teal-900/20 overflow-hidden mb-0">
           <Plane size={140} className="pointer-events-none absolute -bottom-8 -right-6 text-white/[0.06] rotate-45" />
@@ -5842,49 +5860,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </header>
         </div>
-        {hasAdminAccess && showOnlineList && (
-          <div className="hidden xl:flex flex-col fixed top-6 left-[calc(50%+33rem)] w-64 max-h-[calc(100vh-3rem)] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-30">
-            <div className="flex items-center justify-between px-1 pb-1 mb-1 border-b border-stone-100">
-              <p className="text-xs font-semibold text-stone-600">{visibleOnlineUsernames.length} online now</p>
-              <button onClick={() => setShowOnlineList(false)} className="text-stone-400 hover:text-stone-700 p-0.5">
-                <X size={14} />
-              </button>
-            </div>
-            {employeeRoster.length === 0 ? (
-              <p className="text-[11px] text-stone-400 px-1">No employees yet</p>
-            ) : (
-              <ul className="space-y-0.5">
-                {employeeRoster.map((e) => {
-                  const online = onlineUsernames.includes(e.username);
-                  const activity = online && presenceMap[e.username] && presenceMap[e.username].activity;
-                  return (
-                    <li key={e.username} className="flex items-center gap-1.5 px-1 py-1 text-[11px] text-stone-600">
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${online ? "bg-emerald-500" : "bg-stone-300"}`} />
-                      <span className="flex-1 min-w-0 truncate">
-                        {e.name}
-                        {activity && <span className="block text-[10px] text-stone-400 truncate">{activity}</span>}
-                      </span>
-                      {online && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            requestConfirm(`Sign out ${e.name} now?`, () => {
-                              handleForceSignOut(e.username);
-                            });
-                          }}
-                          title="Sign out this employee"
-                          className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 hover:text-red-800 border border-red-200 hover:border-red-300 bg-red-50 rounded-full px-1.5 py-0.5"
-                        >
-                          <LogOut size={10} /> Sign out
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        )}
         {/* Perforated tear line, like separating a boarding-pass stub from the rest */}
         <div className="relative h-6 mb-4">
           <div className="absolute -left-2.5 top-0 w-5 h-5 rounded-full bg-stone-50" />
@@ -6884,7 +6859,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <div className="w-full md:w-[24ch] md:shrink-0 flex items-center border border-stone-300 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-teal-700">
                     <input
                       className="min-w-0 text-sm outline-none bg-transparent flex-1"
-                      style={c.conjunction ? { flex: "0 0 auto", width: `${Math.max((c.ticketNumber || "").length, 3) + 1}ch` } : { width: "20ch" }}
+                      style={c.conjunction ? { flex: "0 0 auto", width: `${Math.max((c.ticketNumber || "").length, 3)}ch` } : { width: "20ch" }}
                       value={c.ticketNumber}
                       onChange={(e) => handleCustomerFieldChange(i, "ticketNumber", e.target.value)}
                       onBlur={() => handleTicketNumberBlur(i)}
@@ -6892,7 +6867,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     />
                     {c.conjunction && (c.ticketNumber || "").replace(/[^A-Z0-9]/g, "").length >= 13 && (
                       <input
-                        className="min-w-0 text-sm outline-none bg-transparent text-stone-600 -ml-1"
+                        className="min-w-0 text-sm outline-none bg-transparent text-stone-600 -ml-2.5"
                         style={{ flex: "0 0 auto", width: `${Math.max((c.ticketNumber2 || "").length, 1) + 1}ch` }}
                         value={c.ticketNumber2 || ""}
                         onChange={(e) => handleCustomerFieldChange(i, "ticketNumber2", e.target.value)}
@@ -10649,6 +10624,52 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         )}
         </>
         )}
+      </div>
+      {hasAdminAccess && showOnlineList && (
+        <div className="hidden xl:block w-64 shrink-0 pt-4 md:pt-6">
+          <div className="sticky top-4 flex flex-col max-h-[calc(100vh-2rem)] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-30">
+            <div className="flex items-center justify-between px-1 pb-1 mb-1 border-b border-stone-100">
+              <p className="text-xs font-semibold text-stone-600">{visibleOnlineUsernames.length} online now</p>
+              <button onClick={() => setShowOnlineList(false)} className="text-stone-400 hover:text-stone-700 p-0.5">
+                <X size={14} />
+              </button>
+            </div>
+            {employeeRoster.length === 0 ? (
+              <p className="text-[11px] text-stone-400 px-1">No employees yet</p>
+            ) : (
+              <ul className="space-y-0.5">
+                {employeeRoster.map((e) => {
+                  const online = onlineUsernames.includes(e.username);
+                  const activity = online && presenceMap[e.username] && presenceMap[e.username].activity;
+                  return (
+                    <li key={e.username} className="flex items-center gap-1.5 px-1 py-1 text-[11px] text-stone-600">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${online ? "bg-emerald-500" : "bg-stone-300"}`} />
+                      <span className="flex-1 min-w-0 truncate">
+                        {e.name}
+                        {activity && <span className="block text-[10px] text-stone-400 truncate">{activity}</span>}
+                      </span>
+                      {online && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            requestConfirm(`Sign out ${e.name} now?`, () => {
+                              handleForceSignOut(e.username);
+                            });
+                          }}
+                          title="Sign out this employee"
+                          className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 hover:text-red-800 border border-red-200 hover:border-red-300 bg-red-50 rounded-full px-1.5 py-0.5"
+                        >
+                          <LogOut size={10} /> Sign out
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
       </div>
 
       {activeSection === "flights" && viewingTicket && (
