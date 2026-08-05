@@ -5917,6 +5917,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {activeSection === "accounts" && canAccessAccounts && (
+                <button
+                  type="button"
+                  onClick={() => setAccountsLang((l) => (l === "ar" ? "en" : "ar"))}
+                  title={accountsLang === "ar" ? "Switch to English" : "التحويل للعربية"}
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center gap-1 transition-colors"
+                >
+                  <Globe size={15} />
+                  <span className="text-xs font-semibold">{accountsLang === "ar" ? "EN" : "AR"}</span>
+                </button>
+              )}
               {hasAdminAccess && (
                 <button onClick={handleBackup} title="Backup"
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
@@ -10352,15 +10363,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               {tab.label}
             </button>
           ))}
-          <button
-            type="button"
-            onClick={() => setAccountsLang((l) => (l === "ar" ? "en" : "ar"))}
-            title={accountsLang === "ar" ? "Switch to English" : "التحويل للعربية"}
-            className="shrink-0 mr-auto flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold bg-white text-stone-500 border-stone-200 hover:border-teal-300 hover:text-teal-800 transition-colors"
-          >
-            <Globe size={15} />
-            {accountsLang === "ar" ? "EN" : "AR"}
-          </button>
         </div>
 
         {/* ---------- Overview ---------- */}
