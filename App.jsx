@@ -5702,7 +5702,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           }
         }
       `}</style>
-      <div className="relative max-w-5xl mx-auto p-4 md:p-6">
+      <div className="relative max-w-5xl mx-auto xl:ml-[calc((100vw-64rem)/2-4rem)] xl:mr-[calc((100vw-64rem)/2+4rem)] p-4 md:p-6">
         {/* Boarding-pass style banner */}
         <div className="relative rounded-2xl bg-gradient-to-r from-teal-800 via-teal-800 to-teal-900 shadow-lg shadow-teal-900/20 overflow-hidden mb-0">
           <Plane size={140} className="pointer-events-none absolute -bottom-8 -right-6 text-white/[0.06] rotate-45" />
