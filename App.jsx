@@ -5842,7 +5842,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </header>
         </div>
-        {hasAdminAccess && (
+        {hasAdminAccess && showOnlineList && (
           <div className="hidden 2xl:flex flex-col fixed top-8 right-8 w-56 max-h-[340px] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-20">
             {employeeRoster.length === 0 ? (
               <p className="text-[11px] text-stone-400 px-1">No employees yet</p>
