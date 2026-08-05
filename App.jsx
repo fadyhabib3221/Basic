@@ -4015,6 +4015,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const emp = (employees || []).find((e) => e.username === u);
     return !(emp && emp.isAdmin);
   });
+  // Roster shown in the header banner: every employee account, with whoever is
+  // currently online sorted to the top (then alphabetically within each group).
+  const employeeRoster = (employees || [])
+    .filter((e) => currentUser && (currentUser.isAdmin || !e.isAdmin))
+    .slice()
+    .sort((a, b) => {
+      const aOnline = onlineUsernames.includes(a.username) ? 0 : 1;
+      const bOnline = onlineUsernames.includes(b.username) ? 0 : 1;
+      if (aOnline !== bOnline) return aOnline - bOnline;
+      return (a.name || "").localeCompare(b.name || "");
+    });
   const visibleTickets = !currentUser
     ? []
     : canViewAllTickets
@@ -5667,17 +5678,39 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </p>
               </div>
             </div>
+            {hasAdminAccess && (
+              <div className="hidden lg:flex flex-col max-h-[104px] w-56 bg-white/10 border border-white/15 rounded-2xl p-2 overflow-y-auto shrink-0">
+                <p className="text-[10px] font-semibold text-teal-100/70 px-1 pb-1 mb-1 border-b border-white/10 sticky top-0">
+                  Employees ({employeeRoster.length})
+                </p>
+                {employeeRoster.length === 0 ? (
+                  <p className="text-[11px] text-teal-100/60 px-1">No employees yet</p>
+                ) : (
+                  <ul className="space-y-0.5">
+                    {employeeRoster.map((e) => {
+                      const online = onlineUsernames.includes(e.username);
+                      return (
+                        <li key={e.username} className="flex items-center gap-1.5 px-1 py-0.5 text-[11px] text-white">
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${online ? "bg-emerald-400" : "bg-white/25"}`} />
+                          <span className="truncate">{e.name}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-2 flex-wrap">
               {hasAdminAccess && (
-                <button onClick={handleBackup}
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
-                  <Download size={15} /> Backup
+                <button onClick={handleBackup} title="Backup"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  <Download size={15} />
                 </button>
               )}
               {hasAdminAccess && (
-                <button onClick={triggerRestore}
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
-                  <Upload size={15} /> Restore
+                <button onClick={triggerRestore} title="Restore"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  <Upload size={15} />
                 </button>
               )}
               {hasAdminAccess && (
@@ -5690,25 +5723,25 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 />
               )}
               {hasAdminAccess && (
-                <button onClick={() => setShowManage(!showManage)}
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
-                  <Users size={15} /> Manage employees
+                <button onClick={() => setShowManage(!showManage)} title="Manage employees"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  <Users size={15} />
                 </button>
               )}
               {currentUser.isAdmin && (
-                <button onClick={() => setShowLicensePanel(!showLicensePanel)}
-                  className={`border text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors ${
+                <button onClick={() => setShowLicensePanel(!showLicensePanel)} title={isLicensed ? "License" : "Activate license"}
+                  className={`border text-sm rounded-2xl p-2 flex items-center justify-center transition-colors ${
                     isLicensed
                       ? "border-white/20 bg-white/10 hover:bg-white/20 text-white"
                       : "border-amber-300/50 bg-amber-500/20 hover:bg-amber-500/30 text-amber-100"
                   }`}>
-                  <Lock size={15} /> {isLicensed ? "License" : "Activate license"}
+                  <Lock size={15} />
                 </button>
               )}
               {canManageCompanies && (
-                <button onClick={() => setShowManageCompanies(!showManageCompanies)}
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
-                  <Factory size={15} /> Manage companies
+                <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage companies"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  <Factory size={15} />
                 </button>
               )}
               <button
@@ -5716,8 +5749,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   setShowRequestsPanel(!showRequestsPanel);
                   setRequestSendError("");
                 }}
-                className="relative border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
-                <Bell size={15} /> Requests
+                title="Requests"
+                className="relative border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                <Bell size={15} />
                 {myPendingRequestsCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
                     {myPendingRequestsCount}
@@ -5733,12 +5767,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   setNewPasswordInput("");
                   setConfirmPasswordInput("");
                 }}
-                className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
-                <Lock size={15} /> Change password
+                title="Change password"
+                className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                <Lock size={15} />
               </button>
-              <button onClick={handleLogout}
-                className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors">
-                <LogOut size={15} /> Sign out
+              <button onClick={handleLogout} title="Sign out"
+                className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                <LogOut size={15} />
               </button>
               {onChangeServer && (
                 <button
@@ -5751,10 +5786,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       }
                     );
                   }}
-                  title="Change data server"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-teal-100 text-sm rounded-2xl px-3 py-2 flex items-center gap-1.5 transition-colors"
+                  title="Server"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-teal-100 text-sm rounded-2xl p-2 flex items-center justify-center transition-colors"
                 >
-                  <Wifi size={15} /> Server
+                  <Wifi size={15} />
                 </button>
               )}
             </div>
