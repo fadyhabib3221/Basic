@@ -3775,18 +3775,27 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         };
       }
     }
-    let next;
     const wasEditing = !!form.id;
-    if (form.id) {
-      next = tickets.map((t) => (t.id === form.id ? record : t));
+    const commitTicket = () => {
+      let next;
+      if (form.id) {
+        next = tickets.map((t) => (t.id === form.id ? record : t));
+      } else {
+        next = [record, ...tickets];
+      }
+      persistTickets(next);
+      rememberSuggestionsFromRecord(record);
+      if (wasEditing) showActionToast("Ticket updated");
+      setForm(getEmptyForm());
+      setSupplierOther(false);
+    };
+    // Editing an existing ticket asks for confirmation before the change is actually
+    // saved; adding a brand-new ticket saves right away.
+    if (wasEditing) {
+      requestConfirm("Save changes to this ticket?", commitTicket);
     } else {
-      next = [record, ...tickets];
+      commitTicket();
     }
-    persistTickets(next);
-    rememberSuggestionsFromRecord(record);
-    if (wasEditing) showActionToast("Ticket updated");
-    setForm(getEmptyForm());
-    setSupplierOther(false);
   };
 
   // The main account can always edit tickets; an employee can too, but only if they've
