@@ -11328,7 +11328,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 Cancel
               </button>
               <button
-                onClick={() => confirmDialog.onConfirm()}
+                onClick={() => {
+                  // Close the dialog automatically once confirmed, so callers don't each
+                  // need to remember to call setConfirmDialog(null) themselves.
+                  confirmDialog.onConfirm();
+                  setConfirmDialog(null);
+                }}
                 className="bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-3 py-2 shadow-sm shadow-teal-800/30 transition-colors"
               >
                 Confirm
