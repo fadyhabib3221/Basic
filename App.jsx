@@ -1622,7 +1622,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Display-language toggle for the Accounts section only (Arabic/English). Stored
   // values (expense categories, entry categories, etc.) always stay in Arabic — this
   // only controls what's shown on screen.
-  const [accountsLang, setAccountsLang] = useState("ar");
+  const [accountsLang, setAccountsLang] = useState("en");
   const at = (key) => {
     const val = ACCOUNTS_I18N[accountsLang][key];
     return val === undefined ? key : val;
@@ -4697,19 +4697,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const treasuryTransactions = [
     ...customerPayments.map((p) => ({
       id: `cp-${p.id}`, date: p.date, accountId: p.accountId, direction: "in",
-      label: `تحصيل من ${p.customer || "-"}`, note: p.note, amount: parseFloat(p.amount) || 0,
+      label: accountsLang === "en" ? `Collection from ${p.customer || "-"}` : `تحصيل من ${p.customer || "-"}`, note: p.note, amount: parseFloat(p.amount) || 0,
     })),
     ...supplierPayments.map((p) => ({
       id: `sp-${p.id}`, date: p.date, accountId: p.accountId, direction: "out",
-      label: `دفعة لـ ${p.supplier || "-"}`, note: p.note, amount: parseFloat(p.amount) || 0,
+      label: accountsLang === "en" ? `Payment to ${p.supplier || "-"}` : `دفعة لـ ${p.supplier || "-"}`, note: p.note, amount: parseFloat(p.amount) || 0,
     })),
     ...expenses.map((e) => ({
       id: `ex-${e.id}`, date: e.date, accountId: e.accountId, direction: "out",
-      label: e.category + (e.description ? ` - ${e.description}` : ""), note: e.note, amount: parseFloat(e.amount) || 0,
+      label: expenseCategoryLabel(e.category) + (e.description ? ` - ${e.description}` : ""), note: e.note, amount: parseFloat(e.amount) || 0,
     })),
     ...treasuryEntries.map((e) => ({
       id: `te-${e.id}`, date: e.date, accountId: e.accountId, direction: e.direction,
-      label: e.category, note: e.note, amount: parseFloat(e.amount) || 0,
+      label: treasuryEntryCategoryLabel(e.category), note: e.note, amount: parseFloat(e.amount) || 0,
     })),
   ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
