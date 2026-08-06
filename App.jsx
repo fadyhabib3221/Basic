@@ -3026,13 +3026,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // the print preview popup.
   const handlePrintTicket = (t) => {
     const customers = getCustomers(t);
-    const customerRows = customers.map((c, i) => [
-      `Customer ${i + 1}`,
-      `${c.name || "-"}${c.ticketNumber ? ` — ${c.ticketNumber}` : ""}${c.pnrReference ? ` (PNR: ${c.pnrReference})` : ""} — ${fmt(t.soldPrice)}`,
+    const customerRows = customers.flatMap((c, i) => [
+      [
+        `Customer ${i + 1}`,
+        `${c.name || "-"}${c.pnrReference ? ` (PNR: ${c.pnrReference})` : ""}`,
+      ],
+      [
+        "Ticket number",
+        `${c.ticketNumber || "-"}${c.conjunction && c.ticketNumber2 ? c.ticketNumber2 : ""}`,
+      ],
     ]);
-    if (customers.length > 1) {
-      customerRows.push(["Total", fmt((parseFloat(t.soldPrice) || 0) * customers.length)]);
-    }
 
     const sections = [
       {
@@ -3052,9 +3055,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       {
         heading: "Pricing",
         rows: [
-          ["Net price", fmt(t.netPrice)],
-          ["Sold price", fmt(t.soldPrice)],
-          ["Profit", fmt(profit(t.netPrice, t.soldPrice))],
+          ["Price per ticket", fmt(t.soldPrice)],
+          ...(customers.length > 1
+            ? [["Total", fmt((parseFloat(t.soldPrice) || 0) * customers.length)]]
+            : []),
         ],
       },
       ...(hasRefund(t)
