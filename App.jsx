@@ -837,7 +837,7 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
 
   useEffect(() => {
     if (emp) {
-      setDraft({ name: emp.name, username: emp.username, password: emp.password });
+      setDraft({ name: emp.name, username: emp.username, password: "" });
       setShowPassword(false);
       setSaveError("");
     }
@@ -895,6 +895,7 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
                 type={showPassword ? "text" : "password"}
                 className="w-full border border-stone-300 rounded-xl pl-2 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                 value={draft.password}
+                placeholder="Leave blank to keep current password"
                 onChange={(ev) => setDraft({ ...draft, password: ev.target.value })}
               />
               <button
@@ -3428,7 +3429,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setManageError("");
     setEditShowPassword(false);
     setEditingUsername(emp.username);
-    setEditDraft({ name: emp.name, username: emp.username, password: emp.password });
+    setEditDraft({ name: emp.name, username: emp.username, password: "" });
   };
 
   const cancelEditEmployee = () => {
@@ -3451,7 +3452,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setManageError("");
     const trimmedName = editDraft.name.trim();
     const trimmedUsername = editDraft.username.trim();
-    if (!trimmedName || !trimmedUsername || !editDraft.password) {
+    if (!trimmedName || !trimmedUsername) {
       setManageError("Please fill in all fields");
       return;
     }
@@ -3462,10 +3463,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       setManageError("That username is already taken by another account");
       return;
     }
-    const targetPassword =
-      editDraft.password === targetBeingEdited.password
-        ? targetBeingEdited.password
-        : await hashPassword(editDraft.password);
+    const targetPassword = editDraft.password ? await hashPassword(editDraft.password) : targetBeingEdited.password;
     const next = (employees || []).map((e) =>
       e.username === editingUsername
         ? { ...e, name: trimmedName, username: trimmedUsername, password: targetPassword }
@@ -3494,7 +3492,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     const trimmedName = draft.name.trim();
     const trimmedUsername = draft.username.trim();
-    if (!trimmedName || !trimmedUsername || !draft.password) {
+    if (!trimmedName || !trimmedUsername) {
       return "Please fill in all fields";
     }
     const clash = (employees || []).some(
@@ -3503,8 +3501,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (clash) {
       return "That username is already taken by another account";
     }
-    const targetPassword =
-      draft.password === target.password ? target.password : await hashPassword(draft.password);
+    const targetPassword = draft.password ? await hashPassword(draft.password) : target.password;
     const next = (employees || []).map((e) =>
       e.username === username
         ? { ...e, name: trimmedName, username: trimmedUsername, password: targetPassword }
@@ -6387,6 +6384,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 type={editShowPassword ? "text" : "password"}
                                 className="w-full border border-stone-300 rounded-xl pl-2 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                                 value={editDraft.password}
+                                placeholder="Leave blank to keep current"
                                 onChange={(ev) => setEditDraft({ ...editDraft, password: ev.target.value })}
                               />
                               <button
