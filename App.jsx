@@ -5791,9 +5791,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     jumpToRow(`ticket:${(t.oldTicketNumber || "").trim().toUpperCase()}`);
                   }}
                   title={`Exchanged from ${t.oldTicketNumber || "an older ticket"} — click to view the original ticket`}
-                  className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5 hover:bg-sky-200 cursor-pointer"
+                  className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full hover:bg-sky-200 cursor-pointer"
                 >
-                  Exchanged
+                  E
                 </span>
               )}
               {refundForIndex(t, i) && (
@@ -5803,9 +5803,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     jumpToRow(`refund:${(c.ticketNumber || "").trim().toUpperCase()}`);
                   }}
                   title={`Refunded — Airline: ${fmt(refundForIndex(t, i).airlineAmount)} · Customer: ${fmt(refundForIndex(t, i).customerAmount)} — click to view the refund`}
-                  className="inline-flex items-center text-[10px] font-semibold text-red-700 bg-red-100 border border-red-300 rounded-full px-1.5 py-0.5 hover:bg-red-200 cursor-pointer"
+                  className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-red-700 bg-red-100 border border-red-300 rounded-full hover:bg-red-200 cursor-pointer"
                 >
-                  Refunded
+                  R
                 </span>
               )}
             </span>
@@ -5867,10 +5867,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   e.stopPropagation();
                   jumpToRow(`ticket:${(refundTicketNumber || "").trim().toUpperCase()}`);
                 }}
-                title="Click to view the original ticket"
+                title="Refund — click to view the original ticket"
                 className={`inline-flex items-center text-[10px] font-semibold rounded-full px-1.5 py-0.5 cursor-pointer ${rowBadgeClasses}`}
               >
-                ↳ Refund
+                ↳ R
               </span>
             </span>
           </td>
