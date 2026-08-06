@@ -1256,6 +1256,96 @@ const AIRPORTS = [
   ["APW", "Apia, Samoa"], ["TBU", "Nuku'alofa, Tonga"], ["GUM", "Guam"], ["SPN", "Saipan"],
 ].map(([code, place]) => `${code} - ${place}`.toUpperCase());
 
+// A small dropdown that lets the user tick any number of checkboxes instead of picking
+// just one value. Used for every "Year / Month / Company / Employee / Supplier" style
+// filter across the app so people can e.g. select two or three years at once.
+// `options` can be an array of plain strings, or an array of { value, label } objects
+// when the display text needs to differ from the underlying value (e.g. months).
+function MultiSelectDropdown({ label, icon: Icon, options, selected, onChange, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e) => {
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  const normalized = options.map((opt) =>
+    typeof opt === "object" && opt !== null ? opt : { value: opt, label: opt }
+  );
+
+  const toggleValue = (value) => {
+    if (selected.includes(value)) {
+      onChange(selected.filter((v) => v !== value));
+    } else {
+      onChange([...selected, value]);
+    }
+  };
+
+  const selectedLabels = normalized
+    .filter((opt) => selected.includes(opt.value))
+    .map((opt) => opt.label);
+
+  const displayText =
+    selectedLabels.length === 0
+      ? placeholder
+      : selectedLabels.length === 1
+      ? selectedLabels[0]
+      : `${selectedLabels.length} selected`;
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`w-auto max-w-[160px] flex items-center gap-1 border rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none relative ${
+          selected.length > 0 ? "border-teal-700 text-teal-800" : "border-stone-300 text-stone-700"
+        }`}
+      >
+        {Icon && (
+          <Icon size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+        )}
+        <span className="truncate">{displayText}</span>
+        <ChevronDown size={12} className={`ml-auto shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-48 max-h-64 overflow-auto bg-white border border-stone-200 rounded-lg shadow-lg py-1">
+          {normalized.length === 0 && (
+            <div className="px-3 py-2 text-xs text-stone-400">No options</div>
+          )}
+          {normalized.map((opt) => (
+            <label
+              key={opt.value}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-stone-50 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(opt.value)}
+                onChange={() => toggleValue(opt.value)}
+                className="accent-teal-700"
+              />
+              <span className="truncate">{opt.label}</span>
+            </label>
+          ))}
+          {selected.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="w-full text-left px-3 py-1.5 text-xs text-teal-700 hover:bg-stone-50 border-t border-stone-100 mt-1"
+            >
+              Clear {label}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Prevent the mouse/trackpad scroll wheel from changing the value of a focused
   // number input. Browsers normally let scrolling over a focused number field
@@ -1572,43 +1662,45 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [refundBoxOpen, setRefundBoxOpen] = useState(false);
   const [refundRows, setRefundRows] = useState([{ number: "", airlineAmount: "", customerAmount: "", customerIndex: 0 }]);
   const [refundSaved, setRefundSaved] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState("");
-  const [selectedYear, setSelectedYear] = useState("");
-  const [selectedCompany, setSelectedCompany] = useState("");
-  const [selectedEmployee, setSelectedEmployee] = useState("");
-  const [selectedSupplier, setSelectedSupplier] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState([]);
+  const [selectedYear, setSelectedYear] = useState([]);
+  const [selectedCompany, setSelectedCompany] = useState([]);
+  const [selectedEmployee, setSelectedEmployee] = useState([]);
+  const [selectedSupplier, setSelectedSupplier] = useState([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Search + filter state for the Hotels, Visa, Transportation, and Files sections —
   // each section gets its own independent search box and filter set (mirroring the
   // Flights search/filters above), matched to the fields that section actually has.
+  // Each filter below holds an array of selected values, so more than one option
+  // (e.g. two years, or three employees) can be picked at once.
   const [hotelQuery, setHotelQuery] = useState("");
   const [hotelFiltersOpen, setHotelFiltersOpen] = useState(false);
-  const [hotelSelectedYear, setHotelSelectedYear] = useState("");
-  const [hotelSelectedMonth, setHotelSelectedMonth] = useState("");
-  const [hotelSelectedEmployee, setHotelSelectedEmployee] = useState("");
-  const [hotelSelectedSupplier, setHotelSelectedSupplier] = useState("");
-  const [hotelSelectedHotelName, setHotelSelectedHotelName] = useState("");
+  const [hotelSelectedYear, setHotelSelectedYear] = useState([]);
+  const [hotelSelectedMonth, setHotelSelectedMonth] = useState([]);
+  const [hotelSelectedEmployee, setHotelSelectedEmployee] = useState([]);
+  const [hotelSelectedSupplier, setHotelSelectedSupplier] = useState([]);
+  const [hotelSelectedHotelName, setHotelSelectedHotelName] = useState([]);
 
   const [visaQuery, setVisaQuery] = useState("");
   const [visaFiltersOpen, setVisaFiltersOpen] = useState(false);
-  const [visaSelectedYear, setVisaSelectedYear] = useState("");
-  const [visaSelectedMonth, setVisaSelectedMonth] = useState("");
-  const [visaSelectedEmployee, setVisaSelectedEmployee] = useState("");
-  const [visaSelectedSupplier, setVisaSelectedSupplier] = useState("");
+  const [visaSelectedYear, setVisaSelectedYear] = useState([]);
+  const [visaSelectedMonth, setVisaSelectedMonth] = useState([]);
+  const [visaSelectedEmployee, setVisaSelectedEmployee] = useState([]);
+  const [visaSelectedSupplier, setVisaSelectedSupplier] = useState([]);
 
   const [carQuery, setCarQuery] = useState("");
   const [carFiltersOpen, setCarFiltersOpen] = useState(false);
-  const [carSelectedYear, setCarSelectedYear] = useState("");
-  const [carSelectedMonth, setCarSelectedMonth] = useState("");
-  const [carSelectedEmployee, setCarSelectedEmployee] = useState("");
-  const [carSelectedSupplier, setCarSelectedSupplier] = useState("");
+  const [carSelectedYear, setCarSelectedYear] = useState([]);
+  const [carSelectedMonth, setCarSelectedMonth] = useState([]);
+  const [carSelectedEmployee, setCarSelectedEmployee] = useState([]);
+  const [carSelectedSupplier, setCarSelectedSupplier] = useState([]);
 
   const [fileQuery, setFileQuery] = useState("");
   const [fileFiltersOpen, setFileFiltersOpen] = useState(false);
-  const [fileSelectedYear, setFileSelectedYear] = useState("");
-  const [fileSelectedCompany, setFileSelectedCompany] = useState("");
-  const [fileSelectedEmployee, setFileSelectedEmployee] = useState("");
+  const [fileSelectedYear, setFileSelectedYear] = useState([]);
+  const [fileSelectedCompany, setFileSelectedCompany] = useState([]);
+  const [fileSelectedEmployee, setFileSelectedEmployee] = useState([]);
 
   // Every value ever entered (companies, customers, airlines, cities) is kept here so it
   // can be offered as an autocomplete suggestion later, even if the original ticket is deleted.
@@ -4262,25 +4354,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   ).sort((a, b) => a.localeCompare(b));
 
   const hasActiveHotelFilter = !!(
-    hotelSelectedYear || hotelSelectedMonth || hotelSelectedEmployee || hotelSelectedSupplier || hotelSelectedHotelName || hotelQuery.trim()
+    hotelSelectedYear.length || hotelSelectedMonth.length || hotelSelectedEmployee.length || hotelSelectedSupplier.length || hotelSelectedHotelName.length || hotelQuery.trim()
   );
-  const activeHotelFilterCount = [
-    hotelSelectedYear, hotelSelectedMonth, hotelSelectedEmployee, hotelSelectedSupplier, hotelSelectedHotelName, hotelQuery.trim(),
-  ].filter(Boolean).length;
+  const activeHotelFilterCount =
+    hotelSelectedYear.length + hotelSelectedMonth.length + hotelSelectedEmployee.length + hotelSelectedSupplier.length + hotelSelectedHotelName.length + (hotelQuery.trim() ? 1 : 0);
   const clearAllHotelFilters = () => {
     setHotelQuery("");
-    setHotelSelectedYear("");
-    setHotelSelectedMonth("");
-    setHotelSelectedEmployee("");
-    setHotelSelectedSupplier("");
-    setHotelSelectedHotelName("");
+    setHotelSelectedYear([]);
+    setHotelSelectedMonth([]);
+    setHotelSelectedEmployee([]);
+    setHotelSelectedSupplier([]);
+    setHotelSelectedHotelName([]);
   };
   const filteredHotelBookings = visibleHotelBookings.filter((h) => {
-    if (hotelSelectedYear && (h.bookingDate || "").slice(0, 4) !== hotelSelectedYear) return false;
-    if (hotelSelectedMonth && monthKey(h.bookingDate) !== hotelSelectedMonth) return false;
-    if (hotelSelectedEmployee && (h.employee || "").trim() !== hotelSelectedEmployee) return false;
-    if (hotelSelectedSupplier && (h.supplier || "").trim() !== hotelSelectedSupplier) return false;
-    if (hotelSelectedHotelName && (h.hotel || "").trim() !== hotelSelectedHotelName) return false;
+    if (hotelSelectedYear.length && !hotelSelectedYear.includes((h.bookingDate || "").slice(0, 4))) return false;
+    if (hotelSelectedMonth.length && !hotelSelectedMonth.includes(monthKey(h.bookingDate))) return false;
+    if (hotelSelectedEmployee.length && !hotelSelectedEmployee.includes((h.employee || "").trim())) return false;
+    if (hotelSelectedSupplier.length && !hotelSelectedSupplier.includes((h.supplier || "").trim())) return false;
+    if (hotelSelectedHotelName.length && !hotelSelectedHotelName.includes((h.hotel || "").trim())) return false;
     const q = hotelQuery.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -4314,18 +4405,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     new Set(visibleVisaBookings.map((v) => (v.supplier || "").trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
-  const hasActiveVisaFilter = !!(visaSelectedYear || visaSelectedMonth || visaSelectedSupplier || visaQuery.trim());
-  const activeVisaFilterCount = [visaSelectedYear, visaSelectedMonth, visaSelectedSupplier, visaQuery.trim()].filter(Boolean).length;
+  const hasActiveVisaFilter = !!(visaSelectedYear.length || visaSelectedMonth.length || visaSelectedSupplier.length || visaQuery.trim());
+  const activeVisaFilterCount = visaSelectedYear.length + visaSelectedMonth.length + visaSelectedSupplier.length + (visaQuery.trim() ? 1 : 0);
   const clearAllVisaFilters = () => {
     setVisaQuery("");
-    setVisaSelectedYear("");
-    setVisaSelectedMonth("");
-    setVisaSelectedSupplier("");
+    setVisaSelectedYear([]);
+    setVisaSelectedMonth([]);
+    setVisaSelectedSupplier([]);
   };
   const filteredVisaBookings = visibleVisaBookings.filter((v) => {
-    if (visaSelectedYear && (v.bookingDate || "").slice(0, 4) !== visaSelectedYear) return false;
-    if (visaSelectedMonth && monthKey(v.bookingDate) !== visaSelectedMonth) return false;
-    if (visaSelectedSupplier && (v.supplier || "").trim() !== visaSelectedSupplier) return false;
+    if (visaSelectedYear.length && !visaSelectedYear.includes((v.bookingDate || "").slice(0, 4))) return false;
+    if (visaSelectedMonth.length && !visaSelectedMonth.includes(monthKey(v.bookingDate))) return false;
+    if (visaSelectedSupplier.length && !visaSelectedSupplier.includes((v.supplier || "").trim())) return false;
     const q = visaQuery.trim().toLowerCase();
     if (!q) return true;
     const customerNames = (v.customers || []).map((c) => c.name || "").join(" ");
@@ -4357,18 +4448,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     new Set(visibleCarBookings.map((c) => (c.supplier || "").trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
-  const hasActiveCarFilter = !!(carSelectedYear || carSelectedMonth || carSelectedSupplier || carQuery.trim());
-  const activeCarFilterCount = [carSelectedYear, carSelectedMonth, carSelectedSupplier, carQuery.trim()].filter(Boolean).length;
+  const hasActiveCarFilter = !!(carSelectedYear.length || carSelectedMonth.length || carSelectedSupplier.length || carQuery.trim());
+  const activeCarFilterCount = carSelectedYear.length + carSelectedMonth.length + carSelectedSupplier.length + (carQuery.trim() ? 1 : 0);
   const clearAllCarFilters = () => {
     setCarQuery("");
-    setCarSelectedYear("");
-    setCarSelectedMonth("");
-    setCarSelectedSupplier("");
+    setCarSelectedYear([]);
+    setCarSelectedMonth([]);
+    setCarSelectedSupplier([]);
   };
   const filteredCarBookings = visibleCarBookings.filter((c) => {
-    if (carSelectedYear && (c.bookingDate || "").slice(0, 4) !== carSelectedYear) return false;
-    if (carSelectedMonth && monthKey(c.bookingDate) !== carSelectedMonth) return false;
-    if (carSelectedSupplier && (c.supplier || "").trim() !== carSelectedSupplier) return false;
+    if (carSelectedYear.length && !carSelectedYear.includes((c.bookingDate || "").slice(0, 4))) return false;
+    if (carSelectedMonth.length && !carSelectedMonth.includes(monthKey(c.bookingDate))) return false;
+    if (carSelectedSupplier.length && !carSelectedSupplier.includes((c.supplier || "").trim())) return false;
     const q = carQuery.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -4847,18 +4938,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     new Set(visibleFiles.map((f) => (f.createdBy || "").trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
-  const hasActiveFileFilter = !!(fileSelectedYear || fileSelectedCompany || fileSelectedEmployee || fileQuery.trim());
-  const activeFileFilterCount = [fileSelectedYear, fileSelectedCompany, fileSelectedEmployee, fileQuery.trim()].filter(Boolean).length;
+  const hasActiveFileFilter = !!(fileSelectedYear.length || fileSelectedCompany.length || fileSelectedEmployee.length || fileQuery.trim());
+  const activeFileFilterCount = fileSelectedYear.length + fileSelectedCompany.length + fileSelectedEmployee.length + (fileQuery.trim() ? 1 : 0);
   const clearAllFileFilters = () => {
     setFileQuery("");
-    setFileSelectedYear("");
-    setFileSelectedCompany("");
-    setFileSelectedEmployee("");
+    setFileSelectedYear([]);
+    setFileSelectedCompany([]);
+    setFileSelectedEmployee([]);
   };
   const filteredFiles = visibleFiles.filter((f) => {
-    if (fileSelectedYear && (f.createdAt || "").slice(0, 4) !== fileSelectedYear) return false;
-    if (fileSelectedCompany && (f.company || "").trim() !== fileSelectedCompany) return false;
-    if (fileSelectedEmployee && (f.createdBy || "").trim() !== fileSelectedEmployee) return false;
+    if (fileSelectedYear.length && !fileSelectedYear.includes((f.createdAt || "").slice(0, 4))) return false;
+    if (fileSelectedCompany.length && !fileSelectedCompany.includes((f.company || "").trim())) return false;
+    if (fileSelectedEmployee.length && !fileSelectedEmployee.includes((f.createdBy || "").trim())) return false;
     const q = fileQuery.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -5091,24 +5182,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     new Set(visibleTickets.map((t) => (t.supplier || "").trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
-  const byMonth = selectedMonth
-    ? visibleTickets.filter((t) => monthKey(t.date) === selectedMonth)
+  const byMonth = selectedMonth.length
+    ? visibleTickets.filter((t) => selectedMonth.includes(monthKey(t.date)))
     : visibleTickets;
 
-  const byYear = selectedYear
-    ? byMonth.filter((t) => (t.date || "").slice(0, 4) === selectedYear)
+  const byYear = selectedYear.length
+    ? byMonth.filter((t) => selectedYear.includes((t.date || "").slice(0, 4)))
     : byMonth;
 
-  const byCompany = selectedCompany
-    ? byYear.filter((t) => (t.company || "").trim() === selectedCompany)
+  const byCompany = selectedCompany.length
+    ? byYear.filter((t) => selectedCompany.includes((t.company || "").trim()))
     : byYear;
 
-  const byEmployee = selectedEmployee
-    ? byCompany.filter((t) => (t.employee || "").trim() === selectedEmployee)
+  const byEmployee = selectedEmployee.length
+    ? byCompany.filter((t) => selectedEmployee.includes((t.employee || "").trim()))
     : byCompany;
 
-  const bySupplier = selectedSupplier
-    ? byEmployee.filter((t) => (t.supplier || "").trim() === selectedSupplier)
+  const bySupplier = selectedSupplier.length
+    ? byEmployee.filter((t) => selectedSupplier.includes((t.supplier || "").trim()))
     : byEmployee;
 
   const filtered = bySupplier.filter((t) => {
@@ -5339,12 +5430,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // at the top of an export instead of forcing whoever opens the file to guess what
   // selection it represents.
   const describeFilters = ({ month, year, company, employee, supplier, search } = {}) => {
+    // Each of month/year/company/employee/supplier may be passed as a single value
+    // (a plain string, e.g. from exportMonth) or an array of several selected values
+    // (from the multi-select filters) — join arrays with an Arabic-style comma.
+    const joinVal = (v) => (Array.isArray(v) ? v.join("، ") : v);
+    const hasVal = (v) => (Array.isArray(v) ? v.length > 0 : !!v);
     const parts = [];
-    if (year) parts.push(`السنة: ${year}`);
-    if (month) parts.push(`الشهر: ${monthLabel(month)}`);
-    if (company) parts.push(`الشركة: ${company}`);
-    if (employee) parts.push(`الموظف: ${employee}`);
-    if (supplier) parts.push(`المورد: ${supplier}`);
+    if (hasVal(year)) parts.push(`السنة: ${joinVal(year)}`);
+    if (hasVal(month)) parts.push(`الشهر: ${Array.isArray(month) ? month.map(monthLabel).join("، ") : monthLabel(month)}`);
+    if (hasVal(company)) parts.push(`الشركة: ${joinVal(company)}`);
+    if (hasVal(employee)) parts.push(`الموظف: ${joinVal(employee)}`);
+    if (hasVal(supplier)) parts.push(`المورد: ${joinVal(supplier)}`);
     if (search) parts.push(`بحث: ${search}`);
     return parts.length ? `الفلاتر المطبقة — ${parts.join("  |  ")}` : "بدون فلاتر — كل النتائج";
   };
@@ -5396,20 +5492,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // employee / supplier filters AND the search box (any combination) — the same set of
   // tickets currently shown on screen — sorted by issue date (same-day tickets ordered
   // by ticket number ascending), as a single sheet ending with a totals row.
-  const hasActiveFilter = !!(selectedMonth || selectedYear || selectedCompany || selectedEmployee || selectedSupplier || query.trim());
+  const hasActiveFilter = !!(selectedMonth.length || selectedYear.length || selectedCompany.length || selectedEmployee.length || selectedSupplier.length || query.trim());
 
   // Count of active filters/search, shown as a badge on the "Filters" toggle button so
   // the person can see at a glance how many are applied without opening the panel.
-  const activeFilterCount = [selectedYear, selectedMonth, selectedCompany, selectedEmployee, selectedSupplier, query.trim()].filter(Boolean).length;
+  const activeFilterCount =
+    selectedYear.length + selectedMonth.length + selectedCompany.length + selectedEmployee.length + selectedSupplier.length + (query.trim() ? 1 : 0);
 
   // Resets every filter and the search box at once — used by the "Clear all" action
   // in the filter chips row.
   const clearAllFilters = () => {
-    setSelectedYear("");
-    setSelectedMonth("");
-    setSelectedCompany("");
-    setSelectedEmployee("");
-    setSelectedSupplier("");
+    setSelectedYear([]);
+    setSelectedMonth([]);
+    setSelectedCompany([]);
+    setSelectedEmployee([]);
+    setSelectedSupplier([]);
     setQuery("");
   };
 
@@ -5432,6 +5529,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       selectedEmployee,
       selectedSupplier,
     ]
+      .flat()
       .filter(Boolean)
       .map((p) => p.replace(/[^a-zA-Z0-9-]+/g, "_"));
     XLSX.writeFile(wb, `tickets_${parts.length ? parts.join("_") : "filtered"}.xlsx`);
@@ -6657,11 +6755,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm text-stone-500">
             Totals for: <span className="font-semibold text-stone-700">
-              {selectedYear ? selectedYear : ""}
-              {selectedMonth ? ` · ${monthLabel(selectedMonth)}` : ""}
-              {selectedCompany ? ` · ${selectedCompany}` : ""}
-              {selectedEmployee ? ` · ${selectedEmployee}` : ""}
-              {selectedSupplier ? ` · ${selectedSupplier}` : ""}
+              {selectedYear.length ? selectedYear.join(", ") : ""}
+              {selectedMonth.length ? ` · ${selectedMonth.map(monthLabel).join(", ")}` : ""}
+              {selectedCompany.length ? ` · ${selectedCompany.join(", ")}` : ""}
+              {selectedEmployee.length ? ` · ${selectedEmployee.join(", ")}` : ""}
+              {selectedSupplier.length ? ` · ${selectedSupplier.join(", ")}` : ""}
               {!hasActiveFilter && "all months"}
             </span>
           </p>
@@ -7366,83 +7464,58 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-stone-100">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Year</label>
-                <div className="relative">
-                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(e.target.value)}
-                  >
-                    <option value="">All years</option>
-                    {yearsAvailable.map((y) => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="years"
+                  icon={Calendar}
+                  options={yearsAvailable}
+                  selected={selectedYear}
+                  onChange={setSelectedYear}
+                  placeholder="All years"
+                />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Month</label>
-                <div className="relative">
-                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                  >
-                    <option value="">All months</option>
-                    {monthsAvailable.map((key) => (
-                      <option key={key} value={key}>{monthLabel(key)}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="months"
+                  icon={Calendar}
+                  options={monthsAvailable.map((key) => ({ value: key, label: monthLabel(key) }))}
+                  selected={selectedMonth}
+                  onChange={setSelectedMonth}
+                  placeholder="All months"
+                />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Company</label>
-                <div className="relative">
-                  <Building2 size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={selectedCompany}
-                    onChange={(e) => setSelectedCompany(e.target.value)}
-                  >
-                    <option value="">All companies</option>
-                    {companiesAvailable.map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="companies"
+                  icon={Building2}
+                  options={companiesAvailable}
+                  selected={selectedCompany}
+                  onChange={setSelectedCompany}
+                  placeholder="All companies"
+                />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Employee</label>
-                <div className="relative">
-                  <User size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={selectedEmployee}
-                    onChange={(e) => setSelectedEmployee(e.target.value)}
-                  >
-                    <option value="">All employees</option>
-                    {employeesAvailable.map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="employees"
+                  icon={User}
+                  options={employeesAvailable}
+                  selected={selectedEmployee}
+                  onChange={setSelectedEmployee}
+                  placeholder="All employees"
+                />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Supplier</label>
-                <div className="relative">
-                  <Plane size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={selectedSupplier}
-                    onChange={(e) => setSelectedSupplier(e.target.value)}
-                  >
-                    <option value="">All suppliers</option>
-                    {suppliersAvailable.map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="suppliers"
+                  icon={Plane}
+                  options={suppliersAvailable}
+                  selected={selectedSupplier}
+                  onChange={setSelectedSupplier}
+                  placeholder="All suppliers"
+                />
               </div>
             </div>
           )}
@@ -7450,36 +7523,36 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           {hasActiveFilter && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
               <span className="text-stone-400 font-medium">Applied:</span>
-              {selectedYear && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Year: <span className="font-semibold text-stone-800">{selectedYear}</span>
-                  <button onClick={() => setSelectedYear("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              {selectedYear.map((y) => (
+                <span key={`year-${y}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Year: <span className="font-semibold text-stone-800">{y}</span>
+                  <button onClick={() => setSelectedYear(selectedYear.filter((v) => v !== y))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
-              {selectedMonth && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Month: <span className="font-semibold text-stone-800">{monthLabel(selectedMonth)}</span>
-                  <button onClick={() => setSelectedMonth("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              ))}
+              {selectedMonth.map((m) => (
+                <span key={`month-${m}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Month: <span className="font-semibold text-stone-800">{monthLabel(m)}</span>
+                  <button onClick={() => setSelectedMonth(selectedMonth.filter((v) => v !== m))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
-              {selectedCompany && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Company: <span className="font-semibold text-stone-800">{selectedCompany}</span>
-                  <button onClick={() => setSelectedCompany("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              ))}
+              {selectedCompany.map((c) => (
+                <span key={`company-${c}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Company: <span className="font-semibold text-stone-800">{c}</span>
+                  <button onClick={() => setSelectedCompany(selectedCompany.filter((v) => v !== c))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
-              {selectedEmployee && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Employee: <span className="font-semibold text-stone-800">{selectedEmployee}</span>
-                  <button onClick={() => setSelectedEmployee("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              ))}
+              {selectedEmployee.map((e) => (
+                <span key={`employee-${e}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Employee: <span className="font-semibold text-stone-800">{e}</span>
+                  <button onClick={() => setSelectedEmployee(selectedEmployee.filter((v) => v !== e))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
-              {selectedSupplier && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Supplier: <span className="font-semibold text-stone-800">{selectedSupplier}</span>
-                  <button onClick={() => setSelectedSupplier("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              ))}
+              {selectedSupplier.map((s) => (
+                <span key={`supplier-${s}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Supplier: <span className="font-semibold text-stone-800">{s}</span>
+                  <button onClick={() => setSelectedSupplier(selectedSupplier.filter((v) => v !== s))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
+              ))}
               {query.trim() && (
                 <span className="inline-flex items-center gap-1 text-stone-600">
                   Search: <span className="font-semibold text-stone-800">"{query.trim()}"</span>
@@ -7552,7 +7625,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           )}
         </div>
 
-        {!selectedMonth && monthlyBreakdown.length > 0 && (
+        {selectedMonth.length === 0 && monthlyBreakdown.length > 0 && (
           <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden mt-6">
             <div className="px-4 py-3 border-b border-stone-100">
               <h2 className="font-semibold text-stone-900 text-sm">Totals by month</h2>
@@ -7599,7 +7672,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         )}
 
-        {!selectedCompany && companyBreakdown.length > 0 && (
+        {selectedCompany.length === 0 && companyBreakdown.length > 0 && (
           <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden mt-6">
             <div className="px-4 py-3 border-b border-stone-100">
               <h2 className="font-semibold text-stone-900 text-sm">Companies and their customers</h2>
@@ -8176,83 +8249,58 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-stone-100">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Year</label>
-                <div className="relative">
-                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={hotelSelectedYear}
-                    onChange={(e) => setHotelSelectedYear(e.target.value)}
-                  >
-                    <option value="">All years</option>
-                    {hotelYearsAvailable.map((y) => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="years"
+                  icon={Calendar}
+                  options={hotelYearsAvailable}
+                  selected={hotelSelectedYear}
+                  onChange={setHotelSelectedYear}
+                  placeholder="All years"
+                />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Month</label>
-                <div className="relative">
-                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={hotelSelectedMonth}
-                    onChange={(e) => setHotelSelectedMonth(e.target.value)}
-                  >
-                    <option value="">All months</option>
-                    {hotelMonthsAvailable.map((key) => (
-                      <option key={key} value={key}>{monthLabel(key)}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="months"
+                  icon={Calendar}
+                  options={hotelMonthsAvailable.map((key) => ({ value: key, label: monthLabel(key) }))}
+                  selected={hotelSelectedMonth}
+                  onChange={setHotelSelectedMonth}
+                  placeholder="All months"
+                />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Employee</label>
-                <div className="relative">
-                  <User size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={hotelSelectedEmployee}
-                    onChange={(e) => setHotelSelectedEmployee(e.target.value)}
-                  >
-                    <option value="">All employees</option>
-                    {hotelEmployeesAvailable.map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="employees"
+                  icon={User}
+                  options={hotelEmployeesAvailable}
+                  selected={hotelSelectedEmployee}
+                  onChange={setHotelSelectedEmployee}
+                  placeholder="All employees"
+                />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Supplier</label>
-                <div className="relative">
-                  <Building2 size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={hotelSelectedSupplier}
-                    onChange={(e) => setHotelSelectedSupplier(e.target.value)}
-                  >
-                    <option value="">All suppliers</option>
-                    {hotelSuppliersAvailable.map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="suppliers"
+                  icon={Building2}
+                  options={hotelSuppliersAvailable}
+                  selected={hotelSelectedSupplier}
+                  onChange={setHotelSelectedSupplier}
+                  placeholder="All suppliers"
+                />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Hotel</label>
-                <div className="relative">
-                  <Building2 size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={hotelSelectedHotelName}
-                    onChange={(e) => setHotelSelectedHotelName(e.target.value)}
-                  >
-                    <option value="">All hotels</option>
-                    {hotelNamesAvailable.map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="hotels"
+                  icon={Building2}
+                  options={hotelNamesAvailable}
+                  selected={hotelSelectedHotelName}
+                  onChange={setHotelSelectedHotelName}
+                  placeholder="All hotels"
+                />
               </div>
             </div>
           )}
@@ -8260,36 +8308,36 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           {hasActiveHotelFilter && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
               <span className="text-stone-400 font-medium">Applied:</span>
-              {hotelSelectedYear && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Year: <span className="font-semibold text-stone-800">{hotelSelectedYear}</span>
-                  <button onClick={() => setHotelSelectedYear("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              {hotelSelectedYear.map((y) => (
+                <span key={`year-${y}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Year: <span className="font-semibold text-stone-800">{y}</span>
+                  <button onClick={() => setHotelSelectedYear(hotelSelectedYear.filter((v) => v !== y))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
-              {hotelSelectedMonth && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Month: <span className="font-semibold text-stone-800">{monthLabel(hotelSelectedMonth)}</span>
-                  <button onClick={() => setHotelSelectedMonth("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              ))}
+              {hotelSelectedMonth.map((m) => (
+                <span key={`month-${m}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Month: <span className="font-semibold text-stone-800">{monthLabel(m)}</span>
+                  <button onClick={() => setHotelSelectedMonth(hotelSelectedMonth.filter((v) => v !== m))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
-              {hotelSelectedEmployee && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Employee: <span className="font-semibold text-stone-800">{hotelSelectedEmployee}</span>
-                  <button onClick={() => setHotelSelectedEmployee("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              ))}
+              {hotelSelectedEmployee.map((e) => (
+                <span key={`employee-${e}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Employee: <span className="font-semibold text-stone-800">{e}</span>
+                  <button onClick={() => setHotelSelectedEmployee(hotelSelectedEmployee.filter((v) => v !== e))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
-              {hotelSelectedSupplier && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Supplier: <span className="font-semibold text-stone-800">{hotelSelectedSupplier}</span>
-                  <button onClick={() => setHotelSelectedSupplier("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              ))}
+              {hotelSelectedSupplier.map((s) => (
+                <span key={`supplier-${s}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Supplier: <span className="font-semibold text-stone-800">{s}</span>
+                  <button onClick={() => setHotelSelectedSupplier(hotelSelectedSupplier.filter((v) => v !== s))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
-              {hotelSelectedHotelName && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Hotel: <span className="font-semibold text-stone-800">{hotelSelectedHotelName}</span>
-                  <button onClick={() => setHotelSelectedHotelName("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              ))}
+              {hotelSelectedHotelName.map((h) => (
+                <span key={`hotel-${h}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Hotel: <span className="font-semibold text-stone-800">{h}</span>
+                  <button onClick={() => setHotelSelectedHotelName(hotelSelectedHotelName.filter((v) => v !== h))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
+              ))}
               {hotelQuery.trim() && (
                 <span className="inline-flex items-center gap-1 text-stone-600">
                   Search: <span className="font-semibold text-stone-800">"{hotelQuery.trim()}"</span>
@@ -8783,51 +8831,36 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-stone-100">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Year</label>
-                <div className="relative">
-                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={visaSelectedYear}
-                    onChange={(e) => setVisaSelectedYear(e.target.value)}
-                  >
-                    <option value="">All years</option>
-                    {visaYearsAvailable.map((y) => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="years"
+                  icon={Calendar}
+                  options={visaYearsAvailable}
+                  selected={visaSelectedYear}
+                  onChange={setVisaSelectedYear}
+                  placeholder="All years"
+                />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Month</label>
-                <div className="relative">
-                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={visaSelectedMonth}
-                    onChange={(e) => setVisaSelectedMonth(e.target.value)}
-                  >
-                    <option value="">All months</option>
-                    {visaMonthsAvailable.map((key) => (
-                      <option key={key} value={key}>{monthLabel(key)}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="months"
+                  icon={Calendar}
+                  options={visaMonthsAvailable.map((key) => ({ value: key, label: monthLabel(key) }))}
+                  selected={visaSelectedMonth}
+                  onChange={setVisaSelectedMonth}
+                  placeholder="All months"
+                />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Supplier</label>
-                <div className="relative">
-                  <Building2 size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={visaSelectedSupplier}
-                    onChange={(e) => setVisaSelectedSupplier(e.target.value)}
-                  >
-                    <option value="">All suppliers</option>
-                    {visaSuppliersAvailable.map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="suppliers"
+                  icon={Building2}
+                  options={visaSuppliersAvailable}
+                  selected={visaSelectedSupplier}
+                  onChange={setVisaSelectedSupplier}
+                  placeholder="All suppliers"
+                />
               </div>
             </div>
           )}
@@ -8835,24 +8868,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           {hasActiveVisaFilter && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
               <span className="text-stone-400 font-medium">Applied:</span>
-              {visaSelectedYear && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Year: <span className="font-semibold text-stone-800">{visaSelectedYear}</span>
-                  <button onClick={() => setVisaSelectedYear("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              {visaSelectedYear.map((y) => (
+                <span key={`year-${y}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Year: <span className="font-semibold text-stone-800">{y}</span>
+                  <button onClick={() => setVisaSelectedYear(visaSelectedYear.filter((v) => v !== y))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
-              {visaSelectedMonth && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Month: <span className="font-semibold text-stone-800">{monthLabel(visaSelectedMonth)}</span>
-                  <button onClick={() => setVisaSelectedMonth("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              ))}
+              {visaSelectedMonth.map((m) => (
+                <span key={`month-${m}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Month: <span className="font-semibold text-stone-800">{monthLabel(m)}</span>
+                  <button onClick={() => setVisaSelectedMonth(visaSelectedMonth.filter((v) => v !== m))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
-              {visaSelectedSupplier && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Supplier: <span className="font-semibold text-stone-800">{visaSelectedSupplier}</span>
-                  <button onClick={() => setVisaSelectedSupplier("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              ))}
+              {visaSelectedSupplier.map((s) => (
+                <span key={`supplier-${s}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Supplier: <span className="font-semibold text-stone-800">{s}</span>
+                  <button onClick={() => setVisaSelectedSupplier(visaSelectedSupplier.filter((v) => v !== s))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
+              ))}
               {visaQuery.trim() && (
                 <span className="inline-flex items-center gap-1 text-stone-600">
                   Search: <span className="font-semibold text-stone-800">"{visaQuery.trim()}"</span>
@@ -9439,51 +9472,36 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-stone-100">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Year</label>
-                <div className="relative">
-                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={carSelectedYear}
-                    onChange={(e) => setCarSelectedYear(e.target.value)}
-                  >
-                    <option value="">All years</option>
-                    {carYearsAvailable.map((y) => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="years"
+                  icon={Calendar}
+                  options={carYearsAvailable}
+                  selected={carSelectedYear}
+                  onChange={setCarSelectedYear}
+                  placeholder="All years"
+                />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Month</label>
-                <div className="relative">
-                  <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={carSelectedMonth}
-                    onChange={(e) => setCarSelectedMonth(e.target.value)}
-                  >
-                    <option value="">All months</option>
-                    {carMonthsAvailable.map((key) => (
-                      <option key={key} value={key}>{monthLabel(key)}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="months"
+                  icon={Calendar}
+                  options={carMonthsAvailable.map((key) => ({ value: key, label: monthLabel(key) }))}
+                  selected={carSelectedMonth}
+                  onChange={setCarSelectedMonth}
+                  placeholder="All months"
+                />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Supplier</label>
-                <div className="relative">
-                  <Building2 size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  <select
-                    className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                    value={carSelectedSupplier}
-                    onChange={(e) => setCarSelectedSupplier(e.target.value)}
-                  >
-                    <option value="">All suppliers</option>
-                    {carSuppliersAvailable.map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="suppliers"
+                  icon={Building2}
+                  options={carSuppliersAvailable}
+                  selected={carSelectedSupplier}
+                  onChange={setCarSelectedSupplier}
+                  placeholder="All suppliers"
+                />
               </div>
             </div>
           )}
@@ -9491,24 +9509,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           {hasActiveCarFilter && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
               <span className="text-stone-400 font-medium">Applied:</span>
-              {carSelectedYear && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Year: <span className="font-semibold text-stone-800">{carSelectedYear}</span>
-                  <button onClick={() => setCarSelectedYear("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              {carSelectedYear.map((y) => (
+                <span key={`year-${y}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Year: <span className="font-semibold text-stone-800">{y}</span>
+                  <button onClick={() => setCarSelectedYear(carSelectedYear.filter((v) => v !== y))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
-              {carSelectedMonth && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Month: <span className="font-semibold text-stone-800">{monthLabel(carSelectedMonth)}</span>
-                  <button onClick={() => setCarSelectedMonth("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              ))}
+              {carSelectedMonth.map((m) => (
+                <span key={`month-${m}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Month: <span className="font-semibold text-stone-800">{monthLabel(m)}</span>
+                  <button onClick={() => setCarSelectedMonth(carSelectedMonth.filter((v) => v !== m))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
-              {carSelectedSupplier && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Supplier: <span className="font-semibold text-stone-800">{carSelectedSupplier}</span>
-                  <button onClick={() => setCarSelectedSupplier("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+              ))}
+              {carSelectedSupplier.map((s) => (
+                <span key={`supplier-${s}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Supplier: <span className="font-semibold text-stone-800">{s}</span>
+                  <button onClick={() => setCarSelectedSupplier(carSelectedSupplier.filter((v) => v !== s))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
-              )}
+              ))}
               {carQuery.trim() && (
                 <span className="inline-flex items-center gap-1 text-stone-600">
                   Search: <span className="font-semibold text-stone-800">"{carQuery.trim()}"</span>
@@ -9810,51 +9828,36 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-stone-100">
                       <div>
                         <label className="text-xs text-stone-500 block mb-1">Year</label>
-                        <div className="relative">
-                          <Calendar size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                          <select
-                            className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                            value={fileSelectedYear}
-                            onChange={(e) => setFileSelectedYear(e.target.value)}
-                          >
-                            <option value="">All years</option>
-                            {fileYearsAvailable.map((y) => (
-                              <option key={y} value={y}>{y}</option>
-                            ))}
-                          </select>
-                        </div>
+                        <MultiSelectDropdown
+                          label="years"
+                          icon={Calendar}
+                          options={fileYearsAvailable}
+                          selected={fileSelectedYear}
+                          onChange={setFileSelectedYear}
+                          placeholder="All years"
+                        />
                       </div>
                       <div>
                         <label className="text-xs text-stone-500 block mb-1">Company</label>
-                        <div className="relative">
-                          <Building2 size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                          <select
-                            className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                            value={fileSelectedCompany}
-                            onChange={(e) => setFileSelectedCompany(e.target.value)}
-                          >
-                            <option value="">All companies</option>
-                            {fileCompaniesAvailable.map((name) => (
-                              <option key={name} value={name}>{name}</option>
-                            ))}
-                          </select>
-                        </div>
+                        <MultiSelectDropdown
+                          label="companies"
+                          icon={Building2}
+                          options={fileCompaniesAvailable}
+                          selected={fileSelectedCompany}
+                          onChange={setFileSelectedCompany}
+                          placeholder="All companies"
+                        />
                       </div>
                       <div>
                         <label className="text-xs text-stone-500 block mb-1">Employee</label>
-                        <div className="relative">
-                          <User size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                          <select
-                            className="w-auto max-w-[160px] border border-stone-300 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white appearance-none"
-                            value={fileSelectedEmployee}
-                            onChange={(e) => setFileSelectedEmployee(e.target.value)}
-                          >
-                            <option value="">All employees</option>
-                            {fileEmployeesAvailable.map((name) => (
-                              <option key={name} value={name}>{name}</option>
-                            ))}
-                          </select>
-                        </div>
+                        <MultiSelectDropdown
+                          label="employees"
+                          icon={User}
+                          options={fileEmployeesAvailable}
+                          selected={fileSelectedEmployee}
+                          onChange={setFileSelectedEmployee}
+                          placeholder="All employees"
+                        />
                       </div>
                     </div>
                   )}
@@ -9862,24 +9865,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   {hasActiveFileFilter && (
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
                       <span className="text-stone-400 font-medium">Applied:</span>
-                      {fileSelectedYear && (
-                        <span className="inline-flex items-center gap-1 text-stone-600">
-                          Year: <span className="font-semibold text-stone-800">{fileSelectedYear}</span>
-                          <button onClick={() => setFileSelectedYear("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                      {fileSelectedYear.map((y) => (
+                        <span key={`year-${y}`} className="inline-flex items-center gap-1 text-stone-600">
+                          Year: <span className="font-semibold text-stone-800">{y}</span>
+                          <button onClick={() => setFileSelectedYear(fileSelectedYear.filter((v) => v !== y))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                         </span>
-                      )}
-                      {fileSelectedCompany && (
-                        <span className="inline-flex items-center gap-1 text-stone-600">
-                          Company: <span className="font-semibold text-stone-800">{fileSelectedCompany}</span>
-                          <button onClick={() => setFileSelectedCompany("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                      ))}
+                      {fileSelectedCompany.map((c) => (
+                        <span key={`company-${c}`} className="inline-flex items-center gap-1 text-stone-600">
+                          Company: <span className="font-semibold text-stone-800">{c}</span>
+                          <button onClick={() => setFileSelectedCompany(fileSelectedCompany.filter((v) => v !== c))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                         </span>
-                      )}
-                      {fileSelectedEmployee && (
-                        <span className="inline-flex items-center gap-1 text-stone-600">
-                          Employee: <span className="font-semibold text-stone-800">{fileSelectedEmployee}</span>
-                          <button onClick={() => setFileSelectedEmployee("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                      ))}
+                      {fileSelectedEmployee.map((e) => (
+                        <span key={`employee-${e}`} className="inline-flex items-center gap-1 text-stone-600">
+                          Employee: <span className="font-semibold text-stone-800">{e}</span>
+                          <button onClick={() => setFileSelectedEmployee(fileSelectedEmployee.filter((v) => v !== e))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                         </span>
-                      )}
+                      ))}
                       {fileQuery.trim() && (
                         <span className="inline-flex items-center gap-1 text-stone-600">
                           Search: <span className="font-semibold text-stone-800">"{fileQuery.trim()}"</span>
