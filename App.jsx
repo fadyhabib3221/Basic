@@ -5349,8 +5349,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           // the first) so each ticket in a multi-ticket booking shows the same
           // Net price / Sold price / Profit, and the totals row below — a
           // plain sum of this column — adds them up exactly as displayed.
-          "Net price": round2(t.netPrice),
           "Sold price": round2(t.soldPrice),
+          "Net price": round2(t.netPrice),
           "Profit": round2(profit(t.netPrice, t.soldPrice)),
           "Company": t.company || "",
           "Supplier": t.supplier || "",
@@ -5374,8 +5374,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             "Ticket #": `Refund — ${(refundedCustomer && refundedCustomer.ticketNumber) || firstTicketNumber(t) || "ticket"}`,
             "Airline": airlineCode,
             "Route": routeLabel(t),
-            "Net price": round2(-airlineAmt),
             "Sold price": round2(-customerAmt),
+            "Net price": round2(-airlineAmt),
             "Profit": round2(airlineAmt - customerAmt),
             "Company": t.company || "",
             "Supplier": t.supplier || "",
@@ -5424,8 +5424,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       ...sheetRows,
       {
         "Employee": "", "Date": "TOTAL", "Customer": "", "Ticket #": "", "Airline": "", "Route": "",
-        "Net price": Math.round(sums.net * 100) / 100,
         "Sold price": Math.round(sums.sold * 100) / 100,
+        "Net price": Math.round(sums.net * 100) / 100,
         "Profit": Math.round(sums.profit * 100) / 100,
         "Company": "", "Supplier": "", "Status": "", "PNR reference": "", "Notes": "",
       },
@@ -5885,8 +5885,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
           </td>
           <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`}>{routeLabel(t)}</td>
-          <td className={`px-2.5 py-1 ${cellText} text-right whitespace-nowrap`}>{fmt(t.netPrice)}</td>
           <td className={`px-2.5 py-1 ${cellText} text-right whitespace-nowrap`}>{fmt(t.soldPrice)}</td>
+          <td className={`px-2.5 py-1 ${cellText} text-right whitespace-nowrap`}>{fmt(t.netPrice)}</td>
           <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
           <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`}>
             {t.company && t.company.trim() ? (
@@ -5949,8 +5949,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
           </td>
           <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`}>{routeLabel(t)}</td>
-          <td className={`px-2.5 py-1 ${rowText} text-right whitespace-nowrap`}>{fmt(refund.airlineAmount)}</td>
           <td className={`px-2.5 py-1 ${rowText} text-right whitespace-nowrap`}>{fmt(refund.customerAmount)}</td>
+          <td className={`px-2.5 py-1 ${rowText} text-right whitespace-nowrap`}>{fmt(refund.airlineAmount)}</td>
           <td className={`px-2.5 py-1 font-semibold ${rowTextBold} text-right whitespace-nowrap`}>
             {fmt((parseFloat(refund.airlineAmount) || 0) - (parseFloat(refund.customerAmount) || 0))}
           </td>
@@ -7721,8 +7721,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Ticket #</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Airline</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Route</th>
-                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net price</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Sold price</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net price</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Profit</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Company</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Supplier</th>
