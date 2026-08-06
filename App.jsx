@@ -85,6 +85,15 @@ const monthLabel = (key) => {
   const idx = parseInt(m, 10) - 1;
   return `${MONTHS[idx] || m} ${y}`;
 };
+// Same as formatDisplayDate but spells the month out in full (e.g. "06-AUGUST-2026") —
+// used on printed invoices/receipts where the abbreviation isn't needed.
+const formatDisplayDateFull = (dateStr) => {
+  if (!dateStr) return "";
+  const [y, m, d] = dateStr.split("-");
+  if (!y || !m || !d) return dateStr;
+  const monthFull = (MONTHS[parseInt(m, 10) - 1] || m).toUpperCase();
+  return `${d}-${monthFull}-${y}`;
+};
 
 // Formats an ISO timestamp as DD-MMM-YYYY HH:MM for showing when a note edit happened.
 const formatDateTime = (iso) => {
@@ -3019,18 +3028,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const customers = getCustomers(t);
     const customerRows = customers.map((c, i) => [
       `Customer ${i + 1}`,
-      `${c.name || "-"}${c.ticketNumber ? ` — ${c.ticketNumber}` : ""}${c.pnrReference ? ` (PNR: ${c.pnrReference})` : ""}`,
+      `${c.name || "-"}${c.ticketNumber ? ` — ${c.ticketNumber}` : ""}${c.pnrReference ? ` (PNR: ${c.pnrReference})` : ""} — ${fmt(t.soldPrice)}`,
     ]);
+    if (customers.length > 1) {
+      customerRows.push(["Total", fmt((parseFloat(t.soldPrice) || 0) * customers.length)]);
+    }
 
     const sections = [
       {
         heading: "Booking",
         rows: [
           ["Company", t.company && t.company.trim() ? t.company : "Individual"],
-          ["Supplier", t.supplier || "-"],
           ["Route", routeLabel(t)],
-          ["Airline", t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"],
-          ["Ticket issue date", t.date ? formatDisplayDate(t.date) : "-"],
+          ["Airline", t.airline ? (getAirlineNameByIata(t.airline) || t.airline) : "-"],
+          ["Ticket issue date", t.date ? formatDisplayDateFull(t.date) : "-"],
           ...(t.isReissued ? [["Exchanged from", t.oldTicketNumber || "an older ticket"]] : []),
         ],
       },
