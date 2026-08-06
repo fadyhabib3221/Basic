@@ -5263,6 +5263,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
   });
 
+  // Ticket numbers that have a refund recorded against them. Same idea as
+  // supersededTicketNumbers above: the original customer row is hidden from the main
+  // table by default (its dedicated refund row shows in its place, at its own date),
+  // and clicking that refund row's "↳ Refund" badge (see jumpToRow above) reveals the
+  // original row again.
+  const refundedTicketNumbers = new Set();
+  tickets.forEach((t2) => {
+    getRefunds(t2).forEach((r) => {
+      if (!r || (r.airlineAmount === "" && r.customerAmount === "")) return;
+      const c = getCustomers(t2)[r.customerIndex || 0];
+      if (c && c.ticketNumber) refundedTicketNumbers.add(c.ticketNumber.trim().toUpperCase());
+    });
+  });
+
   // The ticket currently open in the detail "page", if any.
   const viewingTicket = viewingTicketId ? visibleTickets.find((t) => t.id === viewingTicketId) : null;
 
@@ -5751,9 +5765,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   }
 
   // Builds one ticket's row(s) for the main table: a row per customer (skipping any
-  // customer whose ticket number has been superseded by a reissue, unless that exact
-  // row is the one currently jumped-to/highlighted), plus a refund sub-row if a refund
-  // has been recorded on this specific ticket.
+  // customer whose ticket number has been superseded by a reissue, or has a refund
+  // recorded against it, unless that exact row is the one currently jumped-to/
+  // highlighted), plus a refund sub-row if a refund has been recorded on this ticket.
   const buildTicketRows = (t) => {
     const customers = getCustomers(t);
     const isMulti = customers.length > 1;
@@ -5762,9 +5776,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const ticketKey = `ticket:${(c.ticketNumber || "").trim().toUpperCase()}`;
       const isHighlighted = !!c.ticketNumber && highlightedRowKey === ticketKey;
       const isSuperseded = !!c.ticketNumber && supersededTicketNumbers.has(c.ticketNumber.trim().toUpperCase());
-      // Superseded (reissued-away) rows are hidden from the table by default — they
-      // only reappear when jumped to via the "Exchanged" badge on the newer ticket.
-      if (isSuperseded && !isHighlighted) return;
+      const isRefunded = !!c.ticketNumber && refundedTicketNumbers.has(c.ticketNumber.trim().toUpperCase());
+      // Superseded (reissued-away) and refunded rows are hidden from the table by
+      // default — they only reappear when jumped to via the "Exchanged" badge on the
+      // newer ticket, or the "↳ Refund" badge on the refund row.
+      if ((isSuperseded || isRefunded) && !isHighlighted) return;
       rows.push(
         <tr
           key={`${t.id}-${i}`}
@@ -5772,7 +5788,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           onClick={() => openTicketDetail(t)}
           className={`border-t leading-tight cursor-pointer ${
             isHighlighted
-              ? `border-amber-300 bg-amber-100 ring-1 ring-inset ring-amber-400 hover:bg-amber-100 ${i > 0 ? "border-t-0" : ""}`
+              ? `border-green-300 bg-green-100 ring-1 ring-inset ring-green-400 hover:bg-green-100 ${i > 0 ? "border-t-0" : ""}`
               : t.isReissued
               ? `border-sky-200 bg-sky-50 hover:bg-sky-100 ${i > 0 ? "border-t-0" : ""}`
               : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-teal-50/60"}`
@@ -5847,6 +5863,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const refundTicketNumber = (refundedCustomer && refundedCustomer.ticketNumber) || (customers[0] && customers[0].ticketNumber) || "-";
       const refundKey = `refund:${(refundTicketNumber || "").trim().toUpperCase()}`;
       const isHighlighted = highlightedRowKey === refundKey;
+      // Text stays legible whichever background is active: the usual red on a red row,
+      // or a matching green when this row is the one currently jumped-to/highlighted.
+      const rowText = isHighlighted ? "text-green-700" : "text-red-700";
+      const rowTextBold = isHighlighted ? "text-green-800" : "text-red-800";
+      const rowBadgeClasses = isHighlighted
+        ? "text-green-700 bg-green-100 border border-green-300 hover:bg-green-200"
+        : "text-red-700 bg-red-100 border border-red-300 hover:bg-red-200";
       rows.push(
         <tr
           key={`${t.id}-refund-${ri}`}
@@ -5854,14 +5877,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           onClick={() => openTicketDetail(t)}
           className={`border-t border-dashed leading-tight cursor-pointer ${
             isHighlighted
-              ? "border-amber-300 bg-amber-100 ring-1 ring-inset ring-amber-400 hover:bg-amber-100"
+              ? "border-green-300 bg-green-100 ring-1 ring-inset ring-green-400 hover:bg-green-100"
               : "border-red-200 bg-red-50/60 hover:bg-red-100/60"
           }`}
         >
-          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{t.employee || "-"}</td>
-          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{refund.date ? formatDisplayDate(refund.date) : "-"}</td>
-          <td className="px-2.5 py-1 font-medium text-red-800 whitespace-nowrap">{(refundedCustomer && refundedCustomer.name) || "-"}</td>
-          <td className="px-2.5 py-1 text-red-700 font-mono whitespace-nowrap">
+          <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`}>{t.employee || "-"}</td>
+          <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`}>{refund.date ? formatDisplayDate(refund.date) : "-"}</td>
+          <td className={`px-2.5 py-1 font-medium ${rowTextBold} whitespace-nowrap`}>{(refundedCustomer && refundedCustomer.name) || "-"}</td>
+          <td className={`px-2.5 py-1 ${rowText} font-mono whitespace-nowrap`}>
             <span className="inline-flex items-center gap-1.5">
               {refundTicketNumber}
               <span
@@ -5870,25 +5893,25 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   jumpToRow(`ticket:${(refundTicketNumber || "").trim().toUpperCase()}`);
                 }}
                 title="Click to view the original ticket"
-                className="inline-flex items-center text-[10px] font-semibold text-red-700 bg-red-100 border border-red-300 rounded-full px-1.5 py-0.5 hover:bg-red-200 cursor-pointer"
+                className={`inline-flex items-center text-[10px] font-semibold rounded-full px-1.5 py-0.5 cursor-pointer ${rowBadgeClasses}`}
               >
                 ↳ Refund
               </span>
             </span>
           </td>
-          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
+          <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`} title={getAirlineNameByIata(t.airline) || t.airline || ""}>
             {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
           </td>
-          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{routeLabel(t)}</td>
-          <td className="px-2.5 py-1 text-red-700 text-right whitespace-nowrap">{fmt(refund.airlineAmount)}</td>
-          <td className="px-2.5 py-1 text-red-700 text-right whitespace-nowrap">{fmt(refund.customerAmount)}</td>
-          <td className="px-2.5 py-1 font-semibold text-red-800 text-right whitespace-nowrap">
+          <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`}>{routeLabel(t)}</td>
+          <td className={`px-2.5 py-1 ${rowText} text-right whitespace-nowrap`}>{fmt(refund.airlineAmount)}</td>
+          <td className={`px-2.5 py-1 ${rowText} text-right whitespace-nowrap`}>{fmt(refund.customerAmount)}</td>
+          <td className={`px-2.5 py-1 font-semibold ${rowTextBold} text-right whitespace-nowrap`}>
             {fmt((parseFloat(refund.airlineAmount) || 0) - (parseFloat(refund.customerAmount) || 0))}
           </td>
-          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">
+          <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`}>
             {t.company && t.company.trim() ? t.company : <span className="text-red-400 italic">Individual</span>}
           </td>
-          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{t.supplier || "-"}</td>
+          <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`}>{t.supplier || "-"}</td>
         </tr>
       );
     });
