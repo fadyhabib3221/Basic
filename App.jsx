@@ -1468,6 +1468,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // in-app dialog instead: { message, onConfirm } while open, null while hidden.
   const [confirmDialog, setConfirmDialog] = useState(null);
   const requestConfirm = (message, onConfirm) => setConfirmDialog({ message, onConfirm });
+  // Brief toast confirming an edit/save just actually happened (as opposed to confirmDialog,
+  // which asks BEFORE a destructive action like delete). Shows for a couple seconds then clears.
+  const [actionToast, setActionToast] = useState("");
+  const actionToastTimerRef = useRef(null);
+  const showActionToast = (message) => {
+    setActionToast(message);
+    if (actionToastTimerRef.current) clearTimeout(actionToastTimerRef.current);
+    actionToastTimerRef.current = setTimeout(() => setActionToast(""), 2500);
+  };
 
   // In-app print preview: { title, html } while open, null while closed. Printing renders
   // the receipt into a hidden iframe inside this popup instead of opening a separate
@@ -3767,6 +3776,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
     }
     let next;
+    const wasEditing = !!form.id;
     if (form.id) {
       next = tickets.map((t) => (t.id === form.id ? record : t));
     } else {
@@ -3774,6 +3784,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     persistTickets(next);
     rememberSuggestionsFromRecord(record);
+    if (wasEditing) showActionToast("Ticket updated");
     setForm(getEmptyForm());
     setSupplierOther(false);
   };
@@ -3782,23 +3793,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // been granted the "edit tickets" permission. Deleting stays main-account only either way.
   const handleEdit = (t, afterConfirm) => {
     if (!currentUser.isAdmin && !canEditTickets) return;
-    requestConfirm("Edit this ticket? Any unsaved changes in the current form will be replaced.", () => {
-      // Backward compatibility: older records stored a single customer/ticketNumber pair
-      const customers =
-        Array.isArray(t.customers) && t.customers.length > 0
-          ? t.customers
-          : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
-      // Backward compatibility: older records have no multiDestination/destinations fields.
-      const destinations =
-        Array.isArray(t.destinations) && t.destinations.length >= 2 ? t.destinations : [t.from || "", t.to || ""];
-      setForm({ ...t, customers, customersCount: customers.length, multiDestination: !!t.multiDestination, destinations, tripType: t.tripType || "oneWay", returnAirport: t.returnAirport || "" });
-      setSupplierOther(!!t.supplier && !SUPPLIERS.includes(t.supplier));
-      if (afterConfirm) afterConfirm();
-      setTimeout(() => {
-        const el = document.getElementById("ticket-form");
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 60);
-    });
+    // Backward compatibility: older records stored a single customer/ticketNumber pair
+    const customers =
+      Array.isArray(t.customers) && t.customers.length > 0
+        ? t.customers
+        : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
+    // Backward compatibility: older records have no multiDestination/destinations fields.
+    const destinations =
+      Array.isArray(t.destinations) && t.destinations.length >= 2 ? t.destinations : [t.from || "", t.to || ""];
+    setForm({ ...t, customers, customersCount: customers.length, multiDestination: !!t.multiDestination, destinations, tripType: t.tripType || "oneWay", returnAirport: t.returnAirport || "" });
+    setSupplierOther(!!t.supplier && !SUPPLIERS.includes(t.supplier));
+    if (afterConfirm) afterConfirm();
+    setTimeout(() => {
+      const el = document.getElementById("ticket-form");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
   };
   const handleDelete = (id, afterConfirm) => {
     if (!currentUser.isAdmin && !canDeleteTickets) {
@@ -11286,6 +11295,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {actionToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="bg-emerald-700 text-white text-sm font-medium rounded-xl px-4 py-2.5 shadow-lg shadow-emerald-900/20 flex items-center gap-2">
+            <Check size={16} /> {actionToast}
           </div>
         </div>
       )}
