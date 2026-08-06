@@ -5495,7 +5495,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         // alternating banding so a refund stands out at a glance.
         for (let c = 0; c < colCount; c++) {
           setCellStyle(excelRow, c, {
-            fill: { patternType: "solid", fgColor: { rgb: "F8CBAD" } },
+            fill: { patternType: "solid", fgColor: { rgb: "DA9694" } },
           });
         }
       } else if (i % 2 === 1) {
@@ -5506,6 +5506,28 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           });
         }
       }
+    });
+
+    // Make the totals row a live formula (SUBTOTAL) instead of a fixed number, for the
+    // numeric columns — SUBTOTAL(109, ...) automatically recalculates to only include
+    // rows currently visible through the sheet's own AutoFilter dropdowns, so the total
+    // stays correct as soon as someone filters inside Excel itself.
+    const TOTAL_FORMULA_COLUMNS = ["Sold price", "Net price", "Profit"];
+    const dataFirstRow0 = HEADER_ROW + 1; // 0-based row of the first data row
+    const dataLastRow0 = HEADER_ROW + totalRowIdx; // 0-based row just above the totals row
+    TOTAL_FORMULA_COLUMNS.forEach((colName) => {
+      const colIdx = headerKeys.indexOf(colName);
+      if (colIdx === -1) return;
+      const startAddr = XLSX.utils.encode_cell({ r: dataFirstRow0, c: colIdx });
+      const endAddr = XLSX.utils.encode_cell({ r: dataLastRow0, c: colIdx });
+      const totalAddr = XLSX.utils.encode_cell({ r: HEADER_ROW + 1 + totalRowIdx, c: colIdx });
+      const existingCell = ws[totalAddr] || {};
+      ws[totalAddr] = {
+        ...existingCell,
+        t: "n",
+        v: rows[totalRowIdx][colName], // cached value shown before Excel recalculates
+        f: `SUBTOTAL(109,${startAddr}:${endAddr})`,
+      };
     });
 
     // Column widths fit to the widest value (header or data) in each column.
