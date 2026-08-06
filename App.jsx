@@ -7256,7 +7256,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <div className="w-full md:w-[24ch] md:shrink-0 flex items-center border border-stone-300 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-teal-700">
                     <input
                       className="min-w-0 text-sm outline-none bg-transparent flex-1"
-                      style={c.conjunction ? { flex: "0 0 auto", width: `${Math.max((c.ticketNumber || "").length - ((c.ticketNumber || "").match(/-/g) || []).length * 0.5, 3)}ch` } : { width: "20ch" }}
+                      style={c.conjunction && (c.ticketNumber || "").length > 0 ? { flex: "0 0 auto", width: `${Math.max((c.ticketNumber || "").length - ((c.ticketNumber || "").match(/-/g) || []).length * 0.5, 3)}ch` } : { width: "20ch" }}
                       value={c.ticketNumber}
                       onChange={(e) => handleCustomerFieldChange(i, "ticketNumber", e.target.value)}
                       onBlur={() => handleTicketNumberBlur(i)}
