@@ -5338,13 +5338,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
       const ticketEntries = customers.map((c, i) => ({
         sortDate: t.date || "",
-        // Booking-level amounts count toward totals only once (on the first
-        // customer's row) even though every row now displays them — otherwise
-        // a multi-passenger booking would inflate the totals row by however
-        // many tickets it has.
-        countNet: i === 0 ? round2(t.netPrice) : 0,
-        countSold: i === 0 ? round2(t.soldPrice) : 0,
-        countProfit: i === 0 ? round2(profit(t.netPrice, t.soldPrice)) : 0,
         row: {
           "Employee": t.employee || "",
           "Date": t.date ? formatDisplayDate(t.date) : "",
@@ -5354,8 +5347,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           "Route": routeLabel(t),
           // Same booking amounts carried onto every passenger's row (not just
           // the first) so each ticket in a multi-ticket booking shows the same
-          // Net price / Sold price / Profit — totals still count them once,
-          // via countNet/countSold/countProfit above.
+          // Net price / Sold price / Profit, and the totals row below — a
+          // plain sum of this column — adds them up exactly as displayed.
           "Net price": round2(t.netPrice),
           "Sold price": round2(t.soldPrice),
           "Profit": round2(profit(t.netPrice, t.soldPrice)),
@@ -5374,11 +5367,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         const customerAmt = parseFloat(refund.customerAmount) || 0;
         return {
           sortDate: refund.date || t.date || "",
-          // A refund row is never duplicated across passengers, so it always
-          // counts once toward the totals.
-          countNet: round2(-airlineAmt),
-          countSold: round2(-customerAmt),
-          countProfit: round2(airlineAmt - customerAmt),
           row: {
             "Employee": t.employee || "",
             "Date": refund.date ? formatDisplayDate(refund.date) : "",
@@ -5410,20 +5398,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       if (!b.sortDate) return -1;
       return a.sortDate.localeCompare(b.sortDate);
     });
-    return ordered;
+    return ordered.map((e) => e.row);
   };
 
-  // Sums the countNet / countSold / countProfit fields carried alongside each
-  // entry rather than the displayed Net price / Sold price / Profit columns —
-  // those columns now repeat the same booking amounts on every passenger's
-  // row (see ticketRows above), so summing the displayed columns directly
-  // would multiply a multi-ticket booking's totals by its passenger count.
-  const sumSheetRows = (entries) =>
-    entries.reduce(
-      (acc, e) => {
-        acc.net += e.countNet || 0;
-        acc.sold += e.countSold || 0;
-        acc.profit += e.countProfit || 0;
+  // Sums the Net price / Sold price / Profit columns straight off the generated
+  // sheet rows — a plain column sum, so the totals row always matches exactly
+  // what's visibly added up above it (a multi-ticket booking's amount is now
+  // shown on every one of its rows, and counted that many times here too).
+  const sumSheetRows = (sheetRows) =>
+    sheetRows.reduce(
+      (acc, r) => {
+        acc.net += parseFloat(r["Net price"]) || 0;
+        acc.sold += parseFloat(r["Sold price"]) || 0;
+        acc.profit += parseFloat(r["Profit"]) || 0;
         return acc;
       },
       { net: 0, sold: 0, profit: 0 }
@@ -5431,9 +5418,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Appends a totals row to the end of a sheet's rows.
   const rowsWithTotals = (rows) => {
-    const entries = ticketRows(rows);
-    const sheetRows = entries.map((e) => e.row);
-    const sums = sumSheetRows(entries);
+    const sheetRows = ticketRows(rows);
+    const sums = sumSheetRows(sheetRows);
     return [
       ...sheetRows,
       {
@@ -5502,6 +5488,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           setCellStyle(excelRow, c, {
             font: { bold: true },
             fill: { patternType: "solid", fgColor: { rgb: "FFF3B0" } },
+          });
+        }
+      } else if (row["Status"] === "Refund") {
+        // Refund rows get their own red highlight, overriding the normal
+        // alternating banding so a refund stands out at a glance.
+        for (let c = 0; c < colCount; c++) {
+          setCellStyle(excelRow, c, {
+            fill: { patternType: "solid", fgColor: { rgb: "F8CBAD" } },
           });
         }
       } else if (i % 2 === 1) {
