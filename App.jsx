@@ -759,11 +759,11 @@ const GRADE_TIER_GROUPS = [
 // record is treated as allowed (see employeeSections below) rather than silently locking
 // people out of sections they already had access to.
 const SECTION_OPTIONS = [
-  { value: "flights", label: "Flights" },
-  { value: "hotels", label: "Hotels" },
-  { value: "visa", label: "Visa" },
-  { value: "cars", label: "Transportation" },
-  { value: "files", label: "Files" },
+  { value: "flights", label: "Flights", icon: Plane, iconClassName: "rotate-45" },
+  { value: "hotels", label: "Hotels", icon: Building2 },
+  { value: "visa", label: "Visa", icon: PassportIcon },
+  { value: "cars", label: "Transportation", icon: Car },
+  { value: "files", label: "Files", icon: FileText },
 ];
 const DEFAULT_SECTIONS = { flights: true, hotels: true, visa: true, cars: true, files: true };
 // Merges an employee's stored section toggles over the all-allowed defaults, so a
@@ -838,6 +838,10 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
   const [showPassword, setShowPassword] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
+  // Which section's detail dropdown (View all/Edit/Delete) is currently open — only one
+  // at a time, so the list stays short and scannable instead of showing every section's
+  // toggles expanded all at once.
+  const [expandedSection, setExpandedSection] = useState(null);
 
   useEffect(() => {
     if (emp) {
@@ -938,15 +942,43 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
             const sectionOn = !!sections[s.value];
             const perm = employeeSectionPerm(emp, s.value);
             const hasOwnership = SECTIONS_WITH_OWNERSHIP.includes(s.value);
+            const isOpen = expandedSection === s.value;
+            const Icon = s.icon;
             return (
-              <div key={s.value} className="border border-stone-200 rounded-xl px-3 divide-y divide-stone-100 overflow-hidden">
-                <ToggleSwitch
-                  label={s.label}
-                  checked={sectionOn}
-                  onChange={(v) => onSetSection(s.value, v)}
-                />
-                {sectionOn && (
-                  <div className={emp.isAccounting ? "opacity-50 pointer-events-none" : ""}>
+              <div key={s.value} className="border border-stone-200 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-2.5 px-3 py-2.5">
+                  <span className="shrink-0 bg-stone-100 text-stone-600 rounded-lg p-1.5">
+                    <Icon size={16} className={s.iconClassName || ""} />
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => sectionOn && setExpandedSection(isOpen ? null : s.value)}
+                    disabled={!sectionOn}
+                    className={`flex-1 flex items-center justify-between gap-2 text-left ${sectionOn ? "cursor-pointer" : "cursor-default"}`}
+                  >
+                    <span className="text-sm text-stone-700 font-medium">{s.label}</span>
+                    {sectionOn && (
+                      <ChevronDown size={15} className={`shrink-0 text-stone-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSetSection(s.value, !sectionOn);
+                      if (sectionOn) setExpandedSection((cur) => (cur === s.value ? null : cur));
+                    }}
+                    className={`shrink-0 relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      sectionOn ? "bg-teal-700" : "bg-stone-300"
+                    }`}
+                  >
+                    <span
+                      className="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
+                      style={{ transform: sectionOn ? "translateX(18px)" : "translateX(2px)" }}
+                    />
+                  </button>
+                </div>
+                {sectionOn && isOpen && (
+                  <div className={`px-3 pb-2 divide-y divide-stone-100 border-t border-stone-100 ${emp.isAccounting ? "opacity-50 pointer-events-none" : ""}`}>
                     {hasOwnership && (
                       <ToggleSwitch
                         label="View all services"
