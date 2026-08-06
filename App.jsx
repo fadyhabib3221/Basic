@@ -5807,7 +5807,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     jumpToRow(`refund:${(c.ticketNumber || "").trim().toUpperCase()}`);
                   }}
                   title={`Refunded — Airline: ${fmt(refundForIndex(t, i).airlineAmount)} · Customer: ${fmt(refundForIndex(t, i).customerAmount)} — click to view the refund`}
-                  className="inline-flex items-center text-[10px] font-semibold text-red-800 bg-red-200 border border-red-400 rounded-full px-1.5 py-0.5 hover:bg-red-300 cursor-pointer"
+                  className="inline-flex items-center text-[8px] leading-none font-semibold text-red-800 bg-red-200 border border-red-400 rounded-full px-1 py-0.5 hover:bg-red-300 cursor-pointer"
                 >
                   Refunded
                 </span>
