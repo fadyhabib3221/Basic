@@ -2993,8 +2993,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             td.label { padding: 6px 10px; color: #78716c; width: 40%; border-bottom: 1px solid #e7e5e4; }
             td.value { padding: 6px 10px; font-weight: 600; border-bottom: 1px solid #e7e5e4; }
             .footer { margin-top: 32px; font-size: 11px; color: #a8a29e; text-align: right; }
+            @page {
+              margin: 0;
+            }
             @media print {
-              body { padding: 0 24px; }
+              body { padding: 24px; }
             }
           </style>
         </head>
@@ -3008,7 +3011,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
           ${sectionsHtml}
           <div class="footer">
-            ${printedBy ? `Printed by ${printedBy} &middot; ` : ""}${new Date().toLocaleString()}
+            ${printedBy ? `Printed by ${printedBy} &middot; ` : ""}${formatDateTime(new Date().toISOString())}
           </div>
         </body>
       </html>
