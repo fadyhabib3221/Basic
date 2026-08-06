@@ -6829,7 +6829,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             }`}
           >
             <Wallet size={22} />
-            الحسابات
+            Accounts
           </button>
           )}
         </div>
