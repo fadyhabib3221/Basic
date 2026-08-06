@@ -5250,33 +5250,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return b.date.localeCompare(a.date);
   });
 
-  // Ticket numbers that have been superseded by a reissue — i.e. every ticket number
-  // that appears as some OTHER ticket's oldTicketNumber. These are hidden from the main
-  // table by default (the new, reissued ticket shows in its place, at its own date), so
-  // an old ticket number doesn't keep cluttering the list and the date order never gets
-  // reshuffled to nest a reissued ticket under an older row. Clicking that new ticket's
-  // "Exchanged" badge (see jumpToRow above) reveals the specific old row again.
-  const supersededTicketNumbers = new Set();
-  tickets.forEach((t2) => {
-    if (t2.isReissued && t2.oldTicketNumber) {
-      supersededTicketNumbers.add(t2.oldTicketNumber.trim().toUpperCase());
-    }
-  });
-
-  // Ticket numbers that have a refund recorded against them. Same idea as
-  // supersededTicketNumbers above: the original customer row is hidden from the main
-  // table by default (its dedicated refund row shows in its place, at its own date),
-  // and clicking that refund row's "↳ Refund" badge (see jumpToRow above) reveals the
-  // original row again.
-  const refundedTicketNumbers = new Set();
-  tickets.forEach((t2) => {
-    getRefunds(t2).forEach((r) => {
-      if (!r || (r.airlineAmount === "" && r.customerAmount === "")) return;
-      const c = getCustomers(t2)[r.customerIndex || 0];
-      if (c && c.ticketNumber) refundedTicketNumbers.add(c.ticketNumber.trim().toUpperCase());
-    });
-  });
-
   // The ticket currently open in the detail "page", if any.
   const viewingTicket = viewingTicketId ? visibleTickets.find((t) => t.id === viewingTicketId) : null;
 
@@ -5764,10 +5737,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     );
   }
 
-  // Builds one ticket's row(s) for the main table: a row per customer (skipping any
-  // customer whose ticket number has been superseded by a reissue, or has a refund
-  // recorded against it, unless that exact row is the one currently jumped-to/
-  // highlighted), plus a refund sub-row if a refund has been recorded on this ticket.
+  // Builds one ticket's row(s) for the main table: a row per customer, plus a refund
+  // sub-row if a refund has been recorded on this ticket. Every row always shows —
+  // clicking a ticket's "Exchanged" or "Refunded"/"↳ Refund" badge just scrolls to and
+  // briefly highlights (green) the related row elsewhere in the table.
   const buildTicketRows = (t) => {
     const customers = getCustomers(t);
     const isMulti = customers.length > 1;
@@ -5775,12 +5748,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     customers.forEach((c, i) => {
       const ticketKey = `ticket:${(c.ticketNumber || "").trim().toUpperCase()}`;
       const isHighlighted = !!c.ticketNumber && highlightedRowKey === ticketKey;
-      const isSuperseded = !!c.ticketNumber && supersededTicketNumbers.has(c.ticketNumber.trim().toUpperCase());
-      const isRefunded = !!c.ticketNumber && refundedTicketNumbers.has(c.ticketNumber.trim().toUpperCase());
-      // Superseded (reissued-away) and refunded rows are hidden from the table by
-      // default — they only reappear when jumped to via the "Exchanged" badge on the
-      // newer ticket, or the "↳ Refund" badge on the refund row.
-      if ((isSuperseded || isRefunded) && !isHighlighted) return;
       rows.push(
         <tr
           key={`${t.id}-${i}`}
@@ -5821,7 +5788,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   title={`Exchanged from ${t.oldTicketNumber || "an older ticket"} — click to view the original ticket`}
                   className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5 hover:bg-sky-200 cursor-pointer"
                 >
-                  Exchanged{t.oldTicketNumber ? ` (orig: ${t.oldTicketNumber})` : ""}
+                  Exchanged
                 </span>
               )}
               {refundForIndex(t, i) && (
