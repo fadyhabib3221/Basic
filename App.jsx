@@ -413,7 +413,11 @@ const getEmptyForm = () => ({
 const routeLabel = (t) => {
   const stops = Array.isArray(t.destinations) ? t.destinations.map((d) => (d || "").trim()).filter(Boolean) : [];
   if (t.multiDestination && stops.length >= 2) return stops.join(" - ");
-  return `${t.from || "-"} - ${t.to || "-"}`;
+  const base = `${t.from || "-"} - ${t.to || "-"}`;
+  // Round trip: append the return airport so the main table shows the full
+  // out-and-back route (e.g. "CAI - DMM - CAI") instead of just the outbound leg.
+  if (t.tripType === "roundTrip" && t.returnAirport) return `${base} - ${t.returnAirport}`;
+  return base;
 };
 
 // Room types offered on a hotel booking's room line.
