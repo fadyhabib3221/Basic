@@ -5757,14 +5757,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           {nested && i === 0 && <span className="text-sky-500 mr-1">↳</span>}
           {t.employee || "-"}
         </td>
-        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
-          {t.company && t.company.trim() ? (
-            t.company
-          ) : (
-            <span className="text-stone-400 italic">Individual</span>
-          )}
+        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.date ? formatDisplayDate(t.date) : "-"}</td>
+        <td className="px-2.5 py-1 font-medium text-stone-800 whitespace-nowrap">
+          <span className="inline-flex items-center gap-1.5">
+            {c.name || "-"}
+            {isMulti && i === 0 && (
+              <span
+                title={`This booking has ${customers.length} customers / tickets`}
+                className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5"
+              >
+                <Users size={10} /> {customers.length}
+              </span>
+            )}
+          </span>
         </td>
-        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.supplier || "-"}</td>
         <td className="px-2.5 py-1 text-stone-600 font-mono whitespace-nowrap">
           <span className="inline-flex items-center gap-1.5">
             {c.ticketNumber || "-"}
@@ -5786,27 +5792,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             )}
           </span>
         </td>
-        <td className="px-2.5 py-1 font-medium text-stone-800 whitespace-nowrap">
-          <span className="inline-flex items-center gap-1.5">
-            {c.name || "-"}
-            {isMulti && i === 0 && (
-              <span
-                title={`This booking has ${customers.length} customers / tickets`}
-                className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5"
-              >
-                <Users size={10} /> {customers.length}
-              </span>
-            )}
-          </span>
-        </td>
-        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{routeLabel(t)}</td>
         <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
           {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
         </td>
-        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.date ? formatDisplayDate(t.date) : "-"}</td>
+        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{routeLabel(t)}</td>
         <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.netPrice)}</td>
         <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
         <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
+        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
+          {t.company && t.company.trim() ? (
+            t.company
+          ) : (
+            <span className="text-stone-400 italic">Individual</span>
+          )}
+        </td>
+        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.supplier || "-"}</td>
       </tr>
     ));
     getRefunds(t)
@@ -5821,10 +5821,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           className="border-t border-dashed border-red-200 bg-red-50/60 leading-tight cursor-pointer hover:bg-red-100/60"
         >
           <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{t.employee || "-"}</td>
-          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">
-            {t.company && t.company.trim() ? t.company : <span className="text-red-400 italic">Individual</span>}
-          </td>
-          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{t.supplier || "-"}</td>
+          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{refund.date ? formatDisplayDate(refund.date) : "-"}</td>
+          <td className="px-2.5 py-1 font-medium text-red-800 whitespace-nowrap">{(refundedCustomer && refundedCustomer.name) || "-"}</td>
           <td className="px-2.5 py-1 text-red-700 font-mono whitespace-nowrap">
             <span className="inline-flex items-center gap-1.5">
               {refundTicketNumber}
@@ -5833,17 +5831,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </span>
             </span>
           </td>
-          <td className="px-2.5 py-1 font-medium text-red-800 whitespace-nowrap">{(refundedCustomer && refundedCustomer.name) || "-"}</td>
-          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{routeLabel(t)}</td>
           <td className="px-2.5 py-1 text-red-700 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
             {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
           </td>
-          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{refund.date ? formatDisplayDate(refund.date) : "-"}</td>
+          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{routeLabel(t)}</td>
           <td className="px-2.5 py-1 text-red-700 text-right whitespace-nowrap">{fmt(refund.airlineAmount)}</td>
           <td className="px-2.5 py-1 text-red-700 text-right whitespace-nowrap">{fmt(refund.customerAmount)}</td>
           <td className="px-2.5 py-1 font-semibold text-red-800 text-right whitespace-nowrap">
             {fmt((parseFloat(refund.airlineAmount) || 0) - (parseFloat(refund.customerAmount) || 0))}
           </td>
+          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">
+            {t.company && t.company.trim() ? t.company : <span className="text-red-400 italic">Individual</span>}
+          </td>
+          <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{t.supplier || "-"}</td>
         </tr>
       );
     });
@@ -7603,16 +7603,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <thead>
                   <tr className="bg-teal-50/60 text-teal-800 text-[11px] uppercase tracking-wide border-b-2 border-teal-200">
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Employee</th>
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Company</th>
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Supplier</th>
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Ticket #</th>
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Customer</th>
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Route</th>
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Airline</th>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Date</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Customer</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Ticket #</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Airline</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Route</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net price</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Sold price</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Profit</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Company</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Supplier</th>
                   </tr>
                 </thead>
                 <tbody>
