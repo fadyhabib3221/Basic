@@ -3780,26 +3780,36 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // The main account can always edit tickets; an employee can too, but only if they've
   // been granted the "edit tickets" permission. Deleting stays main-account only either way.
-  const handleEdit = (t) => {
+  const handleEdit = (t, afterConfirm) => {
     if (!currentUser.isAdmin && !canEditTickets) return;
-    // Backward compatibility: older records stored a single customer/ticketNumber pair
-    const customers =
-      Array.isArray(t.customers) && t.customers.length > 0
-        ? t.customers
-        : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
-    // Backward compatibility: older records have no multiDestination/destinations fields.
-    const destinations =
-      Array.isArray(t.destinations) && t.destinations.length >= 2 ? t.destinations : [t.from || "", t.to || ""];
-    setForm({ ...t, customers, customersCount: customers.length, multiDestination: !!t.multiDestination, destinations, tripType: t.tripType || "oneWay", returnAirport: t.returnAirport || "" });
-    setSupplierOther(!!t.supplier && !SUPPLIERS.includes(t.supplier));
+    requestConfirm("Edit this ticket? Any unsaved changes in the current form will be replaced.", () => {
+      // Backward compatibility: older records stored a single customer/ticketNumber pair
+      const customers =
+        Array.isArray(t.customers) && t.customers.length > 0
+          ? t.customers
+          : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
+      // Backward compatibility: older records have no multiDestination/destinations fields.
+      const destinations =
+        Array.isArray(t.destinations) && t.destinations.length >= 2 ? t.destinations : [t.from || "", t.to || ""];
+      setForm({ ...t, customers, customersCount: customers.length, multiDestination: !!t.multiDestination, destinations, tripType: t.tripType || "oneWay", returnAirport: t.returnAirport || "" });
+      setSupplierOther(!!t.supplier && !SUPPLIERS.includes(t.supplier));
+      if (afterConfirm) afterConfirm();
+      setTimeout(() => {
+        const el = document.getElementById("ticket-form");
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 60);
+    });
   };
-  const handleDelete = (id) => {
+  const handleDelete = (id, afterConfirm) => {
     if (!currentUser.isAdmin && !canDeleteTickets) {
       setError("You don't have permission to delete tickets");
       return;
     }
-    if (form.id === id) { setForm(getEmptyForm()); setSupplierOther(false); }
-    persistTickets(tickets.filter((t) => t.id !== id));
+    requestConfirm("Delete this ticket? This cannot be undone.", () => {
+      if (form.id === id) { setForm(getEmptyForm()); setSupplierOther(false); }
+      persistTickets(tickets.filter((t) => t.id !== id));
+      if (afterConfirm) afterConfirm();
+    });
   };
   const handleCancel = () => { setForm(getEmptyForm()); setSupplierOther(false); };
 
@@ -6957,7 +6967,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             anyone with neither add nor edit permission. Shown while editing an existing
             ticket as long as the person has edit access, even if add access is off. */}
         {!isAccountingUser && (canAddTickets || (form.id && canEditTickets)) && (
-        <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
+        <div id="ticket-form" className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
           <h2 className="font-semibold text-stone-900 mb-4">{form.id ? "Edit ticket" : "Add a new ticket"}</h2>
           {error && (
             <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>
@@ -11050,7 +11060,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </button>
               {(currentUser.isAdmin || canEditTickets) && (
                 <button
-                  onClick={() => { handleEdit(viewingTicket); closeTicketDetail(); }}
+                  onClick={() => handleEdit(viewingTicket, closeTicketDetail)}
                   className="border border-stone-300 text-stone-600 hover:text-teal-800 hover:border-teal-700 text-sm font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
                 >
                   <Pencil size={15} /> Edit
@@ -11058,7 +11068,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
               {(currentUser.isAdmin || canDeleteTickets) && (
                 <button
-                  onClick={() => { handleDelete(viewingTicket.id); closeTicketDetail(); }}
+                  onClick={() => handleDelete(viewingTicket.id, closeTicketDetail)}
                   className="border border-stone-300 text-red-600 hover:text-red-700 hover:border-red-400 text-sm font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
                 >
                   <Trash2 size={15} /> Delete
