@@ -6104,6 +6104,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <Plane size={140} className="pointer-events-none absolute -bottom-8 -right-6 text-white/[0.06] rotate-45" />
           <Compass size={90} className="pointer-events-none absolute -top-6 left-[38%] text-white/[0.05]" />
           <Luggage size={70} className="pointer-events-none absolute -bottom-4 left-[18%] text-white/[0.05] hidden md:block" />
+          {activeSection === "accounts" && canAccessAccounts && (
+            <button
+              type="button"
+              onClick={() => setAccountsLang((l) => (l === "ar" ? "en" : "ar"))}
+              title={accountsLang === "ar" ? "Switch to English" : "التحويل للعربية"}
+              className="absolute top-2.5 right-2.5 z-10 border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center gap-1 transition-colors"
+            >
+              <Globe size={15} />
+              <span className="text-xs font-semibold">{accountsLang === "ar" ? "EN" : "AR"}</span>
+            </button>
+          )}
           <header className="relative flex items-center justify-between flex-wrap gap-3 px-4 py-4 md:px-6">
             <div className="flex items-center gap-3">
               <div className="bg-white rounded-2xl p-2.5 shadow-sm shrink-0 hidden sm:block">
@@ -6144,17 +6155,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              {activeSection === "accounts" && canAccessAccounts && (
-                <button
-                  type="button"
-                  onClick={() => setAccountsLang((l) => (l === "ar" ? "en" : "ar"))}
-                  title={accountsLang === "ar" ? "Switch to English" : "التحويل للعربية"}
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center gap-1 transition-colors"
-                >
-                  <Globe size={15} />
-                  <span className="text-xs font-semibold">{accountsLang === "ar" ? "EN" : "AR"}</span>
-                </button>
-              )}
               {hasAdminAccess && (
                 <button onClick={handleBackup} title="Backup"
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
