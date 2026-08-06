@@ -5271,11 +5271,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         const refundCustomerAmt = getRefunds(t).reduce((s, r) => s + (parseFloat(r.customerAmount) || 0), 0);
         const refundAirlineAmt = getRefunds(t).reduce((s, r) => s + (parseFloat(r.airlineAmount) || 0), 0);
         acc.count += n;
+        acc.net += (parseFloat(t.netPrice) || 0) * n - refundAirlineAmt;
         acc.total += (parseFloat(t.soldPrice) || 0) * n - refundCustomerAmt;
         acc.profit += profit(t.netPrice, t.soldPrice) * n + refundAirlineAmt - refundCustomerAmt;
         return acc;
       },
-      { count: 0, total: 0, profit: 0 }
+      { count: 0, net: 0, total: 0, profit: 0 }
     );
 
   const totals = countAndSum(bySupplier);
@@ -6011,6 +6012,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           }
           div[class*="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0"]:nth-child(3) {
             animation-delay: 0.1s;
+          }
+          div[class*="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0"]:nth-child(4) {
+            animation-delay: 0.15s;
           }
 
           /* Section tabs (Flights/Hotels/Visa/...) lift gently on hover */
@@ -6856,7 +6860,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </span>
           </p>
         </div>
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-6">
+        <div className="grid grid-cols-4 gap-1.5 sm:gap-3 mb-6">
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="bg-stone-100 rounded-xl p-1.5 sm:p-2 text-stone-600 shrink-0"><Ticket size={18} className="sm:hidden" /><Ticket size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
@@ -6869,6 +6873,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="min-w-0">
               <p className="text-xs text-stone-500">Total sales</p>
               <p className="text-sm sm:text-lg font-bold truncate">{fmt(totals.total)}</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="bg-amber-50 rounded-xl p-1.5 sm:p-2 text-amber-700 shrink-0"><Receipt size={18} className="sm:hidden" /><Receipt size={20} className="hidden sm:block" /></div>
+            <div className="min-w-0">
+              <p className="text-xs text-stone-500">Total net</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{fmt(totals.net)}</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
