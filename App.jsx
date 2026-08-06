@@ -404,12 +404,12 @@ const getEmptyForm = () => ({
   refunds: [],
 });
 
-// Renders a ticket's route as a single "A → B" (or "A → B → C → ..." for a
+// Renders a ticket's route as a single "A - B" (or "A - B - C - ..." for a
 // multi-destination/multi-city booking) string for lists, detail views, and exports.
 const routeLabel = (t) => {
   const stops = Array.isArray(t.destinations) ? t.destinations.map((d) => (d || "").trim()).filter(Boolean) : [];
-  if (t.multiDestination && stops.length >= 2) return stops.join(" → ");
-  return `${t.from || "-"} → ${t.to || "-"}`;
+  if (t.multiDestination && stops.length >= 2) return stops.join(" - ");
+  return `${t.from || "-"} - ${t.to || "-"}`;
 };
 
 // Room types offered on a hotel booking's room line.
@@ -5751,6 +5751,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     customers.forEach((c, i) => {
       const ticketKey = `ticket:${(c.ticketNumber || "").trim().toUpperCase()}`;
       const isHighlighted = !!c.ticketNumber && highlightedRowKey === ticketKey;
+      // Reissued rows get a darker sky tint (row + text) so they read clearly at a
+      // glance; refund/other rows keep the normal stone text color.
+      const cellText = t.isReissued ? "text-sky-900" : "text-stone-600";
+      const nameText = t.isReissued ? "text-sky-950" : "text-stone-800";
       rows.push({
         sortDate: t.date || "",
         node: (
@@ -5762,13 +5766,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             isHighlighted
               ? `border-green-300 bg-green-100 ring-1 ring-inset ring-green-400 hover:bg-green-100 ${i > 0 ? "border-t-0" : ""}`
               : t.isReissued
-              ? `border-sky-200 bg-sky-50 hover:bg-sky-100 ${i > 0 ? "border-t-0" : ""}`
+              ? `border-sky-300 bg-sky-100 hover:bg-sky-200 ${i > 0 ? "border-t-0" : ""}`
               : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-teal-50/60"}`
           }`}
         >
-          <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.employee || "-"}</td>
-          <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.date ? formatDisplayDate(t.date) : "-"}</td>
-          <td className="px-2.5 py-1 font-medium text-stone-800 whitespace-nowrap">
+          <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`}>{t.employee || "-"}</td>
+          <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`}>{t.date ? formatDisplayDate(t.date) : "-"}</td>
+          <td className={`px-2.5 py-1 font-medium ${nameText} whitespace-nowrap`}>
             <span className="inline-flex items-center gap-1.5">
               {c.name || "-"}
               {isMulti && i === 0 && (
@@ -5781,7 +5785,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
             </span>
           </td>
-          <td className="px-2.5 py-1 text-stone-600 font-mono whitespace-nowrap">
+          <td className={`px-2.5 py-1 ${cellText} font-mono whitespace-nowrap`}>
             <span className="inline-flex items-center gap-1.5">
               {c.ticketNumber || "-"}
               {t.isReissued && (
@@ -5791,9 +5795,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     jumpToRow(`ticket:${(t.oldTicketNumber || "").trim().toUpperCase()}`);
                   }}
                   title={`Exchanged from ${t.oldTicketNumber || "an older ticket"} — click to view the original ticket`}
-                  className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full hover:bg-sky-200 cursor-pointer"
+                  className="inline-flex items-center justify-center w-5 h-4 text-[10px] font-semibold text-sky-800 bg-sky-200 border border-sky-400 rounded-full hover:bg-sky-300 cursor-pointer"
                 >
-                  E
+                  EX
                 </span>
               )}
               {refundForIndex(t, i) && (
@@ -5803,28 +5807,28 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     jumpToRow(`refund:${(c.ticketNumber || "").trim().toUpperCase()}`);
                   }}
                   title={`Refunded — Airline: ${fmt(refundForIndex(t, i).airlineAmount)} · Customer: ${fmt(refundForIndex(t, i).customerAmount)} — click to view the refund`}
-                  className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-red-700 bg-red-100 border border-red-300 rounded-full hover:bg-red-200 cursor-pointer"
+                  className="inline-flex items-center text-[10px] font-semibold text-red-800 bg-red-200 border border-red-400 rounded-full px-1.5 py-0.5 hover:bg-red-300 cursor-pointer"
                 >
-                  R
+                  Refunded
                 </span>
               )}
             </span>
           </td>
-          <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
+          <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`} title={getAirlineNameByIata(t.airline) || t.airline || ""}>
             {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
           </td>
-          <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{routeLabel(t)}</td>
-          <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.netPrice)}</td>
-          <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
+          <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`}>{routeLabel(t)}</td>
+          <td className={`px-2.5 py-1 ${cellText} text-right whitespace-nowrap`}>{fmt(t.netPrice)}</td>
+          <td className={`px-2.5 py-1 ${cellText} text-right whitespace-nowrap`}>{fmt(t.soldPrice)}</td>
           <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
-          <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
+          <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`}>
             {t.company && t.company.trim() ? (
               t.company
             ) : (
               <span className="text-stone-400 italic">Individual</span>
             )}
           </td>
-          <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.supplier || "-"}</td>
+          <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`}>{t.supplier || "-"}</td>
         </tr>
         ),
       });
@@ -5838,11 +5842,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const isHighlighted = highlightedRowKey === refundKey;
       // Text stays legible whichever background is active: the usual red on a red row,
       // or a matching green when this row is the one currently jumped-to/highlighted.
-      const rowText = isHighlighted ? "text-green-700" : "text-red-700";
-      const rowTextBold = isHighlighted ? "text-green-800" : "text-red-800";
+      const rowText = isHighlighted ? "text-green-800" : "text-red-800";
+      const rowTextBold = isHighlighted ? "text-green-900" : "text-red-950";
       const rowBadgeClasses = isHighlighted
-        ? "text-green-700 bg-green-100 border border-green-300 hover:bg-green-200"
-        : "text-red-700 bg-red-100 border border-red-300 hover:bg-red-200";
+        ? "text-green-800 bg-green-200 border border-green-400 hover:bg-green-300"
+        : "text-red-800 bg-red-200 border border-red-400 hover:bg-red-300";
       rows.push({
         sortDate: refund.date || t.date || "",
         node: (
@@ -5853,7 +5857,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           className={`border-t border-dashed leading-tight cursor-pointer ${
             isHighlighted
               ? "border-green-300 bg-green-100 ring-1 ring-inset ring-green-400 hover:bg-green-100"
-              : "border-red-200 bg-red-50/60 hover:bg-red-100/60"
+              : "border-red-300 bg-red-100/70 hover:bg-red-200/70"
           }`}
         >
           <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`}>{t.employee || "-"}</td>
