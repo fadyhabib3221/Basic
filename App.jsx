@@ -929,28 +929,6 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
         <p className="text-xs text-stone-500 mb-1">Grade</p>
         <p className="text-sm font-medium text-stone-700 mb-4">{roleLabel(emp.role)}</p>
 
-        <p className="text-xs text-stone-500 mb-1">Individual permissions</p>
-        <div className="border border-stone-200 rounded-xl px-3 divide-y divide-stone-100 mb-4">
-          <ToggleSwitch
-            label="Accounting mode"
-            description="View all tickets, but the only edit allowed is the Notes field"
-            checked={emp.isAccounting}
-            onChange={(v) => onSetPermission("isAccounting", v)}
-          />
-          <ToggleSwitch
-            label="Manage companies"
-            description="Add, edit, or remove saved company records"
-            checked={emp.canManageCompanies}
-            onChange={(v) => onSetPermission("canManageCompanies", v)}
-          />
-          <ToggleSwitch
-            label="Owner access"
-            description="Admin-level access — manage employees, backup/restore — everything except the License panel"
-            checked={emp.isOwner}
-            onChange={(v) => onSetPermission("isOwner", v)}
-          />
-        </div>
-
         <p className="text-xs text-stone-500 mb-1">Section access &amp; permissions</p>
         <p className="text-[11px] text-stone-400 mb-2">
           Turn a section on or off, then set exactly what they can do inside it — View all services, Edit, and Delete are each independent per section.
