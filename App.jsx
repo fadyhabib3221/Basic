@@ -5859,9 +5859,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-teal-50/60"}`
           }`}
         >
-          <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`}>{t.employee || "-"}</td>
-          <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`}>{t.date ? formatDisplayDate(t.date) : "-"}</td>
-          <td className={`px-2.5 py-1 font-medium ${nameText} whitespace-nowrap`}>
+          <td className={`px-2 py-0.5 ${cellText} whitespace-nowrap`}>{t.employee || "-"}</td>
+          <td className={`px-2 py-0.5 ${cellText} whitespace-nowrap`}>{t.date ? formatDisplayDate(t.date) : "-"}</td>
+          <td className={`px-2 py-0.5 font-medium ${nameText} whitespace-nowrap`}>
             <span className="inline-flex items-center gap-1.5">
               {c.name || "-"}
               {isMulti && i === 0 && (
@@ -5874,7 +5874,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
             </span>
           </td>
-          <td className={`px-2.5 py-1 ${cellText} font-mono whitespace-nowrap`}>
+          <td className={`px-2 py-0.5 ${cellText} font-mono whitespace-nowrap`}>
             <span className="inline-flex items-center gap-1.5">
               {c.ticketNumber || "-"}
               {t.isReissued && (
@@ -5903,21 +5903,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
             </span>
           </td>
-          <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`} title={getAirlineNameByIata(t.airline) || t.airline || ""}>
+          <td className={`px-2 py-0.5 ${cellText} whitespace-nowrap`} title={getAirlineNameByIata(t.airline) || t.airline || ""}>
             {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
           </td>
-          <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`}>{routeLabel(t)}</td>
-          <td className={`px-2.5 py-1 ${cellText} text-right whitespace-nowrap`}>{fmt(t.soldPrice)}</td>
-          <td className={`px-2.5 py-1 ${cellText} text-right whitespace-nowrap`}>{fmt(t.netPrice)}</td>
-          <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
-          <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`}>
+          <td className={`px-2 py-0.5 ${cellText} whitespace-nowrap`}>{routeLabel(t)}</td>
+          <td className={`px-2 py-0.5 ${cellText} text-right whitespace-nowrap`}>{fmt(t.soldPrice)}</td>
+          <td className={`px-2 py-0.5 ${cellText} text-right whitespace-nowrap`}>{fmt(t.netPrice)}</td>
+          <td className="px-2 py-0.5 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
+          <td className={`px-2 py-0.5 ${cellText} whitespace-nowrap`}>
             {t.company && t.company.trim() ? (
               t.company
             ) : (
               <span className="text-stone-400 italic">Individual</span>
             )}
           </td>
-          <td className={`px-2.5 py-1 ${cellText} whitespace-nowrap`}>{t.supplier || "-"}</td>
+          <td className={`px-2 py-0.5 ${cellText} whitespace-nowrap`}>{t.supplier || "-"}</td>
         </tr>
         ),
       });
@@ -5949,10 +5949,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               : "border-red-300 bg-red-100/70 hover:bg-red-200/70"
           }`}
         >
-          <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`}>{t.employee || "-"}</td>
-          <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`}>{refund.date ? formatDisplayDate(refund.date) : "-"}</td>
-          <td className={`px-2.5 py-1 font-medium ${rowTextBold} whitespace-nowrap`}>{(refundedCustomer && refundedCustomer.name) || "-"}</td>
-          <td className={`px-2.5 py-1 ${rowText} font-mono whitespace-nowrap`}>
+          <td className={`px-2 py-0.5 ${rowText} whitespace-nowrap`}>{t.employee || "-"}</td>
+          <td className={`px-2 py-0.5 ${rowText} whitespace-nowrap`}>{refund.date ? formatDisplayDate(refund.date) : "-"}</td>
+          <td className={`px-2 py-0.5 font-medium ${rowTextBold} whitespace-nowrap`}>{(refundedCustomer && refundedCustomer.name) || "-"}</td>
+          <td className={`px-2 py-0.5 ${rowText} font-mono whitespace-nowrap`}>
             <span className="inline-flex items-center gap-1.5">
               {refundTicketNumber}
               <span
@@ -5967,19 +5967,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </span>
             </span>
           </td>
-          <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`} title={getAirlineNameByIata(t.airline) || t.airline || ""}>
+          <td className={`px-2 py-0.5 ${rowText} whitespace-nowrap`} title={getAirlineNameByIata(t.airline) || t.airline || ""}>
             {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
           </td>
-          <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`}>{routeLabel(t)}</td>
-          <td className={`px-2.5 py-1 ${rowText} text-right whitespace-nowrap`}>{fmt(refund.customerAmount)}</td>
-          <td className={`px-2.5 py-1 ${rowText} text-right whitespace-nowrap`}>{fmt(refund.airlineAmount)}</td>
-          <td className={`px-2.5 py-1 font-semibold ${rowTextBold} text-right whitespace-nowrap`}>
+          <td className={`px-2 py-0.5 ${rowText} whitespace-nowrap`}>{routeLabel(t)}</td>
+          <td className={`px-2 py-0.5 ${rowText} text-right whitespace-nowrap`}>{fmt(refund.customerAmount)}</td>
+          <td className={`px-2 py-0.5 ${rowText} text-right whitespace-nowrap`}>{fmt(refund.airlineAmount)}</td>
+          <td className={`px-2 py-0.5 font-semibold ${rowTextBold} text-right whitespace-nowrap`}>
             {fmt((parseFloat(refund.airlineAmount) || 0) - (parseFloat(refund.customerAmount) || 0))}
           </td>
-          <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`}>
+          <td className={`px-2 py-0.5 ${rowText} whitespace-nowrap`}>
             {t.company && t.company.trim() ? t.company : <span className="text-red-400 italic">Individual</span>}
           </td>
-          <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`}>{t.supplier || "-"}</td>
+          <td className={`px-2 py-0.5 ${rowText} whitespace-nowrap`}>{t.supplier || "-"}</td>
         </tr>
         ),
       });
@@ -7737,17 +7737,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full text-xs border-collapse">
                 <thead>
                   <tr className="bg-teal-50/60 text-teal-800 text-[11px] uppercase tracking-wide border-b-2 border-teal-200">
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Employee</th>
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Date</th>
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Customer</th>
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Ticket #</th>
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Airline</th>
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Route</th>
-                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Sold price</th>
-                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Net price</th>
-                    <th className="text-right px-2.5 py-1.5 font-semibold whitespace-nowrap">Profit</th>
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Company</th>
-                    <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Supplier</th>
+                    <th className="text-left px-2 py-1 font-semibold whitespace-nowrap">Employee</th>
+                    <th className="text-left px-2 py-1 font-semibold whitespace-nowrap">Date</th>
+                    <th className="text-left px-2 py-1 font-semibold whitespace-nowrap">Customer</th>
+                    <th className="text-left px-2 py-1 font-semibold whitespace-nowrap">Ticket #</th>
+                    <th className="text-left px-2 py-1 font-semibold whitespace-nowrap">Airline</th>
+                    <th className="text-left px-2 py-1 font-semibold whitespace-nowrap">Route</th>
+                    <th className="text-right px-2 py-1 font-semibold whitespace-nowrap">Sold price</th>
+                    <th className="text-right px-2 py-1 font-semibold whitespace-nowrap">Net price</th>
+                    <th className="text-right px-2 py-1 font-semibold whitespace-nowrap">Profit</th>
+                    <th className="text-left px-2 py-1 font-semibold whitespace-nowrap">Company</th>
+                    <th className="text-left px-2 py-1 font-semibold whitespace-nowrap">Supplier</th>
                   </tr>
                 </thead>
                 <tbody>
