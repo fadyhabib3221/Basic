@@ -1653,6 +1653,25 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [error, setError] = useState("");
   // Clicking a ticket row opens a full detail view of that ticket (id stored here).
   const [viewingTicketId, setViewingTicketId] = useState(null);
+  // Which row is currently highlighted/jumped-to in the main tickets table, identified
+  // by a "ticket:<TICKETNUMBER>" or "refund:<TICKETNUMBER>" key (see data-row-key on
+  // each <tr> below). Set when clicking an "Exchanged"/"Refunded" badge so the related
+  // row — including an old, reissued ticket that's normally hidden from the table — can
+  // be scrolled to and briefly highlighted.
+  const [highlightedRowKey, setHighlightedRowKey] = useState(null);
+  const highlightTimeoutRef = useRef(null);
+  const jumpToRow = (key) => {
+    if (!key) return;
+    setHighlightedRowKey(key);
+    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+    setTimeout(() => {
+      const el = document.querySelector(`tr[data-row-key="${key}"]`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+    highlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedRowKey((cur) => (cur === key ? null : cur));
+    }, 4000);
+  };
   const [notesDraft, setNotesDraft] = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
   // Refund box in the main ticket form (next to Reissue): looks up existing tickets by
@@ -5231,23 +5250,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return b.date.localeCompare(a.date);
   });
 
-  // Reissue chains: when a reissued ticket's original ticket is also visible in this
-  // filtered/sorted list, nest the reissued ticket under that original row instead of
-  // showing it a second time as its own separate top-level row further down the table.
-  const reissueChildrenByParentId = {};
-  const hiddenReissueChildIds = new Set();
-  {
-    const visibleIds = new Set(sortedFiltered.map((x) => x.id));
-    sortedFiltered.forEach((t2) => {
-      if (!t2.isReissued) return;
-      const parent = findTicketByNumber(t2.oldTicketNumber);
-      if (parent && parent.id !== t2.id && visibleIds.has(parent.id)) {
-        if (!reissueChildrenByParentId[parent.id]) reissueChildrenByParentId[parent.id] = [];
-        reissueChildrenByParentId[parent.id].push(t2);
-        hiddenReissueChildIds.add(t2.id);
-      }
-    });
-  }
+  // Ticket numbers that have been superseded by a reissue — i.e. every ticket number
+  // that appears as some OTHER ticket's oldTicketNumber. These are hidden from the main
+  // table by default (the new, reissued ticket shows in its place, at its own date), so
+  // an old ticket number doesn't keep cluttering the list and the date order never gets
+  // reshuffled to nest a reissued ticket under an older row. Clicking that new ticket's
+  // "Exchanged" badge (see jumpToRow above) reveals the specific old row again.
+  const supersededTicketNumbers = new Set();
+  tickets.forEach((t2) => {
+    if (t2.isReissued && t2.oldTicketNumber) {
+      supersededTicketNumbers.add(t2.oldTicketNumber.trim().toUpperCase());
+    }
+  });
 
   // The ticket currently open in the detail "page", if any.
   const viewingTicket = viewingTicketId ? visibleTickets.find((t) => t.id === viewingTicketId) : null;
@@ -5736,89 +5750,113 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     );
   }
 
-  // Builds one ticket's row(s) for the main table: a row per customer, plus a refund
-  // sub-row if a refund has been recorded on this specific ticket. Used both for a
-  // ticket's normal top-level appearance and — with nested: true — for a reissued
-  // ticket shown directly under the original ticket it replaced.
-  const buildTicketRows = (t, { nested = false } = {}) => {
+  // Builds one ticket's row(s) for the main table: a row per customer (skipping any
+  // customer whose ticket number has been superseded by a reissue, unless that exact
+  // row is the one currently jumped-to/highlighted), plus a refund sub-row if a refund
+  // has been recorded on this specific ticket.
+  const buildTicketRows = (t) => {
     const customers = getCustomers(t);
     const isMulti = customers.length > 1;
-    const rows = customers.map((c, i) => (
-      <tr
-        key={`${t.id}-${i}`}
-        onClick={() => openTicketDetail(t)}
-        className={`border-t leading-tight cursor-pointer ${
-          t.isReissued
-            ? `${nested ? "border-dashed" : ""} border-sky-200 bg-sky-50 hover:bg-sky-100 ${i > 0 ? "border-t-0" : ""}`
-            : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-teal-50/60"}`
-        }`}
-      >
-        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
-          {nested && i === 0 && <span className="text-sky-500 mr-1">↳</span>}
-          {t.employee || "-"}
-        </td>
-        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.date ? formatDisplayDate(t.date) : "-"}</td>
-        <td className="px-2.5 py-1 font-medium text-stone-800 whitespace-nowrap">
-          <span className="inline-flex items-center gap-1.5">
-            {c.name || "-"}
-            {isMulti && i === 0 && (
-              <span
-                title={`This booking has ${customers.length} customers / tickets`}
-                className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5"
-              >
-                <Users size={10} /> {customers.length}
-              </span>
+    const rows = [];
+    customers.forEach((c, i) => {
+      const ticketKey = `ticket:${(c.ticketNumber || "").trim().toUpperCase()}`;
+      const isHighlighted = !!c.ticketNumber && highlightedRowKey === ticketKey;
+      const isSuperseded = !!c.ticketNumber && supersededTicketNumbers.has(c.ticketNumber.trim().toUpperCase());
+      // Superseded (reissued-away) rows are hidden from the table by default — they
+      // only reappear when jumped to via the "Exchanged" badge on the newer ticket.
+      if (isSuperseded && !isHighlighted) return;
+      rows.push(
+        <tr
+          key={`${t.id}-${i}`}
+          data-row-key={ticketKey}
+          onClick={() => openTicketDetail(t)}
+          className={`border-t leading-tight cursor-pointer ${
+            isHighlighted
+              ? `border-amber-300 bg-amber-100 ring-1 ring-inset ring-amber-400 hover:bg-amber-100 ${i > 0 ? "border-t-0" : ""}`
+              : t.isReissued
+              ? `border-sky-200 bg-sky-50 hover:bg-sky-100 ${i > 0 ? "border-t-0" : ""}`
+              : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-teal-50/60"}`
+          }`}
+        >
+          <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.employee || "-"}</td>
+          <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.date ? formatDisplayDate(t.date) : "-"}</td>
+          <td className="px-2.5 py-1 font-medium text-stone-800 whitespace-nowrap">
+            <span className="inline-flex items-center gap-1.5">
+              {c.name || "-"}
+              {isMulti && i === 0 && (
+                <span
+                  title={`This booking has ${customers.length} customers / tickets`}
+                  className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5"
+                >
+                  <Users size={10} /> {customers.length}
+                </span>
+              )}
+            </span>
+          </td>
+          <td className="px-2.5 py-1 text-stone-600 font-mono whitespace-nowrap">
+            <span className="inline-flex items-center gap-1.5">
+              {c.ticketNumber || "-"}
+              {t.isReissued && (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    jumpToRow(`ticket:${(t.oldTicketNumber || "").trim().toUpperCase()}`);
+                  }}
+                  title={`Exchanged from ${t.oldTicketNumber || "an older ticket"} — click to view the original ticket`}
+                  className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5 hover:bg-sky-200 cursor-pointer"
+                >
+                  Exchanged{t.oldTicketNumber ? ` (orig: ${t.oldTicketNumber})` : ""}
+                </span>
+              )}
+              {refundForIndex(t, i) && (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    jumpToRow(`refund:${(c.ticketNumber || "").trim().toUpperCase()}`);
+                  }}
+                  title={`Refunded — Airline: ${fmt(refundForIndex(t, i).airlineAmount)} · Customer: ${fmt(refundForIndex(t, i).customerAmount)} — click to view the refund`}
+                  className="inline-flex items-center text-[10px] font-semibold text-red-700 bg-red-100 border border-red-300 rounded-full px-1.5 py-0.5 hover:bg-red-200 cursor-pointer"
+                >
+                  Refunded
+                </span>
+              )}
+            </span>
+          </td>
+          <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
+            {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
+          </td>
+          <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{routeLabel(t)}</td>
+          <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.netPrice)}</td>
+          <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
+          <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
+          <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
+            {t.company && t.company.trim() ? (
+              t.company
+            ) : (
+              <span className="text-stone-400 italic">Individual</span>
             )}
-          </span>
-        </td>
-        <td className="px-2.5 py-1 text-stone-600 font-mono whitespace-nowrap">
-          <span className="inline-flex items-center gap-1.5">
-            {c.ticketNumber || "-"}
-            {t.isReissued && (
-              <span
-                title={`Exchanged from ${t.oldTicketNumber || "an older ticket"}`}
-                className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5"
-              >
-                Exchanged{t.oldTicketNumber ? ` (orig: ${t.oldTicketNumber})` : ""}
-              </span>
-            )}
-            {refundForIndex(t, i) && (
-              <span
-                title={`Refunded — Airline: ${fmt(refundForIndex(t, i).airlineAmount)} · Customer: ${fmt(refundForIndex(t, i).customerAmount)}`}
-                className="inline-flex items-center text-[10px] font-semibold text-red-700 bg-red-100 border border-red-300 rounded-full px-1.5 py-0.5"
-              >
-                Refunded
-              </span>
-            )}
-          </span>
-        </td>
-        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap" title={getAirlineNameByIata(t.airline) || t.airline || ""}>
-          {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
-        </td>
-        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{routeLabel(t)}</td>
-        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.netPrice)}</td>
-        <td className="px-2.5 py-1 text-stone-600 text-right whitespace-nowrap">{fmt(t.soldPrice)}</td>
-        <td className="px-2.5 py-1 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
-        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">
-          {t.company && t.company.trim() ? (
-            t.company
-          ) : (
-            <span className="text-stone-400 italic">Individual</span>
-          )}
-        </td>
-        <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.supplier || "-"}</td>
-      </tr>
-    ));
+          </td>
+          <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.supplier || "-"}</td>
+        </tr>
+      );
+    });
     getRefunds(t)
       .filter((r) => r && (r.airlineAmount !== "" || r.customerAmount !== ""))
       .forEach((refund, ri) => {
       const refundedCustomer = customers[refund.customerIndex || 0];
       const refundTicketNumber = (refundedCustomer && refundedCustomer.ticketNumber) || (customers[0] && customers[0].ticketNumber) || "-";
+      const refundKey = `refund:${(refundTicketNumber || "").trim().toUpperCase()}`;
+      const isHighlighted = highlightedRowKey === refundKey;
       rows.push(
         <tr
           key={`${t.id}-refund-${ri}`}
+          data-row-key={refundKey}
           onClick={() => openTicketDetail(t)}
-          className="border-t border-dashed border-red-200 bg-red-50/60 leading-tight cursor-pointer hover:bg-red-100/60"
+          className={`border-t border-dashed leading-tight cursor-pointer ${
+            isHighlighted
+              ? "border-amber-300 bg-amber-100 ring-1 ring-inset ring-amber-400 hover:bg-amber-100"
+              : "border-red-200 bg-red-50/60 hover:bg-red-100/60"
+          }`}
         >
           <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{t.employee || "-"}</td>
           <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{refund.date ? formatDisplayDate(refund.date) : "-"}</td>
@@ -5826,7 +5864,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <td className="px-2.5 py-1 text-red-700 font-mono whitespace-nowrap">
             <span className="inline-flex items-center gap-1.5">
               {refundTicketNumber}
-              <span className="inline-flex items-center text-[10px] font-semibold text-red-700 bg-red-100 border border-red-300 rounded-full px-1.5 py-0.5">
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  jumpToRow(`ticket:${(refundTicketNumber || "").trim().toUpperCase()}`);
+                }}
+                title="Click to view the original ticket"
+                className="inline-flex items-center text-[10px] font-semibold text-red-700 bg-red-100 border border-red-300 rounded-full px-1.5 py-0.5 hover:bg-red-200 cursor-pointer"
+              >
                 ↳ Refund
               </span>
             </span>
@@ -5846,18 +5891,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <td className="px-2.5 py-1 text-red-700 whitespace-nowrap">{t.supplier || "-"}</td>
         </tr>
       );
-    });
-    return rows;
-  };
-
-  // Renders a ticket's rows followed by (recursively) any ticket(s) that reissued it,
-  // so a chain of reissues nests under the original ticket rather than each appearing
-  // separately at its own position in the sorted table.
-  const renderTicketChain = (t, nested = false) => {
-    const rows = buildTicketRows(t, { nested });
-    const children = reissueChildrenByParentId[t.id] || [];
-    children.forEach((child) => {
-      rows.push(...renderTicketChain(child, true));
     });
     return rows;
   };
@@ -7616,9 +7649,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedFiltered.flatMap((t) =>
-                    hiddenReissueChildIds.has(t.id) ? [] : renderTicketChain(t, false)
-                  )}
+                  {sortedFiltered.flatMap((t) => buildTicketRows(t))}
                 </tbody>
               </table>
             </div>
