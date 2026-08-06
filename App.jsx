@@ -5741,6 +5741,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // sub-row if a refund has been recorded on this ticket. Every row always shows —
   // clicking a ticket's "Exchanged" or "Refunded"/"↳ Refund" badge just scrolls to and
   // briefly highlights (green) the related row elsewhere in the table.
+  // Each entry is tagged with its own sortDate so the caller can place every row —
+  // including refund rows — by that row's own date, instead of always nesting the
+  // refund directly beneath its parent ticket's row(s).
   const buildTicketRows = (t) => {
     const customers = getCustomers(t);
     const isMulti = customers.length > 1;
@@ -5748,7 +5751,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     customers.forEach((c, i) => {
       const ticketKey = `ticket:${(c.ticketNumber || "").trim().toUpperCase()}`;
       const isHighlighted = !!c.ticketNumber && highlightedRowKey === ticketKey;
-      rows.push(
+      rows.push({
+        sortDate: t.date || "",
+        node: (
         <tr
           key={`${t.id}-${i}`}
           data-row-key={ticketKey}
@@ -5821,7 +5826,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </td>
           <td className="px-2.5 py-1 text-stone-600 whitespace-nowrap">{t.supplier || "-"}</td>
         </tr>
-      );
+        ),
+      });
     });
     getRefunds(t)
       .filter((r) => r && (r.airlineAmount !== "" || r.customerAmount !== ""))
@@ -5837,7 +5843,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const rowBadgeClasses = isHighlighted
         ? "text-green-700 bg-green-100 border border-green-300 hover:bg-green-200"
         : "text-red-700 bg-red-100 border border-red-300 hover:bg-red-200";
-      rows.push(
+      rows.push({
+        sortDate: refund.date || t.date || "",
+        node: (
         <tr
           key={`${t.id}-refund-${ri}`}
           data-row-key={refundKey}
@@ -5880,7 +5888,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </td>
           <td className={`px-2.5 py-1 ${rowText} whitespace-nowrap`}>{t.supplier || "-"}</td>
         </tr>
-      );
+        ),
+      });
     });
     return rows;
   };
@@ -7639,7 +7648,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedFiltered.flatMap((t) => buildTicketRows(t))}
+                  {sortedFiltered
+                    .flatMap((t) => buildTicketRows(t))
+                    .sort((a, b) => {
+                      // Places every row — including refund rows — by its own date, so a
+                      // refund lands where it belongs in the date order rather than always
+                      // staying pinned directly under its parent ticket's row(s). Rows with
+                      // no date are pushed to the end, matching sortedFiltered above.
+                      if (!a.sortDate && !b.sortDate) return 0;
+                      if (!a.sortDate) return 1;
+                      if (!b.sortDate) return -1;
+                      return b.sortDate.localeCompare(a.sortDate);
+                    })
+                    .map((row) => row.node)}
                 </tbody>
               </table>
             </div>
