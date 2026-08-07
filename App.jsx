@@ -7072,33 +7072,33 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </span>
           </p>
         </div>
-        <div className="grid grid-cols-4 gap-1.5 sm:gap-3 mb-6">
-          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="flex overflow-x-auto gap-2 sm:gap-3 mb-6 pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory scrollbar-none">
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
             <div className="bg-stone-100 rounded-xl p-1.5 sm:p-2 text-stone-600 shrink-0"><Ticket size={18} className="sm:hidden" /><Ticket size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
-              <p className="text-xs text-stone-500">Tickets</p>
-              <p className="text-sm sm:text-lg font-bold truncate">{totals.count}</p>
+              <p className="text-xs text-stone-500 whitespace-nowrap">Tickets</p>
+              <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{totals.count}</p>
             </div>
           </div>
-          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
             <div className="bg-teal-50 rounded-xl p-1.5 sm:p-2 text-teal-900 shrink-0"><Wallet size={18} className="sm:hidden" /><Wallet size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
-              <p className="text-xs text-stone-500">Total sales</p>
-              <p className="text-sm sm:text-lg font-bold truncate">{fmt(totals.total)}</p>
+              <p className="text-xs text-stone-500 whitespace-nowrap">Total sales</p>
+              <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{fmt(totals.total)}</p>
             </div>
           </div>
-          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
             <div className="bg-amber-50 rounded-xl p-1.5 sm:p-2 text-amber-700 shrink-0"><Receipt size={18} className="sm:hidden" /><Receipt size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
-              <p className="text-xs text-stone-500">Total net</p>
-              <p className="text-sm sm:text-lg font-bold truncate">{fmt(totals.net)}</p>
+              <p className="text-xs text-stone-500 whitespace-nowrap">Total net</p>
+              <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{fmt(totals.net)}</p>
             </div>
           </div>
-          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
             <div className="bg-emerald-50 rounded-xl p-1.5 sm:p-2 text-emerald-700 shrink-0"><TrendingUp size={18} className="sm:hidden" /><TrendingUp size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
-              <p className="text-xs text-stone-500">Total profit</p>
-              <p className="text-sm sm:text-lg font-bold text-emerald-700 truncate">{fmt(totals.profit)}</p>
+              <p className="text-xs text-stone-500 whitespace-nowrap">Total profit</p>
+              <p className="text-sm sm:text-lg font-bold text-emerald-700 whitespace-nowrap">{fmt(totals.profit)}</p>
             </div>
           </div>
         </div>
