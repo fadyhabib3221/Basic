@@ -1402,6 +1402,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Keep the browser tab title and icon in sync with the app's name/branding.
   useEffect(() => {
     document.title = "Travel Agency Manager";
+    // Locks the page at 1x zoom on mobile Safari/Chrome. Without this, a pinch- or
+    // double-tap-zoom the person does anywhere on the page sticks around across
+    // refreshes and navigation (mobile browsers persist zoom/scroll state per tab),
+    // which is confusing in an app-like layout that's designed to fit the screen at 1x.
+    let viewport = document.querySelector("meta[name='viewport']");
+    if (!viewport) {
+      viewport = document.createElement("meta");
+      viewport.name = "viewport";
+      document.head.appendChild(viewport);
+    }
+    viewport.content = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no";
     const faviconSvg =
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
       '<rect width="24" height="24" rx="5" fill="#115e59"/>' +
