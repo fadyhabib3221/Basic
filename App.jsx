@@ -7606,13 +7606,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
           {/* Mobile layout: date gets its own row (native date inputs can overflow
               their grid cell on phones), prices share a separate 3-col row. */}
-          <div className="sm:hidden mt-3">
+          <div className="sm:hidden mt-3 w-full min-w-0 overflow-hidden">
             <label className="text-xs text-stone-500 block mb-1">Ticket issue date</label>
             <input
               type="date"
               lang="en-GB"
               max={todayDateStr()}
-              className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              className="block w-full max-w-full min-w-0 box-border border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              style={{ WebkitAppearance: "none" }}
               value={form.date}
               onChange={(e) => {
                 const v = e.target.value;
