@@ -6519,7 +6519,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <Wifi size={13} className="text-emerald-600" />
               {visibleOnlineUsernames.length} of {(employees || []).filter((e) => currentUser.isAdmin || !e.isAdmin).length} employees connected right now
             </p>
-            <div className="border border-stone-200 rounded-xl overflow-hidden mb-4">
+            <div className="border border-stone-200 rounded-xl overflow-x-auto mb-4">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-stone-50 text-stone-500 text-xs">
@@ -10805,7 +10805,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 className="w-full border border-stone-300 rounded-xl pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
               />
             </div>
-            <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+            <div className="bg-white rounded-2xl border border-stone-200 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
@@ -10852,7 +10852,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 className="w-full border border-stone-300 rounded-xl pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
               />
             </div>
-            <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+            <div className="bg-white rounded-2xl border border-stone-200 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
@@ -10944,7 +10944,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </button>
               </div>
             </div>
-            <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+            <div className="bg-white rounded-2xl border border-stone-200 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
@@ -11017,7 +11017,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <Plus size={14} /> {at("addExpense")}
               </button>
             </div>
-            <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+            <div className="bg-white rounded-2xl border border-stone-200 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
@@ -11115,7 +11115,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
 
             <h3 className="text-sm font-bold text-stone-700 mb-2">{at("expensesByCategory")}</h3>
-            <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+            <div className="bg-white rounded-2xl border border-stone-200 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
@@ -11317,7 +11317,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <p className="text-xs text-stone-400 mb-2">
                   Customers ({getCustomers(viewingTicket).length})
                 </p>
-                <div className="border border-stone-200 rounded-xl overflow-hidden">
+                <div className="border border-stone-200 rounded-xl overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-stone-50 text-stone-500 text-xs">
