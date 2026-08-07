@@ -7625,7 +7625,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <label className="text-xs text-stone-500 block mb-1">Net price</label>
               <input
                 type="number"
-                className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                 value={form.netPrice}
                 onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
                 placeholder="0"
@@ -7635,7 +7635,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <label className="text-xs text-stone-500 block mb-1">Sold price</label>
               <input
                 type="number"
-                className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                 value={form.soldPrice}
                 onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
                 placeholder="0"
