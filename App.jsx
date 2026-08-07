@@ -7604,7 +7604,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </div>
 
-          <div className="mt-3">
+          {/* Mobile layout: date gets its own row (native date inputs can overflow
+              their grid cell on phones), prices share a separate 3-col row. */}
+          <div className="sm:hidden mt-3">
             <label className="text-xs text-stone-500 block mb-1">Ticket issue date</label>
             <input
               type="date"
@@ -7614,19 +7616,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               value={form.date}
               onChange={(e) => {
                 const v = e.target.value;
-                // Belt-and-braces: some browsers still let a future date be typed
-                // manually even with `max` set, so clamp it back to today here too.
                 setForm({ ...form, date: v > todayDateStr() ? todayDateStr() : v });
               }}
             />
           </div>
-
-          <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-3">
+          <div className="sm:hidden grid grid-cols-3 gap-2 mt-3">
             <div>
               <label className="text-xs text-stone-500 block mb-1">Net price</label>
               <input
                 type="number"
-                className="w-full border border-stone-300 rounded-xl px-2 sm:px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                 value={form.netPrice}
                 onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
                 placeholder="0"
@@ -7636,7 +7635,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <label className="text-xs text-stone-500 block mb-1">Sold price</label>
               <input
                 type="number"
-                className="w-full border border-stone-300 rounded-xl px-2 sm:px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                 value={form.soldPrice}
                 onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
                 placeholder="0"
@@ -7644,7 +7643,51 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Profit (auto)</label>
-              <div className="w-full border border-stone-200 bg-stone-50 rounded-xl px-2 sm:px-3 py-2 text-sm text-emerald-700 font-semibold truncate">
+              <div className="w-full border border-stone-200 bg-stone-50 rounded-xl px-2 py-2 text-sm text-emerald-700 font-semibold truncate">
+                {fmt(profit(form.netPrice, form.soldPrice))}
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop/tablet layout: date, net, sold, profit back in a single row, as before. */}
+          <div className="hidden sm:grid sm:grid-cols-4 sm:gap-3 sm:mt-3">
+            <div>
+              <label className="text-xs text-stone-500 block mb-1">Ticket issue date</label>
+              <input
+                type="date"
+                lang="en-GB"
+                max={todayDateStr()}
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                value={form.date}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setForm({ ...form, date: v > todayDateStr() ? todayDateStr() : v });
+                }}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-stone-500 block mb-1">Net price</label>
+              <input
+                type="number"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                value={form.netPrice}
+                onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-stone-500 block mb-1">Sold price</label>
+              <input
+                type="number"
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                value={form.soldPrice}
+                onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-stone-500 block mb-1">Profit (auto)</label>
+              <div className="w-full border border-stone-200 bg-stone-50 rounded-xl px-3 py-2 text-sm text-emerald-700 font-semibold">
                 {fmt(profit(form.netPrice, form.soldPrice))}
               </div>
             </div>
