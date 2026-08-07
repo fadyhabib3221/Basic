@@ -6520,7 +6520,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               {visibleOnlineUsernames.length} of {(employees || []).filter((e) => currentUser.isAdmin || !e.isAdmin).length} employees connected right now
             </p>
             <div className="border border-stone-200 rounded-xl overflow-x-auto mb-4">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-max text-sm">
                 <thead>
                   <tr className="bg-stone-50 text-stone-500 text-xs">
                     <th className="text-left px-3 py-2 font-medium">Status</th>
@@ -6873,7 +6873,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               ) : (
                 <div className="border border-stone-200 rounded-xl overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
+                    <table className="w-full min-w-max text-xs">
                       <thead>
                         <tr className="bg-stone-50 text-stone-500 text-[11px] uppercase tracking-wide">
                           <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Company</th>
@@ -7960,7 +7960,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-stone-200">
-              <table className="w-full text-xs border-collapse">
+              <table className="w-full min-w-max text-xs border-collapse">
                 <thead>
                   <tr className="bg-teal-50/60 text-teal-800 text-[11px] uppercase tracking-wide border-b-2 border-teal-200">
                     <th className="text-left px-2 py-1 font-semibold whitespace-nowrap">Employee</th>
@@ -8002,7 +8002,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <h2 className="font-semibold text-stone-900 text-sm">Totals by month</h2>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-max text-sm">
                 <thead>
                   <tr className="bg-stone-50 text-stone-500 text-xs">
                     <th className="text-left px-3 py-2 font-medium">Month</th>
@@ -8723,7 +8723,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         </div>
 
         <div className="bg-white border border-stone-200 rounded-2xl overflow-x-auto">
-          <table className="w-full text-xs border-collapse">
+          <table className="w-full min-w-max text-xs border-collapse">
             <thead>
               <tr className="bg-stone-50 border-b border-stone-200 text-stone-500">
                 <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Company</th>
@@ -9279,7 +9279,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         ) : (
           <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
                     <th className="text-left px-4 py-3 font-semibold"># Customers</th>
@@ -9920,7 +9920,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         ) : (
           <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
                     <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">Entry date</th>
@@ -10806,7 +10806,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               />
             </div>
             <div className="bg-white rounded-2xl border border-stone-200 overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
                     <th className="text-right px-3 py-2 font-medium">{at("colSupplier")}</th>
@@ -10853,7 +10853,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               />
             </div>
             <div className="bg-white rounded-2xl border border-stone-200 overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
                     <th className="text-right px-3 py-2 font-medium">{at("colCustomer")}</th>
@@ -10945,7 +10945,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
             <div className="bg-white rounded-2xl border border-stone-200 overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
                     <th className="text-right px-3 py-2 font-medium">{at("colDate")}</th>
@@ -11018,7 +11018,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </button>
             </div>
             <div className="bg-white rounded-2xl border border-stone-200 overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
                     <th className="text-right px-3 py-2 font-medium">{at("colDate")}</th>
@@ -11116,7 +11116,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
             <h3 className="text-sm font-bold text-stone-700 mb-2">{at("expensesByCategory")}</h3>
             <div className="bg-white rounded-2xl border border-stone-200 overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
                     <th className="text-right px-3 py-2 font-medium">{at("colCategory")}</th>
@@ -11318,7 +11318,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   Customers ({getCustomers(viewingTicket).length})
                 </p>
                 <div className="border border-stone-200 rounded-xl overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-max text-sm">
                     <thead>
                       <tr className="bg-stone-50 text-stone-500 text-xs">
                         <th className="text-left px-3 py-2 font-medium">Customer</th>
