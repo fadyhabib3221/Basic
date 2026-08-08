@@ -5,11 +5,22 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    /* Disables the pinch-to-zoom gesture at the touch-handling level. Modern
+       Safari/Chrome ignore the viewport meta tag's user-scalable=no/maximum-scale
+       (Apple in particular forces it to be ignored for accessibility reasons since
+       iOS 10), so that meta tag alone no longer blocks zooming. touch-action is a
+       separate mechanism the browser still respects: pan-x/pan-y allow normal
+       scrolling gestures but the browser no longer recognizes a two-finger pinch
+       as a zoom gesture at all, so there's no zoom scale left to persist/restore
+       on refresh.
+    */
+    touch-action: pan-x pan-y;
   }
   body {
     font-family: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    touch-action: pan-x pan-y;
   }
   ::selection {
     background-color: rgb(13 148 136 / 0.25);
