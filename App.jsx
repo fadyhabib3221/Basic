@@ -2115,7 +2115,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
       return "Browsing visa bookings";
     }
-    if (activeSection === "cars") return "Cars";
+    if (activeSection === "cars") return "Transportation";
     if (activeSection === "files") return "Files";
     if (activeSection === "accounts") return "Accounts";
     // Flights (the default section)
@@ -2496,7 +2496,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const entry = {
       username: currentUser ? currentUser.username : "",
       name: currentUser ? currentUser.name : "",
-      module, // e.g. "Flights", "Hotels", "Visas", "Cars", "Expenses", "Treasury", "Payments", "Employees", "Companies", "Requests", "License", "Backup"
+      module, // e.g. "Flights", "Hotels", "Visas", "Transportation", "Expenses", "Treasury", "Payments", "Employees", "Companies", "Requests", "License", "Backup"
       action, // e.g. "created", "edited", "deleted", "activated", "restored"
       description,
       at: Date.now(),
@@ -3038,7 +3038,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (carEditingId) {
       const next = carBookings.map((c) => (c.id === carEditingId ? { ...c, ...carForm, id: carEditingId } : c));
       await persistCarBookings(next);
-      recordActivity("Cars", "edited", `Edited car booking: ${carForm.customerName || "customer"} (${carForm.routeFrom || "?"} → ${carForm.routeTo || "?"})`);
+      recordActivity("Transportation", "edited", `Edited car booking: ${carForm.customerName || "customer"} (${carForm.routeFrom || "?"} → ${carForm.routeTo || "?"})`);
     } else {
       const record = {
         ...carForm,
@@ -3047,7 +3047,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         employeeUsername: currentUser.username,
       };
       await persistCarBookings([record, ...carBookings]);
-      recordActivity("Cars", "created", `Created car booking: ${record.customerName || "customer"} (${record.routeFrom || "?"} → ${record.routeTo || "?"})`);
+      recordActivity("Transportation", "created", `Created car booking: ${record.customerName || "customer"} (${record.routeFrom || "?"} → ${record.routeTo || "?"})`);
     }
     resetCarForm();
   };
@@ -3086,7 +3086,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     requestConfirm("Delete this transfer booking? This cannot be undone.", async () => {
       const deleted = carBookings.find((c) => c.id === id);
       await persistCarBookings(carBookings.filter((c) => c.id !== id));
-      if (deleted) recordActivity("Cars", "deleted", `Deleted car booking: ${deleted.customerName || "customer"} (${deleted.routeFrom || "?"} → ${deleted.routeTo || "?"})`);
+      if (deleted) recordActivity("Transportation", "deleted", `Deleted car booking: ${deleted.customerName || "customer"} (${deleted.routeFrom || "?"} → ${deleted.routeTo || "?"})`);
       if (carEditingId === id) resetCarForm();
       setConfirmDialog(null);
       if (onDeleted) onDeleted();
@@ -6595,7 +6595,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         )}
 
         {showActivityLog && currentUser.isAdmin && (() => {
-          const ACTIVITY_MODULES = ["all", "Flights", "Hotels", "Visas", "Cars", "Expenses", "Treasury", "Payments", "Employees", "Companies", "Requests", "License", "Backup"];
+          const ACTIVITY_MODULES = ["all", "Flights", "Hotels", "Visas", "Transportation", "Files", "Expenses", "Treasury", "Payments", "Employees", "Companies", "Requests", "License", "Backup"];
           const ACTION_STYLES = {
             created: "text-emerald-700 bg-emerald-50 border-emerald-200",
             edited: "text-amber-700 bg-amber-50 border-amber-200",
