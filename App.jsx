@@ -5312,6 +5312,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         soldPrice: visaSoldTotal(record),
       };
     }
+    if (sourceType === "cars") {
+      return {
+        ...base,
+        label: `${record.routeFrom || "-"} → ${record.routeTo || "-"}${record.customerName ? " · " + record.customerName : ""}`,
+        date: record.bookingDate,
+        currency: record.currency || "EGP",
+        netPrice: parseFloat(record.netPrice) || 0,
+        soldPrice: parseFloat(record.soldPrice) || 0,
+      };
+    }
     return { ...base, label: "-", date: "", currency: "EGP", netPrice: 0, soldPrice: 0 };
   };
 
@@ -5389,6 +5399,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const v = visaBookings.find((x) => x.id === it.sourceId);
       if (!v) { showActionToast("This visa booking no longer exists"); return; }
       setViewingVisaBooking(v);
+    } else if (it.sourceType === "cars") {
+      const c = carBookings.find((x) => x.id === it.sourceId);
+      if (!c) { showActionToast("This transfer booking no longer exists"); return; }
+      setViewingCarBooking(c);
     } else {
       showActionToast("No details available for this item");
     }
@@ -9036,6 +9050,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </table>
         </div>
 
+        </>
+        )}
+
+        {/* Rendered independently of activeSection so opening a hotel's details from
+            inside a File doesn't jump the user away to the Hotels section. */}
         {viewingHotelBooking && (
           <div
             className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
@@ -9073,7 +9092,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </button>
                   {hotelsPerm.canEdit && (
                     <button
-                      onClick={() => { handleEditHotelClick(viewingHotelBooking); setViewingHotelBooking(null); }}
+                      onClick={() => { setActiveSection("hotels"); handleEditHotelClick(viewingHotelBooking); setViewingHotelBooking(null); }}
                       className="text-stone-400 hover:text-teal-800 p-1.5"
                       title="Edit"
                     >
@@ -9163,8 +9182,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
           </div>
-        )}
-        </>
         )}
 
         {activeSection === "visa" && (
@@ -10251,6 +10268,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         )}
 
+        </>
+        )}
+
+        {/* Rendered independently of activeSection so opening a transfer's details from
+            inside a File doesn't jump the user away to the Transportation section. */}
         {viewingCarBooking && (
           <div
             className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
@@ -10282,7 +10304,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </button>
                   {carsPerm.canEdit && (
                     <button
-                      onClick={() => { handleEditCarClick(viewingCarBooking); setViewingCarBooking(null); }}
+                      onClick={() => { setActiveSection("cars"); handleEditCarClick(viewingCarBooking); setViewingCarBooking(null); }}
                       className="text-stone-400 hover:text-teal-800 p-1.5"
                       title="Edit"
                     >
@@ -10385,8 +10407,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
           </div>
-        )}
-        </>
         )}
 
         {activeSection === "files" && (
@@ -10891,6 +10911,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       { key: "flights", label: "Flights", icon: Plane },
                       { key: "hotels", label: "Hotels", icon: Building2 },
                       { key: "visa", label: "Visa", icon: PassportIcon },
+                      { key: "cars", label: "Transportation", icon: Car },
                     ].map((tab) => (
                       <button
                         key={tab.key}
@@ -10969,6 +10990,28 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               {v.visaType || "Visa"} · {(v.customers || []).map((c) => c.name).filter(Boolean).join(", ") || "-"}
                             </span>
                             <span className="text-xs text-stone-400 shrink-0">{fmt(visaSoldTotal(v))} {v.currency}</span>
+                          </button>
+                        ))
+                      )
+                    )}
+                    {filePickerTab === "cars" && (
+                      visibleCarBookings.length === 0 ? (
+                        <p className="text-sm text-stone-400 text-center py-6">No transfer bookings to add yet.</p>
+                      ) : (
+                        visibleCarBookings.map((c) => (
+                          <button
+                            key={c.id}
+                            onClick={async () => {
+                              if (draftFile) addDraftItem("cars", c);
+                              else await addItemToFile(openFile.id, "cars", c);
+                              setShowFilePicker(false);
+                            }}
+                            className="w-full text-left border border-stone-200 rounded-xl px-3 py-2 hover:bg-teal-50 hover:border-teal-300 flex items-center justify-between gap-2"
+                          >
+                            <span className="text-sm text-stone-800 truncate">
+                              {c.routeFrom || "-"} → {c.routeTo || "-"}{c.customerName ? ` · ${c.customerName}` : ""}
+                            </span>
+                            <span className="text-xs text-stone-400 shrink-0">{fmt(parseFloat(c.soldPrice) || 0)} {c.currency}</span>
                           </button>
                         ))
                       )
