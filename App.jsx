@@ -6321,16 +6321,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <span className="text-xs font-semibold">{accountsLang === "ar" ? "EN" : "AR"}</span>
             </button>
           )}
-          <header className="relative flex items-center justify-between flex-wrap gap-3 px-4 py-4 md:px-6">
-            <div className="flex items-center gap-3">
-              <div className="bg-white rounded-2xl px-2.5 py-1.5 sm:px-3 sm:py-2 shadow-sm shrink-0">
-                <img src={LOGO_DATA_URL} alt="TANIS International Travel" className="w-[150px] h-[46px] sm:w-[260px] sm:h-[80px] md:w-[320px] md:h-[98px] object-contain" />
+          <header className="relative flex items-center justify-between flex-wrap gap-2 sm:gap-3 px-3 py-2.5 sm:px-4 sm:py-3 md:px-6 md:py-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="bg-white rounded-2xl px-2 py-1 sm:px-2.5 sm:py-1.5 md:px-3 md:py-2 shadow-sm shrink-0">
+                <img src={LOGO_DATA_URL} alt="TANIS International Travel" className="w-[110px] h-[34px] sm:w-[150px] sm:h-[46px] md:w-[260px] md:h-[80px] lg:w-[320px] lg:h-[98px] object-contain" />
               </div>
               <div>
-                <h1 className="text-lg md:text-2xl font-semibold text-white" style={{ fontFamily: "'Fraunces', serif" }}>
-                  Travel Agency Manager <span className="text-teal-200/60 font-medium text-xs md:text-base" style={{ fontFamily: "'Inter', sans-serif" }}>By Fady Habib</span>
+                <h1 className="text-base sm:text-lg md:text-2xl font-semibold text-white" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Travel Agency Manager <span className="text-teal-200/60 font-medium text-[10px] sm:text-xs md:text-base" style={{ fontFamily: "'Inter', sans-serif" }}>By Fady Habib</span>
                 </h1>
-                <p className="text-teal-100/80 text-sm flex items-center gap-1.5 flex-wrap mt-0.5">
+                <p className="text-teal-100/80 text-xs sm:text-sm flex items-center gap-1.5 flex-wrap mt-0.5">
                   Signed in as {currentUser.name}
                   {currentUser.isAdmin && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-900 bg-amber-300 border border-amber-400/50 rounded-full px-2 py-0.5">
@@ -6360,16 +6360,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               {hasAdminAccess && (
                 <button onClick={handleBackup} title="Backup"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
                   <Download size={15} />
                 </button>
               )}
               {hasAdminAccess && (
                 <button onClick={triggerRestore} title="Restore"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
                   <Upload size={15} />
                 </button>
               )}
@@ -6384,13 +6384,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
               {hasAdminAccess && (
                 <button onClick={() => setShowManage(!showManage)} title="Manage employees"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
                   <Users size={15} />
                 </button>
               )}
               {currentUser.isAdmin && (
                 <button onClick={() => setShowLicensePanel(!showLicensePanel)} title={isLicensed ? "License" : "Activate license"}
-                  className={`border text-sm rounded-2xl p-2 flex items-center justify-center transition-colors ${
+                  className={`border text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors ${
                     isLicensed
                       ? "border-white/20 bg-white/10 hover:bg-white/20 text-white"
                       : "border-amber-300/50 bg-amber-500/20 hover:bg-amber-500/30 text-amber-100"
@@ -6400,19 +6400,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
               {currentUser.isAdmin && (
                 <button onClick={() => setShowLoginHistory(!showLoginHistory)} title="Login history"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
                   <History size={15} />
                 </button>
               )}
               {currentUser.isAdmin && (
                 <button onClick={() => setShowActivityLog(!showActivityLog)} title="Activity log"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
                   <ClipboardList size={15} />
                 </button>
               )}
               {canManageCompanies && (
                 <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage companies"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
                   <Factory size={15} />
                 </button>
               )}
@@ -6422,7 +6422,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   setRequestSendError("");
                 }}
                 title="Requests"
-                className="relative border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                className="relative border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
                 <Bell size={15} />
                 {myPendingRequestsCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
@@ -6440,11 +6440,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   setConfirmPasswordInput("");
                 }}
                 title="Change password"
-                className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
                 <Lock size={15} />
               </button>
               <button onClick={handleLogout} title="Sign out"
-                className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
                 <LogOut size={15} />
               </button>
               {onChangeServer && (
@@ -6459,7 +6459,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     );
                   }}
                   title="Server"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-teal-100 text-sm rounded-2xl p-2 flex items-center justify-center transition-colors"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-teal-100 text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors"
                 >
                   <Wifi size={15} />
                 </button>
