@@ -6523,11 +6523,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-sm">
                 <thead>
                   <tr className="bg-stone-50 text-stone-500 text-xs">
-                    <th className="text-left px-3 py-2 font-medium">Status</th>
-                    <th className="text-left px-3 py-2 font-medium">Name</th>
-                    <th className="text-left px-3 py-2 font-medium">Username</th>
-                    <th className="text-left px-3 py-2 font-medium">Password</th>
-                    <th className="text-left px-3 py-2 font-medium">Grade</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Status</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Name</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Username</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Password</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Grade</th>
                     <th className="text-left px-3 py-2 font-medium"></th>
                   </tr>
                 </thead>
@@ -6607,7 +6607,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             {isOnline(e.username) ? "Online" : "Offline"}
                           </span>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2 whitespace-nowrap">
                           {e.isAdmin ? (
                             e.name
                           ) : (
@@ -6621,11 +6621,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             </button>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-stone-500">{e.username}</td>
-                        <td className="px-3 py-2 text-stone-500">
+                        <td className="px-3 py-2 text-stone-500 whitespace-nowrap">{e.username}</td>
+                        <td className="px-3 py-2 text-stone-500 whitespace-nowrap">
                           <span className="font-mono" title="Passwords are stored securely and can't be viewed — click the employee's name to set a new one">••••••••</span>
                         </td>
-                        <td className="px-3 py-2 text-stone-500">
+                        <td className="px-3 py-2 text-stone-500 whitespace-nowrap">
                           {e.isAdmin ? (
                             <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">
                               <ShieldCheck size={11} /> Main
@@ -6634,7 +6634,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <span className="text-xs font-medium text-stone-600">{roleLabel(e.role)}</span>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-right">
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
                           <div className="flex gap-1 justify-end">
                             {/* Promoting/demoting main-account access stays reserved for true
                                 main accounts — an Owner never gets to touch this, so an Owner
@@ -8005,21 +8005,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-sm">
                 <thead>
                   <tr className="bg-stone-50 text-stone-500 text-xs">
-                    <th className="text-left px-3 py-2 font-medium">Month</th>
-                    <th className="text-left px-3 py-2 font-medium">Tickets</th>
-                    <th className="text-left px-3 py-2 font-medium">Total sales</th>
-                    <th className="text-left px-3 py-2 font-medium">Total profit</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Month</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Tickets</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Total sales</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Total profit</th>
                     <th className="text-left px-3 py-2 font-medium"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {monthlyBreakdown.map((m) => (
                     <tr key={m.key} className="border-t border-stone-100 hover:bg-stone-50">
-                      <td className="px-3 py-2 font-medium text-stone-800">{monthLabel(m.key)}</td>
-                      <td className="px-3 py-2 text-stone-600">{m.count}</td>
-                      <td className="px-3 py-2 text-stone-600">{fmt(m.total)}</td>
-                      <td className="px-3 py-2 font-semibold text-emerald-700">{fmt(m.profit)}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 font-medium text-stone-800 whitespace-nowrap">{monthLabel(m.key)}</td>
+                      <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{m.count}</td>
+                      <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{fmt(m.total)}</td>
+                      <td className="px-3 py-2 font-semibold text-emerald-700 whitespace-nowrap">{fmt(m.profit)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
                         <div className="flex items-center gap-3 justify-end">
                           <button
                             onClick={() => exportMonth(m.key)}
@@ -9282,14 +9282,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
-                    <th className="text-left px-4 py-3 font-semibold"># Customers</th>
-                    <th className="text-left px-4 py-3 font-semibold">Names</th>
-                    <th className="text-left px-4 py-3 font-semibold">Visa</th>
-                    <th className="text-left px-4 py-3 font-semibold">Booking date</th>
-                    <th className="text-left px-4 py-3 font-semibold">Supplier</th>
-                    <th className="text-right px-4 py-3 font-semibold">Net</th>
-                    <th className="text-right px-4 py-3 font-semibold">Sold</th>
-                    <th className="text-right px-4 py-3 font-semibold">Profit</th>
+                    <th className="text-left px-4 py-3 font-semibold whitespace-nowrap"># Customers</th>
+                    <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Names</th>
+                    <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Visa</th>
+                    <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Booking date</th>
+                    <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Supplier</th>
+                    <th className="text-right px-4 py-3 font-semibold whitespace-nowrap">Net</th>
+                    <th className="text-right px-4 py-3 font-semibold whitespace-nowrap">Sold</th>
+                    <th className="text-right px-4 py-3 font-semibold whitespace-nowrap">Profit</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -9303,18 +9303,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         className="hover:bg-stone-50 cursor-pointer"
                         onClick={() => setViewingVisaBooking(v)}
                       >
-                        <td className="px-4 py-3 text-stone-700">{(v.customers || []).length}</td>
-                        <td className="px-4 py-3 text-stone-700">
+                        <td className="px-4 py-3 text-stone-700 whitespace-nowrap">{(v.customers || []).length}</td>
+                        <td className="px-4 py-3 text-stone-700 whitespace-nowrap">
                           {(v.customers || []).map((c) => c.name || "-").join(", ")}
                         </td>
-                        <td className="px-4 py-3 text-stone-700">{v.visaType}</td>
+                        <td className="px-4 py-3 text-stone-700 whitespace-nowrap">{v.visaType}</td>
                         <td className="px-4 py-3 text-stone-700 whitespace-nowrap">
                           {v.bookingDate ? formatDisplayDate(v.bookingDate) : "-"}
                         </td>
-                        <td className="px-4 py-3 text-stone-700">{v.supplier}</td>
-                        <td className="px-4 py-3 text-right text-stone-700">{fmt(net)} {v.currency}</td>
-                        <td className="px-4 py-3 text-right text-stone-700">{fmt(sold)} {v.currency}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-emerald-700">{fmt(profit)} {v.currency}</td>
+                        <td className="px-4 py-3 text-stone-700 whitespace-nowrap">{v.supplier}</td>
+                        <td className="px-4 py-3 text-right text-stone-700 whitespace-nowrap">{fmt(net)} {v.currency}</td>
+                        <td className="px-4 py-3 text-right text-stone-700 whitespace-nowrap">{fmt(sold)} {v.currency}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-emerald-700 whitespace-nowrap">{fmt(profit)} {v.currency}</td>
                       </tr>
                     );
                   })}
@@ -10809,11 +10809,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
-                    <th className="text-right px-3 py-2 font-medium">{at("colSupplier")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colSections")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colTotalOwed")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colPaid")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colRemaining")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colSupplier")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colSections")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colTotalOwed")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colPaid")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colRemaining")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -10826,11 +10826,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         onClick={() => setViewingSupplier(s.supplier)}
                         className="hover:bg-teal-50 cursor-pointer"
                       >
-                        <td className="px-3 py-2 font-semibold text-stone-800">{s.supplier}</td>
-                        <td className="px-3 py-2 text-stone-500 text-xs">{s.sections.map((x) => sectionLabel(x)).join(accountsLang === "en" ? ", " : "، ") || "-"}</td>
-                        <td className="px-3 py-2 text-stone-700">{fmt(s.totalOwed)}</td>
-                        <td className="px-3 py-2 text-emerald-700">{fmt(s.paid)}</td>
-                        <td className={`px-3 py-2 font-bold ${s.balance > 0 ? "text-red-600" : "text-stone-400"}`}>{fmt(s.balance)}</td>
+                        <td className="px-3 py-2 font-semibold text-stone-800 whitespace-nowrap">{s.supplier}</td>
+                        <td className="px-3 py-2 text-stone-500 text-xs whitespace-nowrap">{s.sections.map((x) => sectionLabel(x)).join(accountsLang === "en" ? ", " : "، ") || "-"}</td>
+                        <td className="px-3 py-2 text-stone-700 whitespace-nowrap">{fmt(s.totalOwed)}</td>
+                        <td className="px-3 py-2 text-emerald-700 whitespace-nowrap">{fmt(s.paid)}</td>
+                        <td className={`px-3 py-2 font-bold whitespace-nowrap ${s.balance > 0 ? "text-red-600" : "text-stone-400"}`}>{fmt(s.balance)}</td>
                       </tr>
                     ))
                   )}
@@ -10856,11 +10856,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
-                    <th className="text-right px-3 py-2 font-medium">{at("colCustomer")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colSections")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colTotalDue")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colCollected")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colRemaining")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colCustomer")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colSections")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colTotalDue")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colCollected")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colRemaining")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -10873,11 +10873,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         onClick={() => setViewingCustomer(c.customer)}
                         className="hover:bg-teal-50 cursor-pointer"
                       >
-                        <td className="px-3 py-2 font-semibold text-stone-800">{c.customer}</td>
-                        <td className="px-3 py-2 text-stone-500 text-xs">{c.sections.map((x) => sectionLabel(x)).join(accountsLang === "en" ? ", " : "، ") || "-"}</td>
-                        <td className="px-3 py-2 text-stone-700">{fmt(c.totalDue)}</td>
-                        <td className="px-3 py-2 text-emerald-700">{fmt(c.paid)}</td>
-                        <td className={`px-3 py-2 font-bold ${c.balance > 0 ? "text-red-600" : "text-stone-400"}`}>{fmt(c.balance)}</td>
+                        <td className="px-3 py-2 font-semibold text-stone-800 whitespace-nowrap">{c.customer}</td>
+                        <td className="px-3 py-2 text-stone-500 text-xs whitespace-nowrap">{c.sections.map((x) => sectionLabel(x)).join(accountsLang === "en" ? ", " : "، ") || "-"}</td>
+                        <td className="px-3 py-2 text-stone-700 whitespace-nowrap">{fmt(c.totalDue)}</td>
+                        <td className="px-3 py-2 text-emerald-700 whitespace-nowrap">{fmt(c.paid)}</td>
+                        <td className={`px-3 py-2 font-bold whitespace-nowrap ${c.balance > 0 ? "text-red-600" : "text-stone-400"}`}>{fmt(c.balance)}</td>
                       </tr>
                     ))
                   )}
@@ -10948,10 +10948,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
-                    <th className="text-right px-3 py-2 font-medium">{at("colDate")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colAccount")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colStatement")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colAmount")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colDate")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colAccount")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colStatement")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colAmount")}</th>
                     <th className="px-3 py-2"></th>
                   </tr>
                 </thead>
@@ -10964,8 +10964,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       return (
                         <tr key={tx.id}>
                           <td className="px-3 py-2 text-stone-500 text-xs whitespace-nowrap">{tx.date ? formatDisplayDate(tx.date) : "-"}</td>
-                          <td className="px-3 py-2 text-stone-600 text-xs">{treasuryAccounts.find((a) => a.id === tx.accountId)?.name || "-"}</td>
-                          <td className="px-3 py-2 text-stone-800 flex items-center gap-1.5">
+                          <td className="px-3 py-2 text-stone-600 text-xs whitespace-nowrap">{treasuryAccounts.find((a) => a.id === tx.accountId)?.name || "-"}</td>
+                          <td className="px-3 py-2 text-stone-800 flex items-center gap-1.5 whitespace-nowrap">
                             {tx.direction === "in" ? <ArrowDownCircle size={14} className="text-emerald-600 shrink-0" /> : <ArrowUpCircle size={14} className="text-red-500 shrink-0" />}
                             {tx.label}
                           </td>
@@ -11021,11 +11021,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
-                    <th className="text-right px-3 py-2 font-medium">{at("colDate")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colCategory")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colDescription")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colAccount")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colAmount")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colDate")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colCategory")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colDescription")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colAccount")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colAmount")}</th>
                     <th className="px-3 py-2"></th>
                   </tr>
                 </thead>
@@ -11036,9 +11036,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     filteredExpenses.map((e) => (
                       <tr key={e.id}>
                         <td className="px-3 py-2 text-stone-500 text-xs whitespace-nowrap">{e.date ? formatDisplayDate(e.date) : "-"}</td>
-                        <td className="px-3 py-2 text-stone-700">{expenseCategoryLabel(e.category)}</td>
-                        <td className="px-3 py-2 text-stone-500 text-xs">{e.description || "-"}</td>
-                        <td className="px-3 py-2 text-stone-500 text-xs">{treasuryAccounts.find((a) => a.id === e.accountId)?.name || "-"}</td>
+                        <td className="px-3 py-2 text-stone-700 whitespace-nowrap">{expenseCategoryLabel(e.category)}</td>
+                        <td className="px-3 py-2 text-stone-500 text-xs whitespace-nowrap">{e.description || "-"}</td>
+                        <td className="px-3 py-2 text-stone-500 text-xs whitespace-nowrap">{treasuryAccounts.find((a) => a.id === e.accountId)?.name || "-"}</td>
                         <td className="px-3 py-2 font-semibold text-red-600 whitespace-nowrap">{fmt(parseFloat(e.amount) || 0)}</td>
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1.5 justify-end">
@@ -11119,8 +11119,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
-                    <th className="text-right px-3 py-2 font-medium">{at("colCategory")}</th>
-                    <th className="text-right px-3 py-2 font-medium">{at("colAmount")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colCategory")}</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">{at("colAmount")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -11129,8 +11129,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   ) : (
                     Object.entries(reportExpensesByCategory).map(([cat, amt]) => (
                       <tr key={cat}>
-                        <td className="px-3 py-2 text-stone-700">{expenseCategoryLabel(cat)}</td>
-                        <td className="px-3 py-2 font-semibold text-red-600">{fmt(amt)}</td>
+                        <td className="px-3 py-2 text-stone-700 whitespace-nowrap">{expenseCategoryLabel(cat)}</td>
+                        <td className="px-3 py-2 font-semibold text-red-600 whitespace-nowrap">{fmt(amt)}</td>
                       </tr>
                     ))
                   )}
@@ -11321,15 +11321,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <table className="w-full min-w-max text-sm">
                     <thead>
                       <tr className="bg-stone-50 text-stone-500 text-xs">
-                        <th className="text-left px-3 py-2 font-medium">Customer</th>
-                        <th className="text-left px-3 py-2 font-medium">Ticket number</th>
-                        <th className="text-left px-3 py-2 font-medium">PNR</th>
+                        <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Customer</th>
+                        <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Ticket number</th>
+                        <th className="text-left px-3 py-2 font-medium whitespace-nowrap">PNR</th>
                       </tr>
                     </thead>
                     <tbody>
                       {getCustomers(viewingTicket).map((c, i) => (
                         <tr key={i} className="border-t border-stone-100">
-                          <td className="px-3 py-2 text-stone-700">
+                          <td className="px-3 py-2 text-stone-700 whitespace-nowrap">
                             {c.name || "-"}
                             {refundForIndex(viewingTicket, i) && (
                               <span className="ml-2 inline-block text-[10px] font-semibold text-sky-700 bg-sky-100 rounded-full px-2 py-0.5 align-middle">
@@ -11337,13 +11337,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               </span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-stone-700 font-mono">
+                          <td className="px-3 py-2 text-stone-700 font-mono whitespace-nowrap">
                             {c.ticketNumber || "-"}
                             {c.conjunction && c.ticketNumber2 && (
                               <span className="text-stone-400">{c.ticketNumber2}</span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-stone-700 font-mono">{c.pnrReference || "-"}</td>
+                          <td className="px-3 py-2 text-stone-700 font-mono whitespace-nowrap">{c.pnrReference || "-"}</td>
                         </tr>
                       ))}
                     </tbody>
