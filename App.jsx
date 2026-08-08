@@ -2693,12 +2693,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // recorded under that company name are untouched — this only affects the picker.
   const handleDeleteCompany = (name) => {
     if (!canManageCompanies) return;
-    persistSuggestions({
-      ...suggestions,
-      companies: suggestions.companies.filter((c) => companyName(c) !== name),
+    requestConfirm(`Delete company "${name}"? This cannot be undone.`, () => {
+      persistSuggestions({
+        ...suggestions,
+        companies: suggestions.companies.filter((c) => companyName(c) !== name),
+      });
+      recordActivity("Companies", "deleted", `Deleted company: ${name}`);
+      if (editingCompanyName === name) cancelEditCompany();
     });
-    recordActivity("Companies", "deleted", `Deleted company: ${name}`);
-    if (editingCompanyName === name) cancelEditCompany();
   };
 
   const profit = (net, sold) => {
@@ -2799,11 +2801,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
 
     if (hotelEditingId) {
-      const next = hotelBookings.map((h) =>
-        h.id === hotelEditingId ? { ...h, ...hotelForm, id: hotelEditingId } : h
-      );
-      await persistHotelBookings(next);
-      recordActivity("Hotels", "edited", `Edited hotel booking: ${hotelForm.hotel || "hotel"} for ${hotelForm.customer || "customer"}`);
+      const commitHotel = async () => {
+        const next = hotelBookings.map((h) =>
+          h.id === hotelEditingId ? { ...h, ...hotelForm, id: hotelEditingId } : h
+        );
+        await persistHotelBookings(next);
+        recordActivity("Hotels", "edited", `Edited hotel booking: ${hotelForm.hotel || "hotel"} for ${hotelForm.customer || "customer"}`);
+        resetHotelForm();
+      };
+      requestConfirm("Save changes to this hotel booking?", commitHotel);
+      return;
     } else {
       const record = {
         ...hotelForm,
@@ -2875,7 +2882,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleDeleteSupplierName = (name) => {
-    persistSuggestions({ ...suggestions, suppliers: (suggestions.suppliers || []).filter((s) => s !== name) });
+    requestConfirm(`Delete supplier "${name}"? This cannot be undone.`, () => {
+      persistSuggestions({ ...suggestions, suppliers: (suggestions.suppliers || []).filter((s) => s !== name) });
+    });
   };
 
   // Registers a new hotel name so it's always available to pick from the Hotels
@@ -2894,7 +2903,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleDeleteHotelName = (name) => {
-    persistSuggestions({ ...suggestions, hotelNames: (suggestions.hotelNames || []).filter((h) => h !== name) });
+    requestConfirm(`Delete hotel name "${name}"? This cannot be undone.`, () => {
+      persistSuggestions({ ...suggestions, hotelNames: (suggestions.hotelNames || []).filter((h) => h !== name) });
+    });
   };
 
   // ---------- Visa ----------
@@ -2931,9 +2942,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return;
     }
     if (visaEditingId) {
-      const next = visaBookings.map((v) => (v.id === visaEditingId ? { ...v, ...visaForm, id: visaEditingId } : v));
-      await persistVisaBookings(next);
-      recordActivity("Visas", "edited", `Edited visa booking: ${visaForm.visaType || "visa"} for ${(visaForm.customers && visaForm.customers[0] && visaForm.customers[0].name) || "customer"}`);
+      const commitVisa = async () => {
+        const next = visaBookings.map((v) => (v.id === visaEditingId ? { ...v, ...visaForm, id: visaEditingId } : v));
+        await persistVisaBookings(next);
+        recordActivity("Visas", "edited", `Edited visa booking: ${visaForm.visaType || "visa"} for ${(visaForm.customers && visaForm.customers[0] && visaForm.customers[0].name) || "customer"}`);
+        resetVisaForm();
+      };
+      requestConfirm("Save changes to this visa booking?", commitVisa);
+      return;
     } else {
       const record = {
         ...visaForm,
@@ -2992,7 +3008,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleDeleteVisaSupplierName = (name) => {
-    persistSuggestions({ ...suggestions, visaSuppliers: (suggestions.visaSuppliers || []).filter((s) => s !== name) });
+    requestConfirm(`Delete supplier "${name}"? This cannot be undone.`, () => {
+      persistSuggestions({ ...suggestions, visaSuppliers: (suggestions.visaSuppliers || []).filter((s) => s !== name) });
+    });
   };
 
   const resetCarForm = () => {
@@ -3025,9 +3043,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return;
     }
     if (carEditingId) {
-      const next = carBookings.map((c) => (c.id === carEditingId ? { ...c, ...carForm, id: carEditingId } : c));
-      await persistCarBookings(next);
-      recordActivity("Transportation", "edited", `Edited car booking: ${carForm.customerName || "customer"} (${carForm.routeFrom || "?"} → ${carForm.routeTo || "?"})`);
+      const commitCar = async () => {
+        const next = carBookings.map((c) => (c.id === carEditingId ? { ...c, ...carForm, id: carEditingId } : c));
+        await persistCarBookings(next);
+        recordActivity("Transportation", "edited", `Edited car booking: ${carForm.customerName || "customer"} (${carForm.routeFrom || "?"} → ${carForm.routeTo || "?"})`);
+        resetCarForm();
+      };
+      requestConfirm("Save changes to this transfer booking?", commitCar);
+      return;
     } else {
       const record = {
         ...carForm,
@@ -3343,7 +3366,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleDeleteCarSupplierName = (name) => {
-    persistSuggestions({ ...suggestions, carSuppliers: (suggestions.carSuppliers || []).filter((s) => s !== name) });
+    requestConfirm(`Delete supplier "${name}"? This cannot be undone.`, () => {
+      persistSuggestions({ ...suggestions, carSuppliers: (suggestions.carSuppliers || []).filter((s) => s !== name) });
+    });
   };
 
   // ---------- Auth ----------
