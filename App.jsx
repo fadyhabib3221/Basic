@@ -5334,6 +5334,33 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     );
   };
 
+  // Clicking a service inside a file jumps to that service's own full detail view
+  // (the same one used in the Flights/Hotels/Visa sections), by looking the original
+  // record up via the item's stored sourceId and switching to its section. The file
+  // item itself only ever stores a lightweight price snapshot, not the full record, so
+  // this look-up is what makes "see full details" possible. If the original record was
+  // since deleted, there's nothing to jump to — surface a toast instead of navigating.
+  const viewFileItemDetails = (it) => {
+    if (it.sourceType === "flights") {
+      const t = tickets.find((x) => x.id === it.sourceId);
+      if (!t) { showActionToast("This ticket no longer exists"); return; }
+      setActiveSection("flights");
+      setViewingTicketId(t.id);
+    } else if (it.sourceType === "hotels") {
+      const h = hotelBookings.find((x) => x.id === it.sourceId);
+      if (!h) { showActionToast("This hotel booking no longer exists"); return; }
+      setActiveSection("hotels");
+      setViewingHotelBooking(h);
+    } else if (it.sourceType === "visa") {
+      const v = visaBookings.find((x) => x.id === it.sourceId);
+      if (!v) { showActionToast("This visa booking no longer exists"); return; }
+      setActiveSection("visa");
+      setViewingVisaBooking(v);
+    } else {
+      showActionToast("No details available for this item");
+    }
+  };
+
   // Unlike deleting elsewhere in the app, deleting a FILE is intentionally open to every
   // signed-in employee (not gated by canDeleteTickets) — same reasoning as adding items to
   // a file above: files are a shared working space, not permission-gated per employee.
@@ -10618,17 +10645,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <p className="text-sm text-stone-400 text-center py-10">No services added yet — use "Add services" above.</p>
                   ) : (
                     (draftFile.items || []).map((it) => (
-                      <div key={it.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                        <div className="min-w-0">
+                      <div key={it.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-stone-50 transition-colors">
+                        <button
+                          type="button"
+                          onClick={() => viewFileItemDetails(it)}
+                          className="min-w-0 text-left flex-1"
+                        >
                           <p className="text-xs text-teal-800 font-semibold">{FILE_SOURCE_LABELS[it.sourceType] || it.sourceType}</p>
                           <p className="text-sm text-stone-900 truncate">{it.label}</p>
                           <p className="text-xs text-stone-400">{formatDisplayDate(it.date)}</p>
-                        </div>
+                        </button>
                         <div className="flex items-center gap-3 shrink-0">
-                          <div className="text-right">
+                          <button type="button" onClick={() => viewFileItemDetails(it)} className="text-right">
                             <p className="text-sm font-bold">{fmt(it.soldPrice)} {it.currency}</p>
                             <p className="text-xs text-emerald-700">net {fmt(it.netPrice)} {it.currency}</p>
-                          </div>
+                          </button>
                           <button
                             onClick={() => removeDraftItem(it.id)}
                             className="text-red-500 hover:text-red-700 p-1"
@@ -10762,17 +10793,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <p className="text-sm text-stone-400 text-center py-10">No items added to this file yet.</p>
                   ) : (
                     (openFile.items || []).map((it) => (
-                      <div key={it.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                        <div className="min-w-0">
+                      <div key={it.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-stone-50 transition-colors">
+                        <button
+                          type="button"
+                          onClick={() => viewFileItemDetails(it)}
+                          className="min-w-0 text-left flex-1"
+                        >
                           <p className="text-xs text-teal-800 font-semibold">{FILE_SOURCE_LABELS[it.sourceType] || it.sourceType}</p>
                           <p className="text-sm text-stone-900 truncate">{it.label}</p>
                           <p className="text-xs text-stone-400">{formatDisplayDate(it.date)}</p>
-                        </div>
+                        </button>
                         <div className="flex items-center gap-3 shrink-0">
-                          <div className="text-right">
+                          <button type="button" onClick={() => viewFileItemDetails(it)} className="text-right">
                             <p className="text-sm font-bold">{fmt(it.soldPrice)} {it.currency}</p>
                             <p className="text-xs text-emerald-700">net {fmt(it.netPrice)} {it.currency}</p>
-                          </div>
+                          </button>
                           {editingFileServices && filesPerm.canEdit && (
                             <button
                               onClick={() => removeItemFromFile(openFile.id, it.id)}
