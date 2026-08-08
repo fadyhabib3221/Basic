@@ -1381,22 +1381,6 @@ function MultiSelectDropdown({ label, icon: Icon, options, selected, onChange, p
   );
 }
 
-// Locks the page at 1x zoom on mobile Safari/Chrome. This runs synchronously at
-// module load time (not inside a React useEffect) because mobile browsers restore
-// the pinch/double-tap zoom level from the previous session as soon as the page
-// starts loading — before React even mounts. Waiting for a useEffect (which only
-// fires after the first render/paint) is too late: the browser has already
-// re-applied the old zoom by then. Running this at import time closes that gap.
-if (typeof document !== "undefined") {
-  let __viewport = document.querySelector("meta[name='viewport']");
-  if (!__viewport) {
-    __viewport = document.createElement("meta");
-    __viewport.name = "viewport";
-    document.head.appendChild(__viewport);
-  }
-  __viewport.content = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no";
-}
-
 export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Prevent the mouse/trackpad scroll wheel from changing the value of a focused
   // number input. Browsers normally let scrolling over a focused number field
