@@ -1653,6 +1653,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // { type: 'flights'|'hotels'|'visa', record } — opens a modal asking which file (by
   // its serial number) to drop the copy into.
   const [copyPickerSource, setCopyPickerSource] = useState(null);
+  // Search text for filtering the "Or an existing file" list in the copy-to-file picker
+  // above, by serial number or company.
+  const [copyPickerSearch, setCopyPickerSearch] = useState("");
   // USD -> EGP exchange rate, used to also show a USD booking's value in EGP.
   // Entered by hand (no CBE API is publicly reachable from the browser), and saved so
   // everyone signed in sees today's rate without re-typing it.
@@ -5429,6 +5432,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (!copyPickerSource) return;
     await addItemToFile(fileId, copyPickerSource.type, copyPickerSource.record);
     setCopyPickerSource(null);
+    setCopyPickerSearch("");
   };
 
   // "New file" shortcut inside the copy picker: creates the file, then immediately
@@ -5448,6 +5452,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     await persistFiles([record, ...files]);
     recordActivity("Files", "created", `Created file #${record.serial || record.id}`);
     setCopyPickerSource(null);
+    setCopyPickerSearch("");
   };
 
   // Starts a new file in "draft" mode: nothing is saved to the files table yet, but the
@@ -12057,14 +12062,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       )}
 
       {copyPickerSource && (
-        <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50" onClick={() => setCopyPickerSource(null)}>
+        <div
+          className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50"
+          onClick={() => { setCopyPickerSource(null); setCopyPickerSearch(""); }}
+        >
           <div
             className="bg-white rounded-2xl border border-stone-200 p-5 w-full max-w-sm max-h-[80vh] flex flex-col"
             onClick={(ev) => ev.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-1">
               <h3 className="font-semibold text-stone-900">Copy to which file?</h3>
-              <button onClick={() => setCopyPickerSource(null)} className="text-stone-400 hover:text-stone-700 p-1">
+              <button onClick={() => { setCopyPickerSource(null); setCopyPickerSearch(""); }} className="text-stone-400 hover:text-stone-700 p-1">
                 <X size={16} />
               </button>
             </div>
@@ -12080,11 +12088,33 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </button>
 
             <p className="text-xs text-stone-500 mb-1.5">Or an existing file</p>
+            <div className="relative mb-2">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input
+                type="text"
+                value={copyPickerSearch}
+                onChange={(e) => setCopyPickerSearch(e.target.value)}
+                placeholder="Search by file number..."
+                className="w-full border border-stone-200 rounded-xl pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600/30 focus:border-teal-600"
+              />
+            </div>
             <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 overflow-y-auto">
-              {visibleFiles.length === 0 ? (
-                <p className="text-xs text-stone-400 text-center py-4">No existing files yet.</p>
-              ) : (
-                visibleFiles.map((f) => (
+              {(() => {
+                const q = copyPickerSearch.trim().toLowerCase();
+                const filteredFiles = q
+                  ? visibleFiles.filter(
+                      (f) =>
+                        (f.serial || "").toLowerCase().includes(q) ||
+                        (f.company || "").toLowerCase().includes(q)
+                    )
+                  : visibleFiles;
+                if (visibleFiles.length === 0) {
+                  return <p className="text-xs text-stone-400 text-center py-4">No existing files yet.</p>;
+                }
+                if (filteredFiles.length === 0) {
+                  return <p className="text-xs text-stone-400 text-center py-4">No files match "{copyPickerSearch}"</p>;
+                }
+                return filteredFiles.map((f) => (
                   <button
                     key={f.id}
                     onClick={() => copySourceToFile(f.id)}
@@ -12095,8 +12125,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     </span>
                     <span className="text-xs text-stone-400 shrink-0">{(f.items || []).length} item{(f.items || []).length === 1 ? "" : "s"}</span>
                   </button>
-                ))
-              )}
+                ));
+              })()}
             </div>
           </div>
         </div>
