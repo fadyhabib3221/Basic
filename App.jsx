@@ -13,7 +13,7 @@ import {
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
   History, Bell, Send, Landmark, Receipt, PieChart, ArrowUpCircle, ArrowDownCircle,
-  Banknote, HandCoins, ClipboardList, Globe,
+  Banknote, HandCoins, ClipboardList, Globe, Key,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -1437,6 +1437,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [loginHistory, setLoginHistory] = useState([]);
   const [showLoginHistory, setShowLoginHistory] = useState(false);
 
+  // ---------- Activity log ----------
+  // Every meaningful create/edit/delete across the whole app (tickets, hotels, visas,
+  // cars, expenses, treasury, payments, employees, companies, requests, license,
+  // backups) is appended here, in shared storage, so the main/admin account can see a
+  // full audit trail of who did what and when. Gated to currentUser.isAdmin wherever shown.
+  const [activityLog, setActivityLog] = useState([]);
+  const [showActivityLog, setShowActivityLog] = useState(false);
+  const [activityLogFilter, setActivityLogFilter] = useState("all");
+
   // ---------- License / activation ----------
   // Stored centrally (shared storage) so activation applies to every employee,
   // not just the browser it was entered on. null = not loaded from storage yet.
@@ -1465,6 +1474,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         true
       );
       setLicenseRecord({ code: result.code, expiresAt: result.expiresAt || null });
+      recordActivity("License", "activated", `Activated app license${result.expiresAt ? ` (valid until ${result.expiresAt})` : " (permanent)"}`);
       setLicenseInput("");
       setShowLicensePanel(false);
     } catch (e) {
@@ -1829,7 +1839,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   useEffect(() => {
     (async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, sessionRes, suggestionsRes, setupRes, licenseRes, requestsRes, expensesRes, supplierPaymentsRes, customerPaymentsRes, treasuryAccountsRes, treasuryEntriesRes, loginHistoryRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, sessionRes, suggestionsRes, setupRes, licenseRes, requestsRes, expensesRes, supplierPaymentsRes, customerPaymentsRes, treasuryAccountsRes, treasuryEntriesRes, loginHistoryRes, activityLogRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:visas", true).catch(() => null),
@@ -1847,6 +1857,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           window.storage.get("tickets:treasuryAccounts", true).catch(() => null),
           window.storage.get("tickets:treasuryEntries", true).catch(() => null),
           window.storage.get("tickets:loginHistory", true).catch(() => null),
+          window.storage.get("tickets:activityLog", true).catch(() => null),
         ]);
         const ticketsData = ticketsRes && ticketsRes.value ? JSON.parse(ticketsRes.value) : [];
         const hotelsData = hotelsRes && hotelsRes.value ? JSON.parse(hotelsRes.value) : [];
@@ -1868,6 +1879,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         setTreasuryAccounts(treasuryAccountsRes && treasuryAccountsRes.value ? JSON.parse(treasuryAccountsRes.value) : []);
         setTreasuryEntries(treasuryEntriesRes && treasuryEntriesRes.value ? JSON.parse(treasuryEntriesRes.value) : []);
         setLoginHistory(loginHistoryRes && loginHistoryRes.value ? JSON.parse(loginHistoryRes.value) : []);
+        setActivityLog(activityLogRes && activityLogRes.value ? JSON.parse(activityLogRes.value) : []);
         requestsData.forEach((r) => seenRequestIdsRef.current.add(r.id));
         if (licenseRes && licenseRes.value) {
           try {
@@ -1935,7 +1947,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     let cancelled = false;
     const loadCoreData = async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, suggestionsRes, licenseRes, requestsRes, expensesRes, supplierPaymentsRes, customerPaymentsRes, treasuryAccountsRes, treasuryEntriesRes, loginHistoryRes] = await Promise.all([
+        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, suggestionsRes, licenseRes, requestsRes, expensesRes, supplierPaymentsRes, customerPaymentsRes, treasuryAccountsRes, treasuryEntriesRes, loginHistoryRes, activityLogRes] = await Promise.all([
           window.storage.get("tickets:list", true).catch(() => null),
           window.storage.get("tickets:hotels", true).catch(() => null),
           window.storage.get("tickets:visas", true).catch(() => null),
@@ -1951,10 +1963,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           window.storage.get("tickets:treasuryAccounts", true).catch(() => null),
           window.storage.get("tickets:treasuryEntries", true).catch(() => null),
           currentUser.isAdmin ? window.storage.get("tickets:loginHistory", true).catch(() => null) : Promise.resolve(null),
+          currentUser.isAdmin ? window.storage.get("tickets:activityLog", true).catch(() => null) : Promise.resolve(null),
         ]);
         if (cancelled) return;
         if (loginHistoryRes && loginHistoryRes.value) {
           try { setLoginHistory(JSON.parse(loginHistoryRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
+        }
+        if (activityLogRes && activityLogRes.value) {
+          try { setActivityLog(JSON.parse(activityLogRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
         }
         if (expensesRes && expensesRes.value) {
           try { setExpenses(JSON.parse(expensesRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
@@ -2472,6 +2488,31 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
   };
 
+  // Appends one action to the shared, app-wide activity log. Best-effort and silent on
+  // failure — a logging hiccup should never block the actual action from completing.
+  // Capped at the most recent 1000 entries so the stored record doesn't grow without bound.
+  const ACTIVITY_LOG_LIMIT = 1000;
+  const recordActivity = async (module, action, description) => {
+    const entry = {
+      username: currentUser ? currentUser.username : "",
+      name: currentUser ? currentUser.name : "",
+      module, // e.g. "Flights", "Hotels", "Visas", "Cars", "Expenses", "Treasury", "Payments", "Employees", "Companies", "Requests", "License", "Backup"
+      action, // e.g. "created", "edited", "deleted", "activated", "restored"
+      description,
+      at: Date.now(),
+    };
+    try {
+      const existingRes = await window.storage.get("tickets:activityLog", true).catch(() => null);
+      const existing = existingRes && existingRes.value ? JSON.parse(existingRes.value) : [];
+      const next = [...existing, entry].slice(-ACTIVITY_LOG_LIMIT);
+      await window.storage.set("tickets:activityLog", JSON.stringify(next), true);
+      setActivityLog(next);
+    } catch (e) {
+      // Activity log is an audit convenience feature — failures here must never
+      // block or roll back an otherwise-successful action.
+    }
+  };
+
   const persistSuggestions = async (next) => {
     setSuggestions(next);
     try {
@@ -2560,6 +2601,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       respondedAt: null,
     };
     await persistRequests([newReq, ...(requests || [])]);
+    recordActivity("Requests", "created", `Sent request to ${target.name}: ${newReq.message.slice(0, 60)}`);
     setNewRequestTo("");
     setNewRequestMessage("");
   };
@@ -2571,6 +2613,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       r.id === requestId ? { ...r, status, respondedAt: new Date().toISOString() } : r
     );
     await persistRequests(next);
+    const target = (requests || []).find((r) => r.id === requestId);
+    if (target) recordActivity("Requests", "edited", `Marked request from ${target.fromName} as ${status}`);
   };
 
   // Remembers values entered on a ticket (airline, cities) so they keep showing up as
@@ -2634,6 +2678,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       ? suggestions.companies.map((c) => (companyName(c) === editingCompanyName ? record : c))
       : [...suggestions.companies, record];
     persistSuggestions({ ...suggestions, companies });
+    recordActivity("Companies", editingCompanyName ? "edited" : "created", `${editingCompanyName ? "Edited" : "Created"} company: ${name}`);
     setNewCompanyDraft(emptyCompanyDraft);
     setEditingCompanyName(null);
     setCompanyError("");
@@ -2663,6 +2708,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       ...suggestions,
       companies: suggestions.companies.filter((c) => companyName(c) !== name),
     });
+    recordActivity("Companies", "deleted", `Deleted company: ${name}`);
     if (editingCompanyName === name) cancelEditCompany();
   };
 
@@ -2768,6 +2814,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         h.id === hotelEditingId ? { ...h, ...hotelForm, id: hotelEditingId } : h
       );
       await persistHotelBookings(next);
+      recordActivity("Hotels", "edited", `Edited hotel booking: ${hotelForm.hotel || "hotel"} for ${hotelForm.customer || "customer"}`);
     } else {
       const record = {
         ...hotelForm,
@@ -2776,6 +2823,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         employeeUsername: currentUser.username,
       };
       await persistHotelBookings([record, ...hotelBookings]);
+      recordActivity("Hotels", "created", `Created hotel booking: ${record.hotel || "hotel"} for ${record.customer || "customer"}`);
     }
     resetHotelForm();
   };
@@ -2813,7 +2861,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleDeleteHotel = (id, onDeleted) => {
     requestConfirm("Delete this hotel booking? This cannot be undone.", async () => {
+      const deleted = hotelBookings.find((h) => h.id === id);
       await persistHotelBookings(hotelBookings.filter((h) => h.id !== id));
+      if (deleted) recordActivity("Hotels", "deleted", `Deleted hotel booking: ${deleted.hotel || "hotel"} for ${deleted.customer || "customer"}`);
       if (hotelEditingId === id) resetHotelForm();
       setConfirmDialog(null);
       if (onDeleted) onDeleted();
@@ -2894,6 +2944,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (visaEditingId) {
       const next = visaBookings.map((v) => (v.id === visaEditingId ? { ...v, ...visaForm, id: visaEditingId } : v));
       await persistVisaBookings(next);
+      recordActivity("Visas", "edited", `Edited visa booking: ${visaForm.visaType || "visa"} for ${(visaForm.customers && visaForm.customers[0] && visaForm.customers[0].name) || "customer"}`);
     } else {
       const record = {
         ...visaForm,
@@ -2902,6 +2953,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         employeeUsername: currentUser.username,
       };
       await persistVisaBookings([record, ...visaBookings]);
+      recordActivity("Visas", "created", `Created visa booking: ${record.visaType || "visa"} for ${(record.customers && record.customers[0] && record.customers[0].name) || "customer"}`);
     }
     resetVisaForm();
   };
@@ -2925,7 +2977,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleDeleteVisa = (id, onDeleted) => {
     requestConfirm("Delete this visa booking? This cannot be undone.", async () => {
+      const deleted = visaBookings.find((v) => v.id === id);
       await persistVisaBookings(visaBookings.filter((v) => v.id !== id));
+      if (deleted) recordActivity("Visas", "deleted", `Deleted visa booking: ${deleted.visaType || "visa"} for ${(deleted.customers && deleted.customers[0] && deleted.customers[0].name) || "customer"}`);
       if (visaEditingId === id) resetVisaForm();
       setConfirmDialog(null);
       if (onDeleted) onDeleted();
@@ -2984,6 +3038,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (carEditingId) {
       const next = carBookings.map((c) => (c.id === carEditingId ? { ...c, ...carForm, id: carEditingId } : c));
       await persistCarBookings(next);
+      recordActivity("Cars", "edited", `Edited car booking: ${carForm.customerName || "customer"} (${carForm.routeFrom || "?"} → ${carForm.routeTo || "?"})`);
     } else {
       const record = {
         ...carForm,
@@ -2992,6 +3047,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         employeeUsername: currentUser.username,
       };
       await persistCarBookings([record, ...carBookings]);
+      recordActivity("Cars", "created", `Created car booking: ${record.customerName || "customer"} (${record.routeFrom || "?"} → ${record.routeTo || "?"})`);
     }
     resetCarForm();
   };
@@ -3028,7 +3084,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleDeleteCar = (id, onDeleted) => {
     requestConfirm("Delete this transfer booking? This cannot be undone.", async () => {
+      const deleted = carBookings.find((c) => c.id === id);
       await persistCarBookings(carBookings.filter((c) => c.id !== id));
+      if (deleted) recordActivity("Cars", "deleted", `Deleted car booking: ${deleted.customerName || "customer"} (${deleted.routeFrom || "?"} → ${deleted.routeTo || "?"})`);
       if (carEditingId === id) resetCarForm();
       setConfirmDialog(null);
       if (onDeleted) onDeleted();
@@ -3414,6 +3472,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       },
     ];
     await persistEmployees(next);
+    recordActivity("Employees", "created", `Added employee: ${newEmployee.name} (@${newEmployee.username.trim()})`);
     setNewEmployee(emptyNewEmployee);
     setShowNewEmployeePerms(false);
   };
@@ -3431,6 +3490,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       e.username === username ? { ...e, role, ...preset } : e
     );
     await persistEmployees(next);
+    recordActivity("Employees", "edited", `Changed role for @${username} to ${role}`);
   };
 
   // Single generic handler for every individual permission toggle (view all tickets,
@@ -3447,6 +3507,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       e.username === username ? { ...e, ...reconcilePermissions({ ...e, [field]: checked }) } : e
     );
     await persistEmployees(next);
+    recordActivity("Employees", "edited", `${checked ? "Granted" : "Revoked"} "${field}" permission for @${username}`);
   };
 
   // Toggles one section (Flights/Hotels/Visa/Transportation/Files) on or off for an
@@ -3460,6 +3521,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       e.username === username ? { ...e, sections: { ...employeeSections(e), [section]: checked } } : e
     );
     await persistEmployees(next);
+    recordActivity("Employees", "edited", `${checked ? "Enabled" : "Disabled"} "${section}" section access for @${username}`);
   };
 
   // Sets one of View all services / Edit / Delete for one specific section (Flights,
@@ -3477,6 +3539,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return { ...e, sectionPerms: { ...(e.sectionPerms || {}), [section]: updated } };
     });
     await persistEmployees(next);
+    recordActivity("Employees", "edited", `${checked ? "Granted" : "Revoked"} "${field}" on "${section}" for @${username}`);
   };
 
   // Promotes an employee to a main/admin account. Any main account can promote another one.
@@ -3494,6 +3557,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           e.username === username ? { ...e, isAdmin: true } : e
         );
         await persistEmployees(next);
+        recordActivity("Employees", "edited", `Promoted @${username} to main account`);
         setConfirmDialog(null);
       }
     );
@@ -3517,6 +3581,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         e.username === username ? { ...e, isAdmin: false } : e
       );
       await persistEmployees(next);
+      recordActivity("Employees", "edited", `Removed main-account access from @${username}`);
       // If the admin demoted themselves, drop their manage-panel view since they're no longer main
       if (username === currentUser.username) {
         setCurrentUser({ ...currentUser, isAdmin: false });
@@ -3536,6 +3601,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return;
     }
     await persistEmployees((employees || []).filter((e) => e.username !== username));
+    recordActivity("Employees", "deleted", `Deleted employee: @${username}`);
   };
 
   const startEditEmployee = (emp) => {
@@ -3583,6 +3649,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         : e
     );
     await persistEmployees(next);
+    recordActivity("Employees", "edited", `Edited account details for @${trimmedUsername}`);
 
     // If the main account edited its own account, keep the current session in sync
     if (editingUsername === currentUser.username) {
@@ -3621,6 +3688,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         : e
     );
     await persistEmployees(next);
+    recordActivity("Employees", "edited", `Edited account details for @${trimmedUsername}`);
 
     // If the main account edited its own account, keep the current session in sync
     if (username === currentUser.username) {
@@ -3681,6 +3749,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    recordActivity("Backup", "created", `Exported a full backup (${tickets.length} tickets, ${employees.length} employees)`);
   };
 
   const triggerRestore = () => {
@@ -3723,6 +3792,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           await persistTickets(parsed.tickets);
           await persistEmployees(parsed.employees);
           await persistSuggestions(normalizedSuggestions);
+          recordActivity("Backup", "restored", `Restored a backup (${parsed.tickets.length} tickets, ${parsed.employees.length} employees) — replaced all current data`);
           setRestoreSuccess(
             `Backup restored successfully: ${parsed.tickets.length} tickets, ${parsed.employees.length} employee accounts, and ${suggestionsCount} saved suggestions.`
           );
@@ -3857,6 +3927,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
       persistTickets(next);
       rememberSuggestionsFromRecord(record);
+      const ticketDesc = `${(record.customers || []).map((c) => c.name).filter(Boolean).join(", ") || "ticket"} (${record.from || "?"} → ${record.to || "?"})`;
+      recordActivity("Flights", wasEditing ? "edited" : "created", wasEditing ? `Edited ticket for ${ticketDesc}` : `Created ticket for ${ticketDesc}`);
       if (wasEditing) showActionToast("Ticket updated");
       setForm(getEmptyForm());
       setSupplierOther(false);
@@ -3897,7 +3969,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     requestConfirm("Delete this ticket? This cannot be undone.", () => {
       if (form.id === id) { setForm(getEmptyForm()); setSupplierOther(false); }
+      const deleted = tickets.find((t) => t.id === id);
       persistTickets(tickets.filter((t) => t.id !== id));
+      if (deleted) {
+        const ticketDesc = `${(deleted.customers || []).map((c) => c.name).filter(Boolean).join(", ") || "ticket"} (${deleted.from || "?"} → ${deleted.to || "?"})`;
+        recordActivity("Flights", "deleted", `Deleted ticket for ${ticketDesc}`);
+      }
       if (afterConfirm) afterConfirm();
     });
   };
@@ -4923,6 +5000,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       ? expenses.map((e) => (e.id === expenseEditingId ? record : e))
       : [record, ...expenses];
     persistExpenses(next);
+    recordActivity("Expenses", expenseEditingId ? "edited" : "created", `${expenseEditingId ? "Edited" : "Created"} expense: ${record.category || "expense"} (${record.amount})`);
     setExpenseForm(getEmptyExpenseForm());
     setExpenseEditingId(null);
     setShowExpenseForm(false);
@@ -4934,7 +5012,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
   const handleDeleteExpense = (id) => {
     requestConfirm("هل تريد حذف هذا المصروف؟", () => {
+      const deleted = expenses.find((e) => e.id === id);
       persistExpenses(expenses.filter((e) => e.id !== id));
+      if (deleted) recordActivity("Expenses", "deleted", `Deleted expense: ${deleted.category || "expense"} (${deleted.amount})`);
     });
   };
 
@@ -4949,6 +5029,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       ? treasuryAccounts.map((a) => (a.id === treasuryAccountEditingId ? record : a))
       : [...treasuryAccounts, record];
     persistTreasuryAccounts(next);
+    recordActivity("Treasury", treasuryAccountEditingId ? "edited" : "created", `${treasuryAccountEditingId ? "Edited" : "Created"} treasury account: ${record.name || "account"}`);
     setTreasuryForm(getEmptyTreasuryAccountForm());
     setTreasuryAccountEditingId(null);
     setShowTreasuryAccountForm(false);
@@ -4960,7 +5041,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
   const handleDeleteTreasuryAccount = (id) => {
     requestConfirm("هل تريد حذف هذا الحساب؟ لن يتم حذف الحركات المسجلة عليه من قبل.", () => {
+      const deleted = treasuryAccounts.find((a) => a.id === id);
       persistTreasuryAccounts(treasuryAccounts.filter((a) => a.id !== id));
+      if (deleted) recordActivity("Treasury", "deleted", `Deleted treasury account: ${deleted.name || "account"}`);
     });
   };
 
@@ -4972,12 +5055,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setAccountsError("");
     const record = { ...treasuryEntryForm, id: genId() };
     persistTreasuryEntries([record, ...treasuryEntries]);
+    recordActivity("Treasury", "created", `Created treasury entry: ${record.category || "entry"} (${record.amount})`);
     setTreasuryEntryForm(getEmptyTreasuryEntryForm());
     setShowTreasuryEntryForm(false);
   };
   const handleDeleteTreasuryEntry = (id) => {
     requestConfirm("هل تريد حذف هذا القيد؟", () => {
+      const deleted = treasuryEntries.find((e) => e.id === id);
       persistTreasuryEntries(treasuryEntries.filter((e) => e.id !== id));
+      if (deleted) recordActivity("Treasury", "deleted", `Deleted treasury entry: ${deleted.category || "entry"} (${deleted.amount})`);
     });
   };
 
@@ -4989,11 +5075,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setAccountsError("");
     const record = { ...supplierPaymentForm, id: genId() };
     persistSupplierPayments([record, ...supplierPayments]);
+    recordActivity("Payments", "created", `Recorded supplier payment: ${record.supplier || "supplier"} (${record.amount})`);
     setSupplierPaymentForm({ ...getEmptySupplierPaymentForm(), supplier: supplierPaymentForm.supplier });
   };
   const handleDeleteSupplierPayment = (id) => {
     requestConfirm("هل تريد حذف هذه الدفعة؟", () => {
+      const deleted = supplierPayments.find((p) => p.id === id);
       persistSupplierPayments(supplierPayments.filter((p) => p.id !== id));
+      if (deleted) recordActivity("Payments", "deleted", `Deleted supplier payment: ${deleted.supplier || "supplier"} (${deleted.amount})`);
     });
   };
 
@@ -5005,11 +5094,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setAccountsError("");
     const record = { ...customerPaymentForm, id: genId() };
     persistCustomerPayments([record, ...customerPayments]);
+    recordActivity("Payments", "created", `Recorded customer payment: ${record.customer || "customer"} (${record.amount})`);
     setCustomerPaymentForm({ ...getEmptyCustomerPaymentForm(), customer: customerPaymentForm.customer });
   };
   const handleDeleteCustomerPayment = (id) => {
     requestConfirm("هل تريد حذف هذا التحصيل؟", () => {
+      const deleted = customerPayments.find((p) => p.id === id);
       persistCustomerPayments(customerPayments.filter((p) => p.id !== id));
+      if (deleted) recordActivity("Payments", "deleted", `Deleted customer payment: ${deleted.customer || "customer"} (${deleted.amount})`);
     });
   };
 
@@ -5233,7 +5325,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // a file above: files are a shared working space, not permission-gated per employee.
   const deleteFile = async (id) => {
     if (!currentUser) return;
+    const deleted = files.find((f) => f.id === id);
     await persistFiles(files.filter((f) => f.id !== id));
+    if (deleted) recordActivity("Files", "deleted", `Deleted file #${deleted.serial || deleted.id}${deleted.company ? ` for ${deleted.company}` : ""}`);
     if (openFileId === id) setOpenFileId(null);
   };
 
@@ -5262,6 +5356,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       items: [buildFileItem(copyPickerSource.type, copyPickerSource.record)],
     };
     await persistFiles([record, ...files]);
+    recordActivity("Files", "created", `Created file #${record.serial || record.id}`);
     setCopyPickerSource(null);
   };
 
@@ -5307,6 +5402,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       items: draftFile.items || [],
     };
     await persistFiles([record, ...files]);
+    recordActivity("Files", "created", `Created file #${record.serial || record.id}${record.company ? ` for ${record.company}` : ""}`);
     setDraftFile(null);
   };
 
@@ -6238,8 +6334,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           )}
           <header className="relative flex items-center justify-between flex-wrap gap-3 px-4 py-4 md:px-6">
             <div className="flex items-center gap-3">
-              <div className="bg-white rounded-2xl px-3 py-2 shadow-sm shrink-0 hidden sm:block">
-                <img src={LOGO_DATA_URL} alt="TANIS International Travel" className="w-[260px] h-[80px] md:w-[320px] md:h-[98px] object-contain" />
+              <div className="bg-white rounded-2xl px-2.5 py-1.5 sm:px-3 sm:py-2 shadow-sm shrink-0">
+                <img src={LOGO_DATA_URL} alt="TANIS International Travel" className="w-[150px] h-[46px] sm:w-[260px] sm:h-[80px] md:w-[320px] md:h-[98px] object-contain" />
               </div>
               <div>
                 <h1 className="text-lg md:text-2xl font-semibold text-white" style={{ fontFamily: "'Fraunces', serif" }}>
@@ -6310,13 +6406,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       ? "border-white/20 bg-white/10 hover:bg-white/20 text-white"
                       : "border-amber-300/50 bg-amber-500/20 hover:bg-amber-500/30 text-amber-100"
                   }`}>
-                  <Lock size={15} />
+                  <Key size={15} />
                 </button>
               )}
               {currentUser.isAdmin && (
                 <button onClick={() => setShowLoginHistory(!showLoginHistory)} title="Login history"
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
                   <History size={15} />
+                </button>
+              )}
+              {currentUser.isAdmin && (
+                <button onClick={() => setShowActivityLog(!showActivityLog)} title="Activity log"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  <ClipboardList size={15} />
                 </button>
               )}
               {canManageCompanies && (
@@ -6397,7 +6499,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 w-full max-w-sm my-8 md:my-0 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="font-semibold text-stone-900 flex items-center gap-2">
-                  <Lock size={16} className="text-teal-800" /> App license
+                  <Key size={16} className="text-teal-800" /> App license
                 </h2>
                 <button
                   onClick={() => { setShowLicensePanel(false); setLicenseError(""); setLicenseInput(""); }}
@@ -6491,6 +6593,84 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </div>
         )}
+
+        {showActivityLog && currentUser.isAdmin && (() => {
+          const ACTIVITY_MODULES = ["all", "Flights", "Hotels", "Visas", "Cars", "Expenses", "Treasury", "Payments", "Employees", "Companies", "Requests", "License", "Backup"];
+          const ACTION_STYLES = {
+            created: "text-emerald-700 bg-emerald-50 border-emerald-200",
+            edited: "text-amber-700 bg-amber-50 border-amber-200",
+            deleted: "text-rose-700 bg-rose-50 border-rose-200",
+          };
+          const actionStyle = (action) => ACTION_STYLES[action] || "text-teal-800 bg-teal-50 border-teal-200";
+          const filteredActivity = activityLogFilter === "all"
+            ? activityLog
+            : activityLog.filter((entry) => entry.module === activityLogFilter);
+          return (
+            <div
+              className="fixed inset-0 z-50 bg-black/40 flex items-start md:items-center justify-center p-4 overflow-y-auto"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setShowActivityLog(false);
+              }}
+            >
+              <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 w-full max-w-2xl my-8 md:my-0 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="font-semibold text-stone-900 flex items-center gap-2">
+                    <ClipboardList size={16} className="text-teal-800" /> Activity log
+                  </h2>
+                  <button
+                    onClick={() => setShowActivityLog(false)}
+                    className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                <p className="text-xs text-stone-400 mb-3 mt-3">
+                  Visible to the main account only. Shows the most recent {ACTIVITY_LOG_LIMIT} actions across every account and every section, newest first.
+                </p>
+                <div className="flex flex-wrap gap-1.5 mb-4">
+                  {ACTIVITY_MODULES.map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setActivityLogFilter(m)}
+                      className={`text-xs font-medium rounded-full px-2.5 py-1 border transition-colors ${
+                        activityLogFilter === m
+                          ? "bg-teal-800 border-teal-800 text-white"
+                          : "bg-white border-stone-200 text-stone-500 hover:bg-stone-50"
+                      }`}
+                    >
+                      {m === "all" ? "All" : m}
+                    </button>
+                  ))}
+                </div>
+                {filteredActivity.length === 0 ? (
+                  <p className="text-sm text-stone-400 text-center py-6">No activity recorded yet.</p>
+                ) : (
+                  <div className="divide-y divide-stone-100 -mx-1">
+                    {[...filteredActivity].reverse().map((entry, idx) => (
+                      <div key={`${entry.username}-${entry.at}-${idx}`} className="flex items-start justify-between gap-3 px-1 py-2.5">
+                        <div className="min-w-0">
+                          <p className="text-sm text-stone-800 flex items-center gap-1.5 flex-wrap">
+                            <span className="font-medium">{entry.name || entry.username || "Unknown"}</span>
+                            <span className={`text-[10px] font-semibold rounded-full px-1.5 py-0.5 border shrink-0 ${actionStyle(entry.action)}`}>
+                              {entry.action}
+                            </span>
+                            <span className="text-[10px] font-semibold text-stone-500 bg-stone-100 border border-stone-200 rounded-full px-1.5 py-0.5 shrink-0">
+                              {entry.module}
+                            </span>
+                          </p>
+                          <p className="text-xs text-stone-500 mt-0.5">{entry.description}</p>
+                        </div>
+                        <p className="text-xs text-stone-500 whitespace-nowrap shrink-0">
+                          {entry.at ? new Date(entry.at).toLocaleString() : "—"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {(showManage || showManageCompanies) && (
           <div
