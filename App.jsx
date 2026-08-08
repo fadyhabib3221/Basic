@@ -3138,15 +3138,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             .header h1 { font-size: 20px; margin: 0; color: #115e59; }
             .header p { margin: 2px 0 0; font-size: 12px; color: #78716c; }
             h2 { font-size: 14px; color: #115e59; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; }
-            table { width: 100%; border-collapse: collapse; font-size: 13px; }
-            td.label { padding: 6px 10px; color: #78716c; width: 40%; border-bottom: 1px solid #e7e5e4; }
-            td.value { padding: 6px 10px; font-weight: 600; border-bottom: 1px solid #e7e5e4; }
+            table { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
+            td.label { padding: 8px 10px; color: #78716c; width: 34%; border-bottom: 1px solid #e7e5e4; vertical-align: top; word-break: break-word; }
+            td.value { padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #e7e5e4; vertical-align: top; word-break: break-word; line-height: 1.6; }
+            tr { page-break-inside: avoid; break-inside: avoid; }
             .footer { margin-top: 32px; font-size: 11px; color: #a8a29e; text-align: right; }
             @page {
-              margin: 0;
+              size: A4;
+              margin: 14mm 12mm;
             }
             @media print {
-              body { padding: 24px; }
+              body { padding: 0; }
             }
           </style>
         </head>
@@ -3355,7 +3357,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const t = fileTotals(f);
     const itemRows = (f.items || []).map((it) => [
       `${FILE_SOURCE_LABELS[it.sourceType] || it.sourceType} — ${it.label}`,
-      `${it.date ? formatDisplayDate(it.date) : "-"} · Net ${fmt(it.netPrice)} ${it.currency} · Sold ${fmt(it.soldPrice)} ${it.currency}`,
+      `${it.date ? formatDisplayDate(it.date) : "-"}<br/>Net ${fmt(it.netPrice)} ${it.currency} &middot; Sold ${fmt(it.soldPrice)} ${it.currency}`,
     ]);
 
     openPrintPreview(`File ${f.serial || ""}`, "File Summary", [
@@ -12109,7 +12111,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           onClick={() => setPrintPreview(null)}
         >
           <div
-            className="bg-white rounded-2xl border border-stone-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+            className="bg-white rounded-2xl border border-stone-200 w-full max-w-5xl h-[92vh] flex flex-col overflow-hidden"
             onClick={(ev) => ev.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-3 border-b border-stone-100 shrink-0">
@@ -12135,7 +12137,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               title={printPreview.title}
               srcDoc={printPreview.html}
               className="flex-1 w-full"
-              style={{ border: "none", minHeight: "60vh" }}
+              style={{ border: "none" }}
             />
           </div>
         </div>
