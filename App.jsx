@@ -3349,6 +3349,41 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     );
   };
 
+  // Opens a printable summary of a whole File — its info plus every item it
+  // contains (each a snapshot pulled from Flights/Hotels/Visa) and the file's totals.
+  const handlePrintFile = (f) => {
+    const t = fileTotals(f);
+    const itemRows = (f.items || []).map((it) => [
+      `${FILE_SOURCE_LABELS[it.sourceType] || it.sourceType} — ${it.label}`,
+      `${it.date ? formatDisplayDate(it.date) : "-"} · Net ${fmt(it.netPrice)} ${it.currency} · Sold ${fmt(it.soldPrice)} ${it.currency}`,
+    ]);
+
+    openPrintPreview(`File ${f.serial || ""}`, "File Summary", [
+      {
+        heading: "File",
+        rows: [
+          ["Serial", f.serial || "-"],
+          ["Company", f.company || "Individual"],
+          ["File date", f.createdAt ? formatDisplayDate(f.createdAt) : "-"],
+          ["Created by", f.createdBy || "-"],
+          ["Notes", f.notes || "-"],
+        ],
+      },
+      {
+        heading: `Items (${(f.items || []).length})`,
+        rows: itemRows.length > 0 ? itemRows : [["-", "No items added to this file yet."]],
+      },
+      {
+        heading: "Totals",
+        rows: [
+          ["Net total", `${fmt(t.net)} EGP`],
+          ["Sold total", `${fmt(t.sold)} EGP`],
+          ["Profit", `${fmt(t.profit)} EGP`],
+        ],
+      },
+    ]);
+  };
+
   // Registers a new supplier name in the Transfers page's OWN supplier list — kept
   // separate from the Hotels/Flights/Visa supplier lists, via the "+ Add supplier"
   // button at the top of the Transfers page.
@@ -5334,27 +5369,25 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     );
   };
 
-  // Clicking a service inside a file jumps to that service's own full detail view
-  // (the same one used in the Flights/Hotels/Visa sections), by looking the original
-  // record up via the item's stored sourceId and switching to its section. The file
-  // item itself only ever stores a lightweight price snapshot, not the full record, so
-  // this look-up is what makes "see full details" possible. If the original record was
-  // since deleted, there's nothing to jump to — surface a toast instead of navigating.
+  // Clicking a service inside a file opens that service's own full detail modal
+  // (the same one used in the Flights/Hotels/Visa sections) by looking the original
+  // record up via the item's stored sourceId — but WITHOUT switching activeSection,
+  // so the user stays on the Files section underneath the modal. The file item
+  // itself only ever stores a lightweight price snapshot, not the full record, so
+  // this look-up is what makes "see full details" possible. If the original record
+  // was since deleted, there's nothing to jump to — surface a toast instead.
   const viewFileItemDetails = (it) => {
     if (it.sourceType === "flights") {
       const t = tickets.find((x) => x.id === it.sourceId);
       if (!t) { showActionToast("This ticket no longer exists"); return; }
-      setActiveSection("flights");
       setViewingTicketId(t.id);
     } else if (it.sourceType === "hotels") {
       const h = hotelBookings.find((x) => x.id === it.sourceId);
       if (!h) { showActionToast("This hotel booking no longer exists"); return; }
-      setActiveSection("hotels");
       setViewingHotelBooking(h);
     } else if (it.sourceType === "visa") {
       const v = visaBookings.find((x) => x.id === it.sourceId);
       if (!v) { showActionToast("This visa booking no longer exists"); return; }
-      setActiveSection("visa");
       setViewingVisaBooking(v);
     } else {
       showActionToast("No details available for this item");
@@ -9545,6 +9578,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         )}
 
+        </>
+        )}
+
+        {/* Rendered independently of activeSection so opening a visa's details from
+            inside a File doesn't jump the user away to the Visa section. */}
         {viewingVisaBooking && (
           <div
             className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
@@ -9579,7 +9617,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </button>
                   {visaPerm.canEdit && (
                     <button
-                      onClick={() => { handleEditVisaClick(viewingVisaBooking); setViewingVisaBooking(null); }}
+                      onClick={() => { setActiveSection("visa"); handleEditVisaClick(viewingVisaBooking); setViewingVisaBooking(null); }}
                       className="text-stone-400 hover:text-teal-800 p-1.5"
                       title="Edit"
                     >
@@ -9647,8 +9685,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
           </div>
-        )}
-        </>
         )}
 
         {activeSection === "cars" && (
@@ -10690,6 +10726,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <p className="text-xs text-stone-400">{formatDisplayDate(openFile.createdAt)} · Created by {openFile.createdBy}</p>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handlePrintFile(openFile)}
+                        className="text-stone-400 hover:text-teal-800 p-1.5"
+                        title="Print"
+                      >
+                        <Printer size={18} />
+                      </button>
                       {filesPerm.canEdit && (
                       <button
                         onClick={() => setEditingFileServices((v) => !v)}
@@ -11442,7 +11485,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       )}
       </div>
 
-      {activeSection === "flights" && viewingTicket && (
+      {/* Rendered independently of activeSection so opening a ticket's details from
+          inside a File doesn't jump the user away to the Flights section. */}
+      {viewingTicket && (
         <div className="fixed inset-0 bg-white z-40 overflow-y-auto">
           <div className="max-w-3xl mx-auto p-4 md:p-6">
             <div className="flex items-center justify-between mb-6">
@@ -11475,7 +11520,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </button>
               {(currentUser.isAdmin || canEditTickets) && (
                 <button
-                  onClick={() => handleEdit(viewingTicket, closeTicketDetail)}
+                  onClick={() => { setActiveSection("flights"); handleEdit(viewingTicket, closeTicketDetail); }}
                   className="border border-stone-300 text-stone-600 hover:text-teal-800 hover:border-teal-700 text-sm font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
                 >
                   <Pencil size={15} /> Edit
