@@ -1381,6 +1381,22 @@ function MultiSelectDropdown({ label, icon: Icon, options, selected, onChange, p
   );
 }
 
+// Locks the page at 1x zoom on mobile Safari/Chrome. This runs synchronously at
+// module load time (not inside a React useEffect) because mobile browsers restore
+// the pinch/double-tap zoom level from the previous session as soon as the page
+// starts loading — before React even mounts. Waiting for a useEffect (which only
+// fires after the first render/paint) is too late: the browser has already
+// re-applied the old zoom by then. Running this at import time closes that gap.
+if (typeof document !== "undefined") {
+  let __viewport = document.querySelector("meta[name='viewport']");
+  if (!__viewport) {
+    __viewport = document.createElement("meta");
+    __viewport.name = "viewport";
+    document.head.appendChild(__viewport);
+  }
+  __viewport.content = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no";
+}
+
 export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Prevent the mouse/trackpad scroll wheel from changing the value of a focused
   // number input. Browsers normally let scrolling over a focused number field
@@ -1402,17 +1418,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Keep the browser tab title and icon in sync with the app's name/branding.
   useEffect(() => {
     document.title = "Travel Agency Manager";
-    // Locks the page at 1x zoom on mobile Safari/Chrome. Without this, a pinch- or
-    // double-tap-zoom the person does anywhere on the page sticks around across
-    // refreshes and navigation (mobile browsers persist zoom/scroll state per tab),
-    // which is confusing in an app-like layout that's designed to fit the screen at 1x.
-    let viewport = document.querySelector("meta[name='viewport']");
-    if (!viewport) {
-      viewport = document.createElement("meta");
-      viewport.name = "viewport";
-      document.head.appendChild(viewport);
-    }
-    viewport.content = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no";
     const faviconSvg =
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
       '<rect width="24" height="24" rx="5" fill="#115e59"/>' +
