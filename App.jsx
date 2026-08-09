@@ -2447,6 +2447,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
   };
 
+  // When a service (ticket/hotel/visa/car) is deleted from its own section, any file
+  // that references it via a file item (sourceType + sourceId) should have that item
+  // removed too — otherwise the file keeps showing a stale line that errors out when
+  // clicked ("This ... no longer exists"). This only strips the matching item(s) from
+  // files; it never touches the service being deleted. Going the other direction,
+  // removeItemFromFile (removing an item from inside a file) still never touches the
+  // original service — that behavior is unchanged.
+  const removeItemFromAllFiles = async (sourceType, sourceId) => {
+    const next = files.map((f) => ({
+      ...f,
+      items: (f.items || []).filter((i) => !(i.sourceType === sourceType && i.sourceId === sourceId)),
+    }));
+    await persistFiles(next);
+  };
+
   const persistEmployees = async (next) => {
     setEmployees(next);
     try {
@@ -2862,6 +2877,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     requestConfirm("Delete this hotel booking? This cannot be undone.", async () => {
       const deleted = hotelBookings.find((h) => h.id === id);
       await persistHotelBookings(hotelBookings.filter((h) => h.id !== id));
+      await removeItemFromAllFiles("hotels", id);
       if (deleted) recordActivity("Hotels", "deleted", `Deleted hotel booking: ${deleted.hotel || "hotel"} for ${deleted.customer || "customer"}`);
       if (hotelEditingId === id) resetHotelForm();
       setConfirmDialog(null);
@@ -2987,6 +3003,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     requestConfirm("Delete this visa booking? This cannot be undone.", async () => {
       const deleted = visaBookings.find((v) => v.id === id);
       await persistVisaBookings(visaBookings.filter((v) => v.id !== id));
+      await removeItemFromAllFiles("visa", id);
       if (deleted) recordActivity("Visas", "deleted", `Deleted visa booking: ${deleted.visaType || "visa"} for ${(deleted.customers && deleted.customers[0] && deleted.customers[0].name) || "customer"}`);
       if (visaEditingId === id) resetVisaForm();
       setConfirmDialog(null);
@@ -3101,6 +3118,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     requestConfirm("Delete this transfer booking? This cannot be undone.", async () => {
       const deleted = carBookings.find((c) => c.id === id);
       await persistCarBookings(carBookings.filter((c) => c.id !== id));
+      await removeItemFromAllFiles("cars", id);
       if (deleted) recordActivity("Transportation", "deleted", `Deleted car booking: ${deleted.customerName || "customer"} (${deleted.routeFrom || "?"} → ${deleted.routeTo || "?"})`);
       if (carEditingId === id) resetCarForm();
       setConfirmDialog(null);
@@ -4025,6 +4043,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       if (form.id === id) { setForm(getEmptyForm()); setSupplierOther(false); }
       const deleted = tickets.find((t) => t.id === id);
       persistTickets(tickets.filter((t) => t.id !== id));
+      removeItemFromAllFiles("flights", id);
       if (deleted) {
         const ticketDesc = `${(deleted.customers || []).map((c) => c.name).filter(Boolean).join(", ") || "ticket"} (${deleted.from || "?"} → ${deleted.to || "?"})`;
         recordActivity("Flights", "deleted", `Deleted ticket for ${ticketDesc}`);
