@@ -95,6 +95,22 @@ const formatDisplayDateFull = (dateStr) => {
   return `${d}-${monthFull}-${y}`;
 };
 
+// Reduces an employee's full name to just the first letter of each word — e.g.
+// "Fady Habib" -> "FH" — used in the main flight-tickets table so the Employee
+// column stays compact. The full name is still shown everywhere else (detail
+// modal, filters, exports).
+const employeeInitials = (name) => {
+  if (!name) return "-";
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .join("")
+    .toUpperCase();
+  return initials || "-";
+};
+
 // Formats an ISO timestamp as DD-MMM-YYYY HH:MM for showing when a note edit happened.
 const formatDateTime = (iso) => {
   if (!iso) return "";
@@ -6203,7 +6219,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-teal-50/60"}`
           }`}
         >
-          <td className={`px-2 py-0.5 ${cellText} whitespace-nowrap`}>{t.employee || "-"}</td>
+          <td className={`px-2 py-0.5 ${cellText} whitespace-nowrap`} title={t.employee || ""}>{employeeInitials(t.employee)}</td>
           <td className={`px-2 py-0.5 ${cellText} whitespace-nowrap`}>{t.date ? formatDisplayDate(t.date) : "-"}</td>
           <td className={`px-2 py-0.5 font-medium ${nameText} whitespace-nowrap`}>
             <span className="inline-flex items-center gap-1.5">
@@ -6293,7 +6309,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               : "border-red-300 bg-red-100/70 hover:bg-red-200/70"
           }`}
         >
-          <td className={`px-2 py-0.5 ${rowText} whitespace-nowrap`}>{t.employee || "-"}</td>
+          <td className={`px-2 py-0.5 ${rowText} whitespace-nowrap`} title={t.employee || ""}>{employeeInitials(t.employee)}</td>
           <td className={`px-2 py-0.5 ${rowText} whitespace-nowrap`}>{refund.date ? formatDisplayDate(refund.date) : "-"}</td>
           <td className={`px-2 py-0.5 font-medium ${rowTextBold} whitespace-nowrap`}>{(refundedCustomer && refundedCustomer.name) || "-"}</td>
           <td className={`px-2 py-0.5 ${rowText} font-mono whitespace-nowrap`}>
