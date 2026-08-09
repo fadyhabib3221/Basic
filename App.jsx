@@ -4726,21 +4726,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const visaYearsAvailable = Array.from(
     new Set(visibleVisaBookings.map((v) => (v.bookingDate ? v.bookingDate.slice(0, 4) : "")).filter(Boolean))
   ).sort((a, b) => b.localeCompare(a));
+  const visaEmployeesAvailable = Array.from(
+    new Set(visibleVisaBookings.map((v) => (v.employee || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
   const visaSuppliersAvailable = Array.from(
     new Set(visibleVisaBookings.map((v) => (v.supplier || "").trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
-  const hasActiveVisaFilter = !!(visaSelectedYear.length || visaSelectedMonth.length || visaSelectedSupplier.length || visaQuery.trim());
-  const activeVisaFilterCount = visaSelectedYear.length + visaSelectedMonth.length + visaSelectedSupplier.length + (visaQuery.trim() ? 1 : 0);
+  const hasActiveVisaFilter = !!(visaSelectedYear.length || visaSelectedMonth.length || visaSelectedEmployee.length || visaSelectedSupplier.length || visaQuery.trim());
+  const activeVisaFilterCount = visaSelectedYear.length + visaSelectedMonth.length + visaSelectedEmployee.length + visaSelectedSupplier.length + (visaQuery.trim() ? 1 : 0);
   const clearAllVisaFilters = () => {
     setVisaQuery("");
     setVisaSelectedYear([]);
     setVisaSelectedMonth([]);
+    setVisaSelectedEmployee([]);
     setVisaSelectedSupplier([]);
   };
   const filteredVisaBookings = visibleVisaBookings.filter((v) => {
     if (visaSelectedYear.length && !visaSelectedYear.includes((v.bookingDate || "").slice(0, 4))) return false;
     if (visaSelectedMonth.length && !visaSelectedMonth.includes(monthKey(v.bookingDate))) return false;
+    if (visaSelectedEmployee.length && !visaSelectedEmployee.includes((v.employee || "").trim())) return false;
     if (visaSelectedSupplier.length && !visaSelectedSupplier.includes((v.supplier || "").trim())) return false;
     const q = visaQuery.trim().toLowerCase();
     if (!q) return true;
@@ -8179,7 +8184,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 />
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">Employee</label>
+                <label className="text-xs text-stone-500 block mb-1">By</label>
                 <MultiSelectDropdown
                   label="employees"
                   icon={User}
@@ -8226,7 +8231,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               ))}
               {selectedEmployee.map((e) => (
                 <span key={`employee-${e}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Employee: <span className="font-semibold text-stone-800">{e}</span>
+                  By: <span className="font-semibold text-stone-800">{e}</span>
                   <button onClick={() => setSelectedEmployee(selectedEmployee.filter((v) => v !== e))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
               ))}
@@ -8285,7 +8290,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-xs border-collapse">
                 <thead>
                   <tr className="bg-teal-50/60 text-teal-800 text-[11px] uppercase tracking-wide border-b-2 border-teal-200">
-                    <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Employee</th>
+                    <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">By</th>
                     <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Date</th>
                     <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Customer</th>
                     <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Ticket #</th>
@@ -8963,7 +8968,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 />
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">Employee</label>
+                <label className="text-xs text-stone-500 block mb-1">By</label>
                 <MultiSelectDropdown
                   label="employees"
                   icon={User}
@@ -9015,7 +9020,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               ))}
               {hotelSelectedEmployee.map((e) => (
                 <span key={`employee-${e}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Employee: <span className="font-semibold text-stone-800">{e}</span>
+                  By: <span className="font-semibold text-stone-800">{e}</span>
                   <button onClick={() => setHotelSelectedEmployee(hotelSelectedEmployee.filter((v) => v !== e))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
               ))}
@@ -9555,6 +9560,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 />
               </div>
               <div>
+                <label className="text-xs text-stone-500 block mb-1">By</label>
+                <MultiSelectDropdown
+                  label="employees"
+                  icon={User}
+                  options={visaEmployeesAvailable}
+                  selected={visaSelectedEmployee}
+                  onChange={setVisaSelectedEmployee}
+                  placeholder="All employees"
+                />
+              </div>
+              <div>
                 <label className="text-xs text-stone-500 block mb-1">Supplier</label>
                 <MultiSelectDropdown
                   label="suppliers"
@@ -9581,6 +9597,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <span key={`month-${m}`} className="inline-flex items-center gap-1 text-stone-600">
                   Month: <span className="font-semibold text-stone-800">{monthLabel(m)}</span>
                   <button onClick={() => setVisaSelectedMonth(visaSelectedMonth.filter((v) => v !== m))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              ))}
+              {visaSelectedEmployee.map((e) => (
+                <span key={`employee-${e}`} className="inline-flex items-center gap-1 text-stone-600">
+                  By: <span className="font-semibold text-stone-800">{e}</span>
+                  <button onClick={() => setVisaSelectedEmployee(visaSelectedEmployee.filter((v) => v !== e))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
               ))}
               {visaSelectedSupplier.map((s) => (
@@ -9614,6 +9636,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
+                    <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">By</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap"># Customers</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Names</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Visa</th>
@@ -9635,6 +9658,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         className="hover:bg-stone-50 cursor-pointer"
                         onClick={() => { setViewingFileContext(null); setViewingVisaBooking(v); }}
                       >
+                        <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap" title={v.employee || ""}>{employeeInitials(v.employee)}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">{(v.customers || []).length}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">
                           {(v.customers || []).map((c) => c.name || "-").join(", ")}
@@ -10572,7 +10596,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-stone-500 block mb-1">Employee</label>
+                        <label className="text-xs text-stone-500 block mb-1">By</label>
                         <MultiSelectDropdown
                           label="employees"
                           icon={User}
@@ -10602,7 +10626,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       ))}
                       {fileSelectedEmployee.map((e) => (
                         <span key={`employee-${e}`} className="inline-flex items-center gap-1 text-stone-600">
-                          Employee: <span className="font-semibold text-stone-800">{e}</span>
+                          By: <span className="font-semibold text-stone-800">{e}</span>
                           <button onClick={() => setFileSelectedEmployee(fileSelectedEmployee.filter((v) => v !== e))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                         </span>
                       ))}
