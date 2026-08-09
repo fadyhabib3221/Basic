@@ -1634,6 +1634,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // together without touching the original records — nothing here feeds back into the
   // totals shown in those other sections.
   const [files, setFiles] = useState([]);
+  // When a service's detail modal (hotel/visa/car/ticket) is opened from INSIDE a file
+  // (via viewFileItemDetails) rather than from that service's own section, this holds
+  // { fileId, itemId } (or { draft: true, itemId } for the unsaved draft-file view) so the
+  // modal's Delete button can be redirected to "remove from this file/draft only" instead
+  // of deleting the real service record. null when the modal was opened normally.
+  const [viewingFileContext, setViewingFileContext] = useState(null);
   const [fileError, setFileError] = useState("");
   // Which file (by id) is currently open in the detail view; null = showing the list.
   const [openFileId, setOpenFileId] = useState(null);
@@ -4055,6 +4061,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Opens the full-detail view ("page") for a ticket, showing every field including notes.
   const openTicketDetail = (t) => {
+    setViewingFileContext(null);
     setViewingTicketId(t.id);
     setNotesDraft(t.notes || "");
     setNotesSaved(false);
@@ -5410,7 +5417,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // itself only ever stores a lightweight price snapshot, not the full record, so
   // this look-up is what makes "see full details" possible. If the original record
   // was since deleted, there's nothing to jump to — surface a toast instead.
-  const viewFileItemDetails = (it) => {
+  //
+  // `context` identifies where this item lives — { fileId, itemId } for a saved file,
+  // or { draft: true, itemId } for the unsaved draft-file view — so the modal's Delete
+  // button can remove just this file's item instead of the real service record.
+  const viewFileItemDetails = (it, context) => {
+    setViewingFileContext(context || null);
     if (it.sourceType === "flights") {
       const t = tickets.find((x) => x.id === it.sourceId);
       if (!t) { showActionToast("This ticket no longer exists"); return; }
@@ -9044,7 +9056,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <tr
                   key={h.id}
                   className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer"
-                  onClick={() => setViewingHotelBooking(h)}
+                  onClick={() => { setViewingFileContext(null); setViewingHotelBooking(h); }}
                 >
                   <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">
                     {h.customer && h.customer.trim() ? (
@@ -9128,11 +9140,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   {hotelsPerm.canDelete && (
                     <button
                       onClick={() => {
+                        if (viewingFileContext) {
+                          if (viewingFileContext.draft) removeDraftItem(viewingFileContext.itemId);
+                          else removeItemFromFile(viewingFileContext.fileId, viewingFileContext.itemId);
+                          setViewingFileContext(null);
+                          setViewingHotelBooking(null);
+                          return;
+                        }
                         const id = viewingHotelBooking.id;
                         handleDeleteHotel(id, () => setViewingHotelBooking(null));
                       }}
                       className="text-stone-400 hover:text-red-600 p-1.5"
-                      title="Delete"
+                      title={viewingFileContext ? "Remove from file" : "Delete"}
                     >
                       <Trash2 size={18} />
                     </button>
@@ -9598,7 +9617,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <tr
                         key={v.id}
                         className="hover:bg-stone-50 cursor-pointer"
-                        onClick={() => setViewingVisaBooking(v)}
+                        onClick={() => { setViewingFileContext(null); setViewingVisaBooking(v); }}
                       >
                         <td className="px-4 py-3 text-stone-700 whitespace-nowrap">{(v.customers || []).length}</td>
                         <td className="px-4 py-3 text-stone-700 whitespace-nowrap">
@@ -9670,11 +9689,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   {visaPerm.canDelete && (
                     <button
                       onClick={() => {
+                        if (viewingFileContext) {
+                          if (viewingFileContext.draft) removeDraftItem(viewingFileContext.itemId);
+                          else removeItemFromFile(viewingFileContext.fileId, viewingFileContext.itemId);
+                          setViewingFileContext(null);
+                          setViewingVisaBooking(null);
+                          return;
+                        }
                         const id = viewingVisaBooking.id;
                         handleDeleteVisa(id, () => setViewingVisaBooking(null));
                       }}
                       className="text-stone-400 hover:text-red-600 p-1.5"
-                      title="Delete"
+                      title={viewingFileContext ? "Remove from file" : "Delete"}
                     >
                       <Trash2 size={18} />
                     </button>
@@ -10250,7 +10276,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <tr
                         key={c.id}
                         className="leading-tight hover:bg-stone-50 cursor-pointer"
-                        onClick={() => setViewingCarBooking(c)}
+                        onClick={() => { setViewingFileContext(null); setViewingCarBooking(c); }}
                       >
                         <td className="px-2.5 py-1 text-stone-700 whitespace-nowrap">
                           {c.entryDate ? formatDisplayDate(c.entryDate) : "-"}
@@ -10340,11 +10366,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   {carsPerm.canDelete && (
                     <button
                       onClick={() => {
+                        if (viewingFileContext) {
+                          if (viewingFileContext.draft) removeDraftItem(viewingFileContext.itemId);
+                          else removeItemFromFile(viewingFileContext.fileId, viewingFileContext.itemId);
+                          setViewingFileContext(null);
+                          setViewingCarBooking(null);
+                          return;
+                        }
                         const id = viewingCarBooking.id;
                         handleDeleteCar(id, () => setViewingCarBooking(null));
                       }}
                       className="text-stone-400 hover:text-red-600 p-1.5"
-                      title="Delete"
+                      title={viewingFileContext ? "Remove from file" : "Delete"}
                     >
                       <Trash2 size={18} />
                     </button>
@@ -10730,7 +10763,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <div key={it.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-stone-50 transition-colors">
                         <button
                           type="button"
-                          onClick={() => viewFileItemDetails(it)}
+                          onClick={() => viewFileItemDetails(it, { draft: true, itemId: it.id })}
                           className="min-w-0 text-left flex-1"
                         >
                           <p className="text-xs text-teal-800 font-semibold">{FILE_SOURCE_LABELS[it.sourceType] || it.sourceType}</p>
@@ -10738,7 +10771,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           <p className="text-xs text-stone-400">{formatDisplayDate(it.date)}</p>
                         </button>
                         <div className="flex items-center gap-3 shrink-0">
-                          <button type="button" onClick={() => viewFileItemDetails(it)} className="text-right">
+                          <button type="button" onClick={() => viewFileItemDetails(it, { draft: true, itemId: it.id })} className="text-right">
                             <p className="text-sm font-bold">{fmt(it.soldPrice)} {it.currency}</p>
                             <p className="text-xs text-emerald-700">net {fmt(it.netPrice)} {it.currency}</p>
                           </button>
@@ -10885,7 +10918,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <div key={it.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-stone-50 transition-colors">
                         <button
                           type="button"
-                          onClick={() => viewFileItemDetails(it)}
+                          onClick={() => viewFileItemDetails(it, { fileId: openFile.id, itemId: it.id })}
                           className="min-w-0 text-left flex-1"
                         >
                           <p className="text-xs text-teal-800 font-semibold">{FILE_SOURCE_LABELS[it.sourceType] || it.sourceType}</p>
@@ -10893,7 +10926,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           <p className="text-xs text-stone-400">{formatDisplayDate(it.date)}</p>
                         </button>
                         <div className="flex items-center gap-3 shrink-0">
-                          <button type="button" onClick={() => viewFileItemDetails(it)} className="text-right">
+                          <button type="button" onClick={() => viewFileItemDetails(it, { fileId: openFile.id, itemId: it.id })} className="text-right">
                             <p className="text-sm font-bold">{fmt(it.soldPrice)} {it.currency}</p>
                             <p className="text-xs text-emerald-700">net {fmt(it.netPrice)} {it.currency}</p>
                           </button>
@@ -11597,10 +11630,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
               {(currentUser.isAdmin || canDeleteTickets) && (
                 <button
-                  onClick={() => handleDelete(viewingTicket.id, closeTicketDetail)}
+                  onClick={() => {
+                    if (viewingFileContext) {
+                      if (viewingFileContext.draft) removeDraftItem(viewingFileContext.itemId);
+                      else removeItemFromFile(viewingFileContext.fileId, viewingFileContext.itemId);
+                      setViewingFileContext(null);
+                      closeTicketDetail();
+                      return;
+                    }
+                    handleDelete(viewingTicket.id, closeTicketDetail);
+                  }}
                   className="border border-stone-300 text-red-600 hover:text-red-700 hover:border-red-400 text-sm font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
                 >
-                  <Trash2 size={15} /> Delete
+                  <Trash2 size={15} /> {viewingFileContext ? "Remove from file" : "Delete"}
                 </button>
               )}
             </div>
