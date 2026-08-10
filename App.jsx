@@ -1511,6 +1511,46 @@ function ThFilter({ label, align = "left", options, selected, onChange, classNam
   );
 }
 
+// Renders the "Applied: ..." chips row under a filter panel (year/month/company/etc,
+// each removable, plus a trailing "Clear all"). Every list in the app — tickets,
+// hotels, visas, transfers, files — used to hand-roll this same block; now they all
+// pass their filters through `groups` instead, so the chip UI can't drift out of sync
+// between sections. `groups` is [{ label, values }], where each value is
+// { key, text, onRemove }. Groups (and the whole row) auto-hide when nothing's active.
+function AppliedFilters({ groups, onClearAll }) {
+  const chips = groups.flatMap((g) => g.values.map((v) => ({ ...v, groupLabel: g.label })));
+  if (chips.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
+      <span className="text-stone-400 font-medium">Applied:</span>
+      {chips.map((chip) => (
+        <span key={chip.key} className="inline-flex items-center gap-1 text-stone-600">
+          {chip.groupLabel}: <span className="font-semibold text-stone-800">{chip.text}</span>
+          <button onClick={chip.onRemove} className="text-stone-400 hover:text-red-600" aria-label={`Remove ${chip.groupLabel} filter: ${chip.text}`}>
+            <X size={12} />
+          </button>
+        </span>
+      ))}
+      <button onClick={onClearAll} className="text-red-600 hover:text-red-700 font-semibold ml-auto">
+        Clear all
+      </button>
+    </div>
+  );
+}
+
+// Builds one AppliedFilters group from a multi-select filter's [selected, setSelected]
+// pair — the common case (year, month, company, employee, supplier, airline, ...).
+// `textFor` formats a raw value for display (e.g. turning a month key into "Aug 2026"),
+// and defaults to showing the raw value unchanged.
+const multiFilterGroup = (label, keyPrefix, selected, setSelected, textFor = (v) => v) => ({
+  label,
+  values: selected.map((v) => ({
+    key: `${keyPrefix}-${v}`,
+    text: textFor(v),
+    onRemove: () => setSelected(selected.filter((x) => x !== v)),
+  })),
+});
+
 export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Prevent the mouse/trackpad scroll wheel from changing the value of a focused
   // number input. Browsers normally let scrolling over a focused number field
@@ -8775,59 +8815,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           )}
 
-          {hasActiveFilter && (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
-              <span className="text-stone-400 font-medium">Applied:</span>
-              {selectedYear.map((y) => (
-                <span key={`year-${y}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Year: <span className="font-semibold text-stone-800">{y}</span>
-                  <button onClick={() => setSelectedYear(selectedYear.filter((v) => v !== y))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {selectedMonth.map((m) => (
-                <span key={`month-${m}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Month: <span className="font-semibold text-stone-800">{monthLabel(m)}</span>
-                  <button onClick={() => setSelectedMonth(selectedMonth.filter((v) => v !== m))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {selectedCompany.map((c) => (
-                <span key={`company-${c}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Company: <span className="font-semibold text-stone-800">{c}</span>
-                  <button onClick={() => setSelectedCompany(selectedCompany.filter((v) => v !== c))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {selectedEmployee.map((e) => (
-                <span key={`employee-${e}`} className="inline-flex items-center gap-1 text-stone-600">
-                  By: <span className="font-semibold text-stone-800">{e}</span>
-                  <button onClick={() => setSelectedEmployee(selectedEmployee.filter((v) => v !== e))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {selectedSupplier.map((s) => (
-                <span key={`supplier-${s}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Supplier: <span className="font-semibold text-stone-800">{s}</span>
-                  <button onClick={() => setSelectedSupplier(selectedSupplier.filter((v) => v !== s))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {selectedAirline.map((a) => (
-                <span key={`airline-${a}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Airline: <span className="font-semibold text-stone-800">{getAirlineIata(a) || a}</span>
-                  <button onClick={() => setSelectedAirline(selectedAirline.filter((v) => v !== a))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {query.trim() && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Search: <span className="font-semibold text-stone-800">"{query.trim()}"</span>
-                  <button onClick={() => setQuery("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              )}
-              <button
-                onClick={clearAllFilters}
-                className="text-red-600 hover:text-red-700 font-semibold ml-auto"
-              >
-                Clear all
-              </button>
-            </div>
-          )}
+          <AppliedFilters
+            groups={[
+              multiFilterGroup("Year", "year", selectedYear, setSelectedYear),
+              multiFilterGroup("Month", "month", selectedMonth, setSelectedMonth, monthLabel),
+              multiFilterGroup("Company", "company", selectedCompany, setSelectedCompany),
+              multiFilterGroup("By", "employee", selectedEmployee, setSelectedEmployee),
+              multiFilterGroup("Supplier", "supplier", selectedSupplier, setSelectedSupplier),
+              multiFilterGroup("Airline", "airline", selectedAirline, setSelectedAirline, (a) => getAirlineIata(a) || a),
+              { label: "Search", values: query.trim() ? [{ key: "search", text: `"${query.trim()}"`, onRemove: () => setQuery("") }] : [] },
+            ]}
+            onClearAll={clearAllFilters}
+          />
         </div>
 
         <datalist id="company-suggestions">
@@ -9616,50 +9615,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           )}
 
-          {hasActiveHotelFilter && (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
-              <span className="text-stone-400 font-medium">Applied:</span>
-              {hotelSelectedYear.map((y) => (
-                <span key={`year-${y}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Year: <span className="font-semibold text-stone-800">{y}</span>
-                  <button onClick={() => setHotelSelectedYear(hotelSelectedYear.filter((v) => v !== y))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {hotelSelectedMonth.map((m) => (
-                <span key={`month-${m}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Month: <span className="font-semibold text-stone-800">{monthLabel(m)}</span>
-                  <button onClick={() => setHotelSelectedMonth(hotelSelectedMonth.filter((v) => v !== m))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {hotelSelectedEmployee.map((e) => (
-                <span key={`employee-${e}`} className="inline-flex items-center gap-1 text-stone-600">
-                  By: <span className="font-semibold text-stone-800">{e}</span>
-                  <button onClick={() => setHotelSelectedEmployee(hotelSelectedEmployee.filter((v) => v !== e))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {hotelSelectedSupplier.map((s) => (
-                <span key={`supplier-${s}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Supplier: <span className="font-semibold text-stone-800">{s}</span>
-                  <button onClick={() => setHotelSelectedSupplier(hotelSelectedSupplier.filter((v) => v !== s))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {hotelSelectedHotelName.map((h) => (
-                <span key={`hotel-${h}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Hotel: <span className="font-semibold text-stone-800">{h}</span>
-                  <button onClick={() => setHotelSelectedHotelName(hotelSelectedHotelName.filter((v) => v !== h))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {hotelQuery.trim() && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Search: <span className="font-semibold text-stone-800">"{hotelQuery.trim()}"</span>
-                  <button onClick={() => setHotelQuery("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              )}
-              <button onClick={clearAllHotelFilters} className="text-red-600 hover:text-red-700 font-semibold ml-auto">
-                Clear all
-              </button>
-            </div>
-          )}
+          <AppliedFilters
+            groups={[
+              multiFilterGroup("Year", "year", hotelSelectedYear, setHotelSelectedYear),
+              multiFilterGroup("Month", "month", hotelSelectedMonth, setHotelSelectedMonth, monthLabel),
+              multiFilterGroup("By", "employee", hotelSelectedEmployee, setHotelSelectedEmployee),
+              multiFilterGroup("Supplier", "supplier", hotelSelectedSupplier, setHotelSelectedSupplier),
+              multiFilterGroup("Hotel", "hotel", hotelSelectedHotelName, setHotelSelectedHotelName),
+              { label: "Search", values: hotelQuery.trim() ? [{ key: "search", text: `"${hotelQuery.trim()}"`, onRemove: () => setHotelQuery("") }] : [] },
+            ]}
+            onClearAll={clearAllHotelFilters}
+          />
         </div>
 
         <div className="bg-white border border-stone-200 rounded-2xl overflow-x-auto" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}>
@@ -10201,44 +10167,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           )}
 
-          {hasActiveVisaFilter && (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
-              <span className="text-stone-400 font-medium">Applied:</span>
-              {visaSelectedYear.map((y) => (
-                <span key={`year-${y}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Year: <span className="font-semibold text-stone-800">{y}</span>
-                  <button onClick={() => setVisaSelectedYear(visaSelectedYear.filter((v) => v !== y))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {visaSelectedMonth.map((m) => (
-                <span key={`month-${m}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Month: <span className="font-semibold text-stone-800">{monthLabel(m)}</span>
-                  <button onClick={() => setVisaSelectedMonth(visaSelectedMonth.filter((v) => v !== m))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {visaSelectedEmployee.map((e) => (
-                <span key={`employee-${e}`} className="inline-flex items-center gap-1 text-stone-600">
-                  By: <span className="font-semibold text-stone-800">{e}</span>
-                  <button onClick={() => setVisaSelectedEmployee(visaSelectedEmployee.filter((v) => v !== e))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {visaSelectedSupplier.map((s) => (
-                <span key={`supplier-${s}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Supplier: <span className="font-semibold text-stone-800">{s}</span>
-                  <button onClick={() => setVisaSelectedSupplier(visaSelectedSupplier.filter((v) => v !== s))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {visaQuery.trim() && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Search: <span className="font-semibold text-stone-800">"{visaQuery.trim()}"</span>
-                  <button onClick={() => setVisaQuery("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              )}
-              <button onClick={clearAllVisaFilters} className="text-red-600 hover:text-red-700 font-semibold ml-auto">
-                Clear all
-              </button>
-            </div>
-          )}
+          <AppliedFilters
+            groups={[
+              multiFilterGroup("Year", "year", visaSelectedYear, setVisaSelectedYear),
+              multiFilterGroup("Month", "month", visaSelectedMonth, setVisaSelectedMonth, monthLabel),
+              multiFilterGroup("By", "employee", visaSelectedEmployee, setVisaSelectedEmployee),
+              multiFilterGroup("Supplier", "supplier", visaSelectedSupplier, setVisaSelectedSupplier),
+              { label: "Search", values: visaQuery.trim() ? [{ key: "search", text: `"${visaQuery.trim()}"`, onRemove: () => setVisaQuery("") }] : [] },
+            ]}
+            onClearAll={clearAllVisaFilters}
+          />
         </div>
 
         {/* Visa bookings list */}
@@ -10866,38 +10804,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           )}
 
-          {hasActiveCarFilter && (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
-              <span className="text-stone-400 font-medium">Applied:</span>
-              {carSelectedYear.map((y) => (
-                <span key={`year-${y}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Year: <span className="font-semibold text-stone-800">{y}</span>
-                  <button onClick={() => setCarSelectedYear(carSelectedYear.filter((v) => v !== y))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {carSelectedMonth.map((m) => (
-                <span key={`month-${m}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Month: <span className="font-semibold text-stone-800">{monthLabel(m)}</span>
-                  <button onClick={() => setCarSelectedMonth(carSelectedMonth.filter((v) => v !== m))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {carSelectedSupplier.map((s) => (
-                <span key={`supplier-${s}`} className="inline-flex items-center gap-1 text-stone-600">
-                  Supplier: <span className="font-semibold text-stone-800">{s}</span>
-                  <button onClick={() => setCarSelectedSupplier(carSelectedSupplier.filter((v) => v !== s))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              ))}
-              {carQuery.trim() && (
-                <span className="inline-flex items-center gap-1 text-stone-600">
-                  Search: <span className="font-semibold text-stone-800">"{carQuery.trim()}"</span>
-                  <button onClick={() => setCarQuery("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                </span>
-              )}
-              <button onClick={clearAllCarFilters} className="text-red-600 hover:text-red-700 font-semibold ml-auto">
-                Clear all
-              </button>
-            </div>
-          )}
+          <AppliedFilters
+            groups={[
+              multiFilterGroup("Year", "year", carSelectedYear, setCarSelectedYear),
+              multiFilterGroup("Month", "month", carSelectedMonth, setCarSelectedMonth, monthLabel),
+              multiFilterGroup("Supplier", "supplier", carSelectedSupplier, setCarSelectedSupplier),
+              { label: "Search", values: carQuery.trim() ? [{ key: "search", text: `"${carQuery.trim()}"`, onRemove: () => setCarQuery("") }] : [] },
+            ]}
+            onClearAll={clearAllCarFilters}
+          />
         </div>
 
         {/* Transfer bookings list */}
@@ -11234,38 +11149,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     </div>
                   )}
 
-                  {hasActiveFileFilter && (
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-stone-100 text-xs">
-                      <span className="text-stone-400 font-medium">Applied:</span>
-                      {fileSelectedYear.map((y) => (
-                        <span key={`year-${y}`} className="inline-flex items-center gap-1 text-stone-600">
-                          Year: <span className="font-semibold text-stone-800">{y}</span>
-                          <button onClick={() => setFileSelectedYear(fileSelectedYear.filter((v) => v !== y))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                        </span>
-                      ))}
-                      {fileSelectedCompany.map((c) => (
-                        <span key={`company-${c}`} className="inline-flex items-center gap-1 text-stone-600">
-                          Company: <span className="font-semibold text-stone-800">{c}</span>
-                          <button onClick={() => setFileSelectedCompany(fileSelectedCompany.filter((v) => v !== c))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                        </span>
-                      ))}
-                      {fileSelectedEmployee.map((e) => (
-                        <span key={`employee-${e}`} className="inline-flex items-center gap-1 text-stone-600">
-                          By: <span className="font-semibold text-stone-800">{e}</span>
-                          <button onClick={() => setFileSelectedEmployee(fileSelectedEmployee.filter((v) => v !== e))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                        </span>
-                      ))}
-                      {fileQuery.trim() && (
-                        <span className="inline-flex items-center gap-1 text-stone-600">
-                          Search: <span className="font-semibold text-stone-800">"{fileQuery.trim()}"</span>
-                          <button onClick={() => setFileQuery("")} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
-                        </span>
-                      )}
-                      <button onClick={clearAllFileFilters} className="text-red-600 hover:text-red-700 font-semibold ml-auto">
-                        Clear all
-                      </button>
-                    </div>
-                  )}
+                  <AppliedFilters
+                    groups={[
+                      multiFilterGroup("Year", "year", fileSelectedYear, setFileSelectedYear),
+                      multiFilterGroup("Company", "company", fileSelectedCompany, setFileSelectedCompany),
+                      multiFilterGroup("By", "employee", fileSelectedEmployee, setFileSelectedEmployee),
+                      { label: "Search", values: fileQuery.trim() ? [{ key: "search", text: `"${fileQuery.trim()}"`, onRemove: () => setFileQuery("") }] : [] },
+                    ]}
+                    onClearAll={clearAllFileFilters}
+                  />
                 </div>
 
                 <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100 overflow-hidden mb-6">
