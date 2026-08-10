@@ -6224,7 +6224,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const nameText = t.isReissued ? "text-sky-950" : "text-stone-800";
       rows.push({
         sortDate: t.date || "",
-        node: (
+        render: (rn) => (
         <tr
           key={`${t.id}-${i}`}
           data-row-key={ticketKey}
@@ -6237,6 +6237,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-teal-50/60"}`
           }`}
         >
+          <td className={`px-1 py-0 ${cellText} text-stone-400 whitespace-nowrap`}>{rn}</td>
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`} title={t.employee || ""}>{employeeInitials(t.employee)}</td>
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`}>{t.date ? formatDisplayDate(t.date) : "-"}</td>
           <td className={`px-1 py-0 font-medium ${nameText} whitespace-nowrap`}>
@@ -6316,7 +6317,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         : "text-red-800 bg-red-200 border border-red-400 hover:bg-red-300";
       rows.push({
         sortDate: refund.date || t.date || "",
-        node: (
+        render: (rn) => (
         <tr
           key={`${t.id}-refund-${ri}`}
           data-row-key={refundKey}
@@ -6327,6 +6328,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               : "border-red-300 bg-red-100/70 hover:bg-red-200/70"
           }`}
         >
+          <td className={`px-1 py-0 ${rowText} whitespace-nowrap`}>{rn}</td>
           <td className={`px-1 py-0 ${rowText} whitespace-nowrap`} title={t.employee || ""}>{employeeInitials(t.employee)}</td>
           <td className={`px-1 py-0 ${rowText} whitespace-nowrap`}>{refund.date ? formatDisplayDate(refund.date) : "-"}</td>
           <td className={`px-1 py-0 font-medium ${rowTextBold} whitespace-nowrap`}>{(refundedCustomer && refundedCustomer.name) || "-"}</td>
@@ -8313,6 +8315,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-xs border-collapse">
                 <thead>
                   <tr className="bg-teal-50/60 text-teal-800 text-[11px] uppercase tracking-wide border-b-2 border-teal-200">
+                    <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">RN</th>
                     <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">By</th>
                     <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Date</th>
                     <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Customer</th>
@@ -8339,7 +8342,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       if (!b.sortDate) return -1;
                       return b.sortDate.localeCompare(a.sortDate);
                     })
-                    .map((row) => row.node)}
+                    .map((row, idx) => row.render(idx + 1))}
                 </tbody>
               </table>
             </div>
@@ -9078,6 +9081,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <table className="w-full min-w-max text-xs border-collapse">
             <thead>
               <tr className="bg-stone-50 border-b border-stone-200 text-stone-500">
+                <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">RN</th>
                 <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Company</th>
                 <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Hotel</th>
                 <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Supplier</th>
@@ -9093,17 +9097,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <tbody>
               {filteredHotelBookings.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="text-center text-stone-400 px-2.5 py-6">
+                  <td colSpan={11} className="text-center text-stone-400 px-2.5 py-6">
                     {visibleHotelBookings.length === 0 ? "No hotel bookings yet." : "No hotel bookings match the current search/filters."}
                   </td>
                 </tr>
               )}
-              {filteredHotelBookings.map((h) => (
+              {filteredHotelBookings.map((h, hIdx) => (
                 <tr
                   key={h.id}
                   className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer"
                   onClick={() => { setViewingFileContext(null); setViewingHotelBooking(h); }}
                 >
+                  <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{hIdx + 1}</td>
                   <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">
                     {h.customer && h.customer.trim() ? (
                       h.customer
@@ -9663,6 +9668,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
+                    <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">RN</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">By</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap"># Customers</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Names</th>
@@ -9675,7 +9681,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {filteredVisaBookings.map((v) => {
+                  {filteredVisaBookings.map((v, vIdx) => {
                     const net = visaNetTotal(v);
                     const sold = visaSoldTotal(v);
                     const profit = sold - net;
@@ -9685,6 +9691,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         className="hover:bg-stone-50 cursor-pointer"
                         onClick={() => { setViewingFileContext(null); setViewingVisaBooking(v); }}
                       >
+                        <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{vIdx + 1}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap" title={v.employee || ""}>{employeeInitials(v.employee)}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">{(v.customers || []).length}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">
@@ -10320,6 +10327,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-sm">
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
+                    <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">RN</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Entry date</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Customer</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Phone</th>
@@ -10339,7 +10347,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {filteredCarBookings.map((c) => {
+                  {filteredCarBookings.map((c, cIdx) => {
                     const net = parseFloat(c.netPrice) || 0;
                     const sold = parseFloat(c.soldPrice) || 0;
                     const profit = sold - net;
@@ -10349,6 +10357,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         className="leading-tight hover:bg-stone-50 cursor-pointer"
                         onClick={() => { setViewingFileContext(null); setViewingCarBooking(c); }}
                       >
+                        <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{cIdx + 1}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">
                           {c.entryDate ? formatDisplayDate(c.entryDate) : "-"}
                         </td>
