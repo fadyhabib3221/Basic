@@ -6224,6 +6224,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const nameText = t.isReissued ? "text-sky-950" : "text-stone-800";
       rows.push({
         sortDate: t.date || "",
+        ticketNumber: c.ticketNumber || "",
         type: "ticket",
         rid: `${t.id}-${i}`,
         bookingId: t.id,
@@ -6321,6 +6322,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         : "text-red-800 bg-red-200 border border-red-400 hover:bg-red-300";
       rows.push({
         sortDate: refund.date || t.date || "",
+        ticketNumber: refundTicketNumber || "",
         type: "refund",
         rid: `${t.id}-refund-${ri}`,
         bookingId: t.id,
@@ -8352,7 +8354,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       // entry order (first customer = first ticket), regardless of
                       // which direction the surrounding dates are being sorted in.
                       if (a.bookingId === b.bookingId) return a.orderIndex - b.orderIndex;
-                      return 0;
+                      // Different bookings on the same date: order by ticket number.
+                      return (a.ticketNumber || "").localeCompare(b.ticketNumber || "", undefined, { numeric: true, sensitivity: "base" });
                     });
                     const rnByRid = {};
                     let ticketCount = 0;
@@ -8379,7 +8382,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         // Same date: keep customer entry order within a booking (first
                         // customer's ticket shown first) even though dates otherwise sort newest-first.
                         if (a.bookingId === b.bookingId) return a.orderIndex - b.orderIndex;
-                        return 0;
+                        // Different bookings on the same date: order by ticket number.
+                        return (a.ticketNumber || "").localeCompare(b.ticketNumber || "", undefined, { numeric: true, sensitivity: "base" });
                       })
                       .map((row) => row.render(rnByRid[row.rid]));
                   })()}
