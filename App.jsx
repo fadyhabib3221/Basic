@@ -5723,6 +5723,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
       const ticketEntries = customers.map((c, i) => ({
         sortDate: t.date || "",
+        isRefund: false,
         row: {
           "Employee": t.employee || "",
           "Date": t.date ? formatDisplayDate(t.date) : "",
@@ -5752,6 +5753,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         const customerAmt = parseFloat(refund.customerAmount) || 0;
         return {
           sortDate: refund.date || t.date || "",
+          isRefund: true,
           row: {
             "Employee": t.employee || "",
             "Date": refund.date ? formatDisplayDate(refund.date) : "",
@@ -5783,7 +5785,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       if (!b.sortDate) return -1;
       return a.sortDate.localeCompare(b.sortDate);
     });
-    return ordered.map((e) => e.row);
+    // RN, same as the on-screen table: tickets and refunds are numbered in their
+    // own separate sequence (oldest = 1), in this same oldest-first row order.
+    let ticketCount = 0;
+    let refundCount = 0;
+    return ordered.map((e) => {
+      let rn;
+      if (e.isRefund) {
+        refundCount += 1;
+        rn = `R${refundCount}`;
+      } else {
+        ticketCount += 1;
+        rn = ticketCount;
+      }
+      return { "RN": rn, ...e.row };
+    });
   };
 
   // Sums the Net price / Sold price / Profit columns straight off the generated
@@ -5808,7 +5824,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return [
       ...sheetRows,
       {
-        "Employee": "", "Date": "TOTAL", "Customer": "", "Ticket #": "", "Airline": "", "Route": "",
+        "RN": "", "Employee": "", "Date": "TOTAL", "Customer": "", "Ticket #": "", "Airline": "", "Route": "",
         "Sold price": Math.round(sums.sold * 100) / 100,
         "Net price": Math.round(sums.net * 100) / 100,
         "Profit": Math.round(sums.profit * 100) / 100,
