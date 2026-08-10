@@ -6579,6 +6579,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </p>
               </div>
             </div>
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               {hasAdminAccess && (
                 <button onClick={handleBackup} title="Backup"
@@ -6629,18 +6630,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <ClipboardList size={15} />
                 </button>
               )}
-              {canManageCompanies && (
-                <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage companies"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
-                  <Factory size={15} /> <span className="hidden sm:inline">Corporates</span>
-                </button>
-              )}
-              {canManageCompanies && (
-                <button onClick={() => setShowManageSuppliers(!showManageSuppliers)} title="Manage suppliers"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
-                  <Truck size={15} /> <span className="hidden sm:inline">Suppliers</span>
-                </button>
-              )}
               <button
                 onClick={() => {
                   setShowRequestsPanel(!showRequestsPanel);
@@ -6689,6 +6678,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <Wifi size={15} />
                 </button>
               )}
+            </div>
+            {canManageCompanies && (
+              <div className="flex flex-col items-stretch gap-1.5 sm:gap-2">
+                <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage companies"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
+                  <Factory size={15} /> <span className="hidden sm:inline">Corporates</span>
+                </button>
+                <button onClick={() => setShowManageSuppliers(!showManageSuppliers)} title="Manage suppliers"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
+                  <Truck size={15} /> <span className="hidden sm:inline">Suppliers</span>
+                </button>
+              </div>
+            )}
             </div>
           </header>
         </div>
