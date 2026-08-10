@@ -1454,6 +1454,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // employees never see this — it's gated to currentUser.isAdmin wherever it's shown.
   const [loginHistory, setLoginHistory] = useState([]);
   const [showLoginHistory, setShowLoginHistory] = useState(false);
+  const [loginHistoryQuery, setLoginHistoryQuery] = useState("");
 
   // ---------- Activity log ----------
   // Every meaningful create/edit/delete across the whole app (tickets, hotels, visas,
@@ -1463,6 +1464,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [activityLog, setActivityLog] = useState([]);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [activityLogFilter, setActivityLogFilter] = useState("all");
+  const [activityLogQuery, setActivityLogQuery] = useState("");
 
   // ---------- License / activation ----------
   // Stored centrally (shared storage) so activation applies to every employee,
@@ -2506,16 +2508,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
   };
 
-  // Appends one login event (any account, including the main account) to the shared
-  // login-history log. Best-effort and silent on failure — a logging hiccup should
-  // never block someone from actually signing in. Capped at the most recent 500
+  // Appends one login or logout event (any account, including the main account) to the
+  // shared login-history log. Best-effort and silent on failure — a logging hiccup should
+  // never block someone from actually signing in/out. Capped at the most recent 500
   // entries so the stored record doesn't grow without bound.
   const LOGIN_HISTORY_LIMIT = 500;
-  const recordLogin = async (user) => {
+  const recordLogin = async (user, type = "login") => {
     const entry = {
       username: user.username,
       name: user.name,
       isAdmin: !!user.isAdmin,
+      type, // "login" | "logout"
       at: Date.now(),
     };
     try {
@@ -2526,7 +2529,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       setLoginHistory(next);
     } catch (e) {
       // Login history is a convenience/audit feature — failures here must never
-      // block or roll back an otherwise-successful login.
+      // block or roll back an otherwise-successful login/logout.
     }
   };
 
@@ -3529,6 +3532,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleLogout = async () => {
+    if (currentUser) recordLogin({ username: currentUser.username, name: currentUser.name, isAdmin: currentUser.isAdmin }, "logout");
     await window.storage.delete("session:user", false).catch(() => {});
     setCurrentUser(null);
     setShowManage(false);
@@ -6732,67 +6736,110 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         )}
 
-        {showLoginHistory && currentUser.isAdmin && (
-          <div
-            className="fixed inset-0 z-50 bg-black/40 flex items-start md:items-center justify-center p-4 overflow-y-auto"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setShowLoginHistory(false);
-            }}
-          >
-            <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 w-full max-w-lg my-8 md:my-0 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-1">
-                <h2 className="font-semibold text-stone-900 flex items-center gap-2">
-                  <History size={16} className="text-teal-800" /> Login history
-                </h2>
-                <button
-                  onClick={() => setShowLoginHistory(false)}
-                  className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <p className="text-xs text-stone-400 mb-4 mt-3">
-                Visible to the main account only. Shows the most recent {LOGIN_HISTORY_LIMIT} sign-ins across every account, newest first.
-              </p>
-              {loginHistory.length === 0 ? (
-                <p className="text-sm text-stone-400 text-center py-6">No sign-ins recorded yet.</p>
-              ) : (
-                <div className="divide-y divide-stone-100 -mx-1">
-                  {[...loginHistory].reverse().map((entry, idx) => (
-                    <div key={`${entry.username}-${entry.at}-${idx}`} className="flex items-center justify-between gap-3 px-1 py-2.5">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-stone-800 truncate flex items-center gap-1.5">
-                          {entry.name || entry.username}
-                          {entry.isAdmin && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-900 bg-amber-300 border border-amber-400/50 rounded-full px-1.5 py-0.5 shrink-0">
-                              <ShieldCheck size={10} /> Main
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-xs text-stone-400 truncate">@{entry.username}</p>
-                      </div>
-                      <p className="text-xs text-stone-500 whitespace-nowrap shrink-0">
-                        {entry.at ? new Date(entry.at).toLocaleString() : "—"}
-                      </p>
-                    </div>
-                  ))}
+        {showLoginHistory && currentUser.isAdmin && (() => {
+          const q = loginHistoryQuery.trim().toLowerCase();
+          const filteredHistory = loginHistory.filter((entry) => {
+            if (!q) return true;
+            const haystack = `${entry.name || ""} ${entry.username || ""}`.toLowerCase();
+            return haystack.includes(q);
+          });
+          return (
+            <div
+              className="fixed inset-0 z-50 bg-black/40 flex items-start md:items-center justify-center p-4 overflow-y-auto"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setShowLoginHistory(false);
+              }}
+            >
+              <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 w-full max-w-lg my-8 md:my-0 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="font-semibold text-stone-900 flex items-center gap-2">
+                    <History size={16} className="text-teal-800" /> Login History
+                  </h2>
+                  <button
+                    onClick={() => setShowLoginHistory(false)}
+                    className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
+                  >
+                    <X size={18} />
+                  </button>
                 </div>
-              )}
+                <p className="text-xs text-stone-400 mb-3 mt-3">
+                  Every login and logout across every account. Visible to the main account only.
+                </p>
+                <div className="relative mb-4">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input
+                    type="text"
+                    value={loginHistoryQuery}
+                    onChange={(e) => setLoginHistoryQuery(e.target.value)}
+                    placeholder="Search by name..."
+                    className="w-full border border-stone-200 rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  />
+                </div>
+                {filteredHistory.length === 0 ? (
+                  <p className="text-sm text-stone-400 text-center py-6">No sign-ins recorded yet.</p>
+                ) : (
+                  <div className="flex flex-col gap-2.5">
+                    {[...filteredHistory].sort((a, b) => (b.at || 0) - (a.at || 0)).map((entry, idx) => (
+                      <div
+                        key={`${entry.username}-${entry.at}-${idx}`}
+                        className="flex items-start justify-between gap-3 border border-stone-200 rounded-xl px-3.5 py-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-stone-900 flex items-center gap-1.5 flex-wrap">
+                            {entry.type === "logout" ? "Logged out" : "Logged in"}
+                            <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-1.5 py-0.5 shrink-0">
+                              Login/Logout
+                            </span>
+                            {entry.isAdmin && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-900 bg-amber-300 border border-amber-400/50 rounded-full px-1.5 py-0.5 shrink-0">
+                                <ShieldCheck size={10} /> Main
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-semibold text-stone-900 whitespace-nowrap">{entry.name || entry.username || "Unknown"}</p>
+                          <p className="text-xs text-stone-400 whitespace-nowrap mt-0.5">{entry.at ? formatDateTime(entry.at) : "—"}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {showActivityLog && currentUser.isAdmin && (() => {
-          const ACTIVITY_MODULES = ["all", "Flights", "Hotels", "Visas", "Transportation", "Files", "Expenses", "Treasury", "Payments", "Employees", "Companies", "Requests", "License", "Backup"];
-          const ACTION_STYLES = {
-            created: "text-emerald-700 bg-emerald-50 border-emerald-200",
-            edited: "text-amber-700 bg-amber-50 border-amber-200",
-            deleted: "text-rose-700 bg-rose-50 border-rose-200",
-          };
-          const actionStyle = (action) => ACTION_STYLES[action] || "text-teal-800 bg-teal-50 border-teal-200";
-          const filteredActivity = activityLogFilter === "all"
-            ? activityLog
-            : activityLog.filter((entry) => entry.module === activityLogFilter);
+          const ACTIVITY_MODULES = ["all", "Tickets", "Hotels", "Visa", "Employees", "Login/Logout"];
+          // Collapses the many granular module tags used when recording activity
+          // (Flights, Visas, Transportation, Files, Expenses, Treasury, Payments,
+          // Companies, Requests, License, Backup, ...) down to the simpler set of
+          // filter chips shown here. Anything not explicitly mapped keeps its own
+          // tag text and still shows up under "All".
+          const MODULE_BUCKET = { Flights: "Tickets", Visas: "Visa", Hotels: "Hotels", Employees: "Employees" };
+          const moduleBucket = (m) => MODULE_BUCKET[m] || m;
+          // Combines the activity log with the login/logout history into a single
+          // feed, tagged as "Login/Logout" with a plain "Logged in"/"Logged out"
+          // heading in place of a description.
+          const combined = [
+            ...activityLog.map((entry) => ({ ...entry, isLoginEvent: false })),
+            ...loginHistory.map((entry) => ({
+              ...entry,
+              module: "Login/Logout",
+              action: entry.type === "logout" ? "Logged out" : "Logged in",
+              description: entry.type === "logout" ? "Logged out" : "Logged in",
+              isLoginEvent: true,
+            })),
+          ];
+          const q = activityLogQuery.trim().toLowerCase();
+          const filteredActivity = combined.filter((entry) => {
+            const matchesFilter = activityLogFilter === "all" || moduleBucket(entry.module) === activityLogFilter;
+            if (!matchesFilter) return false;
+            if (!q) return true;
+            const haystack = `${entry.name || entry.username || ""} ${entry.description || ""}`.toLowerCase();
+            return haystack.includes(q);
+          });
           return (
             <div
               className="fixed inset-0 z-50 bg-black/40 flex items-start md:items-center justify-center p-4 overflow-y-auto"
@@ -6803,7 +6850,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 w-full max-w-2xl my-8 md:my-0 max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between mb-1">
                   <h2 className="font-semibold text-stone-900 flex items-center gap-2">
-                    <ClipboardList size={16} className="text-teal-800" /> Activity log
+                    <ClipboardList size={16} className="text-teal-800" /> Activity Log
                   </h2>
                   <button
                     onClick={() => setShowActivityLog(false)}
@@ -6813,8 +6860,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </button>
                 </div>
                 <p className="text-xs text-stone-400 mb-3 mt-3">
-                  Visible to the main account only. Shows the most recent {ACTIVITY_LOG_LIMIT} actions across every account and every section, newest first.
+                  A log of every addition, edit, and deletion across tickets, hotel and visa bookings, and employee accounts, plus every login and logout. Visible to the main account only.
                 </p>
+                <div className="relative mb-3">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input
+                    type="text"
+                    value={activityLogQuery}
+                    onChange={(e) => setActivityLogQuery(e.target.value)}
+                    placeholder="Search by name or description..."
+                    className="w-full border border-stone-200 rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  />
+                </div>
                 <div className="flex flex-wrap gap-1.5 mb-4">
                   {ACTIVITY_MODULES.map((m) => (
                     <button
@@ -6833,24 +6890,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 {filteredActivity.length === 0 ? (
                   <p className="text-sm text-stone-400 text-center py-6">No activity recorded yet.</p>
                 ) : (
-                  <div className="divide-y divide-stone-100 -mx-1">
-                    {[...filteredActivity].reverse().map((entry, idx) => (
-                      <div key={`${entry.username}-${entry.at}-${idx}`} className="flex items-start justify-between gap-3 px-1 py-2.5">
+                  <div className="flex flex-col gap-2.5">
+                    {[...filteredActivity].sort((a, b) => (b.at || 0) - (a.at || 0)).map((entry, idx) => (
+                      <div
+                        key={`${entry.username}-${entry.at}-${idx}`}
+                        className="flex items-start justify-between gap-3 border border-stone-200 rounded-xl px-3.5 py-3"
+                      >
                         <div className="min-w-0">
-                          <p className="text-sm text-stone-800 flex items-center gap-1.5 flex-wrap">
-                            <span className="font-medium">{entry.name || entry.username || "Unknown"}</span>
-                            <span className={`text-[10px] font-semibold rounded-full px-1.5 py-0.5 border shrink-0 ${actionStyle(entry.action)}`}>
-                              {entry.action}
-                            </span>
-                            <span className="text-[10px] font-semibold text-stone-500 bg-stone-100 border border-stone-200 rounded-full px-1.5 py-0.5 shrink-0">
-                              {entry.module}
+                          <p className="text-sm font-semibold text-stone-900 flex items-center gap-1.5 flex-wrap">
+                            {entry.isLoginEvent ? entry.action : entry.description}
+                            <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-1.5 py-0.5 shrink-0">
+                              {moduleBucket(entry.module)}
                             </span>
                           </p>
-                          <p className="text-xs text-stone-500 mt-0.5">{entry.description}</p>
                         </div>
-                        <p className="text-xs text-stone-500 whitespace-nowrap shrink-0">
-                          {entry.at ? new Date(entry.at).toLocaleString() : "—"}
-                        </p>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-semibold text-stone-900 whitespace-nowrap">{entry.name || entry.username || "Unknown"}</p>
+                          <p className="text-xs text-stone-400 whitespace-nowrap mt-0.5">{entry.at ? formatDateTime(entry.at) : "—"}</p>
+                        </div>
                       </div>
                     ))}
                   </div>
