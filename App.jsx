@@ -1536,12 +1536,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const requestConfirm = (message, onConfirm) => setConfirmDialog({ message, onConfirm });
   // Brief toast confirming an edit/save just actually happened (as opposed to confirmDialog,
   // which asks BEFORE a destructive action like delete). Shows for a couple seconds then clears.
-  const [actionToast, setActionToast] = useState("");
+  // Pass an `onUndo` to add an Undo button to the toast (used after deletes) — the toast
+  // then stays up longer (6s) to give the user a real chance to catch it. Clicking Undo,
+  // or the toast timing out, both clear it the same way.
+  const [actionToast, setActionToast] = useState(null); // { message, onUndo? } | null
   const actionToastTimerRef = useRef(null);
-  const showActionToast = (message) => {
-    setActionToast(message);
+  const showActionToast = (message, onUndo) => {
+    setActionToast({ message, onUndo: onUndo || null });
     if (actionToastTimerRef.current) clearTimeout(actionToastTimerRef.current);
-    actionToastTimerRef.current = setTimeout(() => setActionToast(""), 2500);
+    actionToastTimerRef.current = setTimeout(() => setActionToast(null), onUndo ? 6000 : 2500);
   };
 
   // In-app print preview: { title, html } while open, null while closed. Printing renders
@@ -1686,6 +1689,22 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // instantly updates every file it's linked into. Nothing here feeds back the other
   // way: adding/removing a link from a file never touches the original record.
   const [files, setFiles] = useState([]);
+  // Undo (see showActionToast) fires from a callback created at delete-time but clicked
+  // seconds later, by which point other edits may have landed — so it can't safely close
+  // over the tickets/hotelBookings/visaBookings/carBookings/files state values directly
+  // (those would be frozen at the moment Delete was pressed). These refs are kept in
+  // sync with the live state below and read via .current at undo-time instead, so an
+  // undo always restores against whatever the list looks like right now.
+  const ticketsRef = useRef([]);
+  const hotelBookingsRef = useRef([]);
+  const visaBookingsRef = useRef([]);
+  const carBookingsRef = useRef([]);
+  const filesRef = useRef([]);
+  useEffect(() => { ticketsRef.current = tickets; }, [tickets]);
+  useEffect(() => { hotelBookingsRef.current = hotelBookings; }, [hotelBookings]);
+  useEffect(() => { visaBookingsRef.current = visaBookings; }, [visaBookings]);
+  useEffect(() => { carBookingsRef.current = carBookings; }, [carBookings]);
+  useEffect(() => { filesRef.current = files; }, [files]);
   // When a service's detail modal (hotel/visa/car/ticket) is opened from INSIDE a file
   // (via viewFileItemDetails) rather than from that service's own section, this holds
   // { fileId, itemId } (or { draft: true, itemId } for the unsaved draft-file view) so the
@@ -2525,6 +2544,29 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     await persistFiles(next);
   };
 
+  // Returns [{fileId, item}] for every file-item link currently pointing at
+  // (sourceType, sourceId) — captured right before removeItemFromAllFiles strips them,
+  // so an Undo can put the exact same links back afterward.
+  const findFileLinksFor = (sourceType, sourceId) =>
+    filesRef.current.flatMap((f) =>
+      (f.items || [])
+        .filter((i) => i.sourceType === sourceType && i.sourceId === sourceId)
+        .map((item) => ({ fileId: f.id, item }))
+    );
+
+  // Undo counterpart to removeItemFromAllFiles: puts previously-captured file-item links
+  // (from findFileLinksFor) back into their original files. Reads the CURRENT files list
+  // (filesRef) rather than closing over a stale one, since Undo can fire well after other
+  // edits have happened.
+  const restoreFileItemLinks = async (entries) => {
+    if (!entries || !entries.length) return;
+    const next = filesRef.current.map((f) => {
+      const toAdd = entries.filter((e) => e.fileId === f.id).map((e) => e.item);
+      return toAdd.length ? { ...f, items: [...(f.items || []), ...toAdd] } : f;
+    });
+    await persistFiles(next);
+  };
+
   const persistEmployees = async (next) => {
     setEmployees(next);
     try {
@@ -2941,11 +2983,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleDeleteHotel = (id, onDeleted) => {
-    requestConfirm("Delete this hotel booking? This cannot be undone.", async () => {
+    requestConfirm("Delete this hotel booking?", async () => {
       const deleted = hotelBookings.find((h) => h.id === id);
+      const linkedFileEntries = findFileLinksFor("hotels", id);
       await persistHotelBookings(hotelBookings.filter((h) => h.id !== id));
       await removeItemFromAllFiles("hotels", id);
-      if (deleted) recordActivity("Hotels", "deleted", `Deleted hotel booking: ${deleted.hotel || "hotel"} for ${deleted.customer || "customer"}`);
+      if (deleted) {
+        recordActivity("Hotels", "deleted", `Deleted hotel booking: ${deleted.hotel || "hotel"} for ${deleted.customer || "customer"}`);
+        showActionToast("Hotel booking deleted", async () => {
+          await persistHotelBookings([deleted, ...hotelBookingsRef.current]);
+          await restoreFileItemLinks(linkedFileEntries);
+          recordActivity("Hotels", "restored", `Restored hotel booking: ${deleted.hotel || "hotel"} for ${deleted.customer || "customer"}`);
+        });
+      }
       if (hotelEditingId === id) resetHotelForm();
       setConfirmDialog(null);
       if (onDeleted) onDeleted();
@@ -3089,11 +3139,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleDeleteVisa = (id, onDeleted) => {
-    requestConfirm("Delete this visa booking? This cannot be undone.", async () => {
+    requestConfirm("Delete this visa booking?", async () => {
       const deleted = visaBookings.find((v) => v.id === id);
+      const linkedFileEntries = findFileLinksFor("visa", id);
       await persistVisaBookings(visaBookings.filter((v) => v.id !== id));
       await removeItemFromAllFiles("visa", id);
-      if (deleted) recordActivity("Visas", "deleted", `Deleted visa booking: ${deleted.visaType || "visa"} for ${(deleted.customers && deleted.customers[0] && deleted.customers[0].name) || "customer"}`);
+      if (deleted) {
+        const custName = (deleted.customers && deleted.customers[0] && deleted.customers[0].name) || "customer";
+        recordActivity("Visas", "deleted", `Deleted visa booking: ${deleted.visaType || "visa"} for ${custName}`);
+        showActionToast("Visa booking deleted", async () => {
+          await persistVisaBookings([deleted, ...visaBookingsRef.current]);
+          await restoreFileItemLinks(linkedFileEntries);
+          recordActivity("Visas", "restored", `Restored visa booking: ${deleted.visaType || "visa"} for ${custName}`);
+        });
+      }
       if (visaEditingId === id) resetVisaForm();
       setConfirmDialog(null);
       if (onDeleted) onDeleted();
@@ -3204,11 +3263,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleDeleteCar = (id, onDeleted) => {
-    requestConfirm("Delete this transfer booking? This cannot be undone.", async () => {
+    requestConfirm("Delete this transfer booking?", async () => {
       const deleted = carBookings.find((c) => c.id === id);
+      const linkedFileEntries = findFileLinksFor("cars", id);
       await persistCarBookings(carBookings.filter((c) => c.id !== id));
       await removeItemFromAllFiles("cars", id);
-      if (deleted) recordActivity("Transportation", "deleted", `Deleted car booking: ${deleted.customerName || "customer"} (${deleted.routeFrom || "?"} → ${deleted.routeTo || "?"})`);
+      if (deleted) {
+        recordActivity("Transportation", "deleted", `Deleted car booking: ${deleted.customerName || "customer"} (${deleted.routeFrom || "?"} → ${deleted.routeTo || "?"})`);
+        showActionToast("Transfer booking deleted", async () => {
+          await persistCarBookings([deleted, ...carBookingsRef.current]);
+          await restoreFileItemLinks(linkedFileEntries);
+          recordActivity("Transportation", "restored", `Restored car booking: ${deleted.customerName || "customer"} (${deleted.routeFrom || "?"} → ${deleted.routeTo || "?"})`);
+        });
+      }
       if (carEditingId === id) resetCarForm();
       setConfirmDialog(null);
       if (onDeleted) onDeleted();
@@ -4133,14 +4200,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       setError("You don't have permission to delete tickets");
       return;
     }
-    requestConfirm("Delete this ticket? This cannot be undone.", () => {
+    requestConfirm("Delete this ticket?", () => {
       if (form.id === id) { setForm(getEmptyForm()); setSupplierOther(false); }
       const deleted = tickets.find((t) => t.id === id);
+      const linkedFileEntries = findFileLinksFor("flights", id);
       persistTickets(tickets.filter((t) => t.id !== id));
       removeItemFromAllFiles("flights", id);
       if (deleted) {
         const ticketDesc = `${(deleted.customers || []).map((c) => c.name).filter(Boolean).join(", ") || "ticket"} (${deleted.from || "?"} → ${deleted.to || "?"})`;
         recordActivity("Flights", "deleted", `Deleted ticket for ${ticketDesc}`);
+        showActionToast("Ticket deleted", async () => {
+          await persistTickets([deleted, ...ticketsRef.current]);
+          await restoreFileItemLinks(linkedFileEntries);
+          recordActivity("Flights", "restored", `Restored ticket for ${ticketDesc}`);
+        });
       }
       if (afterConfirm) afterConfirm();
     });
@@ -12333,8 +12406,22 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
       {actionToast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-          <div className="bg-emerald-700 text-white text-sm font-medium rounded-xl px-4 py-2.5 shadow-lg shadow-emerald-900/20 flex items-center gap-2">
-            <Check size={16} /> {actionToast}
+          <div className="bg-emerald-700 text-white text-sm font-medium rounded-xl px-4 py-2.5 shadow-lg shadow-emerald-900/20 flex items-center gap-3">
+            <span className="flex items-center gap-2"><Check size={16} /> {actionToast.message}</span>
+            {actionToast.onUndo && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (actionToastTimerRef.current) clearTimeout(actionToastTimerRef.current);
+                  const undo = actionToast.onUndo;
+                  setActionToast(null);
+                  undo();
+                }}
+                className="font-semibold underline underline-offset-2 hover:text-emerald-100"
+              >
+                Undo
+              </button>
+            )}
           </div>
         </div>
       )}
