@@ -1537,14 +1537,32 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Brief toast confirming an edit/save just actually happened (as opposed to confirmDialog,
   // which asks BEFORE a destructive action like delete). Shows for a couple seconds then clears.
   // Pass an `onUndo` to add an Undo button to the toast (used after deletes) — the toast
-  // then stays up longer (6s) to give the user a real chance to catch it. Clicking Undo,
-  // or the toast timing out, both clear it the same way.
+  // then stays up longer (60s, with a live countdown shown next to the button) to give
+  // the user a real chance to catch it. Clicking Undo, or the toast timing out, both
+  // clear it the same way.
   const [actionToast, setActionToast] = useState(null); // { message, onUndo? } | null
+  // Counts down the seconds left to hit Undo; shown next to the Undo button. Only
+  // relevant while actionToast.onUndo is set — null the rest of the time.
+  const [undoSecondsLeft, setUndoSecondsLeft] = useState(null);
   const actionToastTimerRef = useRef(null);
+  const actionToastIntervalRef = useRef(null);
+  const UNDO_DURATION_MS = 60000;
   const showActionToast = (message, onUndo) => {
     setActionToast({ message, onUndo: onUndo || null });
     if (actionToastTimerRef.current) clearTimeout(actionToastTimerRef.current);
-    actionToastTimerRef.current = setTimeout(() => setActionToast(null), onUndo ? 6000 : 2500);
+    if (actionToastIntervalRef.current) clearInterval(actionToastIntervalRef.current);
+    if (onUndo) {
+      setUndoSecondsLeft(UNDO_DURATION_MS / 1000);
+      actionToastIntervalRef.current = setInterval(() => {
+        setUndoSecondsLeft((s) => (s === null ? s : Math.max(0, s - 1)));
+      }, 1000);
+    } else {
+      setUndoSecondsLeft(null);
+    }
+    actionToastTimerRef.current = setTimeout(() => {
+      setActionToast(null);
+      if (actionToastIntervalRef.current) clearInterval(actionToastIntervalRef.current);
+    }, onUndo ? UNDO_DURATION_MS : 2500);
   };
 
   // In-app print preview: { title, html } while open, null while closed. Printing renders
@@ -12409,18 +12427,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="bg-emerald-700 text-white text-sm font-medium rounded-xl px-4 py-2.5 shadow-lg shadow-emerald-900/20 flex items-center gap-3">
             <span className="flex items-center gap-2"><Check size={16} /> {actionToast.message}</span>
             {actionToast.onUndo && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (actionToastTimerRef.current) clearTimeout(actionToastTimerRef.current);
-                  const undo = actionToast.onUndo;
-                  setActionToast(null);
-                  undo();
-                }}
-                className="font-semibold underline underline-offset-2 hover:text-emerald-100"
-              >
-                Undo
-              </button>
+              <>
+                {undoSecondsLeft !== null && (
+                  <span className="text-emerald-100 text-xs tabular-nums shrink-0">
+                    {undoSecondsLeft}s
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (actionToastTimerRef.current) clearTimeout(actionToastTimerRef.current);
+                    if (actionToastIntervalRef.current) clearInterval(actionToastIntervalRef.current);
+                    const undo = actionToast.onUndo;
+                    setActionToast(null);
+                    undo();
+                  }}
+                  className="font-semibold underline underline-offset-2 hover:text-emerald-100"
+                >
+                  Undo
+                </button>
+              </>
             )}
           </div>
         </div>
