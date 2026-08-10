@@ -6563,19 +6563,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <Compass size={90} className="pointer-events-none absolute -top-6 left-[38%] text-white/[0.05]" />
           <Luggage size={70} className="pointer-events-none absolute -bottom-4 left-[18%] text-white/[0.05] hidden md:block" />
           {(canManageCompanies || (activeSection === "accounts" && canAccessAccounts)) && (
-            <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5 sm:gap-2">
-              {canManageCompanies && (
-                <>
-                  <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage companies"
-                    className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
-                    <Factory size={15} /> <span className="hidden sm:inline">Corporates</span>
-                  </button>
-                  <button onClick={() => setShowManageSuppliers(!showManageSuppliers)} title="Manage suppliers"
-                    className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
-                    <Truck size={15} /> <span className="hidden sm:inline">Suppliers</span>
-                  </button>
-                </>
-              )}
+            <div className="absolute top-2.5 right-2.5 z-10 flex flex-col items-end gap-1.5 sm:gap-2">
               {activeSection === "accounts" && canAccessAccounts && (
                 <button
                   type="button"
@@ -6586,6 +6574,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <Globe size={15} />
                   <span className="text-xs font-semibold">{accountsLang === "ar" ? "EN" : "AR"}</span>
                 </button>
+              )}
+              {canManageCompanies && (
+                <div className="flex flex-col items-end gap-1.5 sm:gap-2">
+                  <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage companies"
+                    className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
+                    <Factory size={15} /> <span className="hidden sm:inline">Corporates</span>
+                  </button>
+                  <button onClick={() => setShowManageSuppliers(!showManageSuppliers)} title="Manage suppliers"
+                    className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
+                    <Truck size={15} /> <span className="hidden sm:inline">Suppliers</span>
+                  </button>
+                </div>
               )}
             </div>
           )}
