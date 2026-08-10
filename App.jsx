@@ -7003,10 +7003,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <span className="text-xs font-semibold">{accountsLang === "ar" ? "EN" : "AR"}</span>
                   </button>
                 )}
-                <button onClick={handleLogout} title="Sign out"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
-                  <LogOut size={15} />
-                </button>
                 <button
                   onClick={() => {
                     setShowChangePassword(!showChangePassword);
@@ -7019,6 +7015,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   title="Change password"
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
                   <Lock size={15} />
+                </button>
+                <button onClick={handleLogout} title="Sign out"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  <LogOut size={15} />
                 </button>
               </div>
               {canManageCompanies && (
