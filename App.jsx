@@ -44,28 +44,170 @@ const MONTHS = [
 ];
 
 // ---------- Password hashing ----------
-// Employee passwords are stored as a SHA-256 hash (prefixed "sha256:") rather than
-// plain text, so anyone who ends up reading the raw stored employee data can't see
-// the actual password. Hashing happens client-side with the browser's built-in
-// Web Crypto API — no server involved.
-const HASH_PREFIX = "sha256:";
+// Employee passwords are stored as a SALTED PBKDF2-SHA256 hash (100,000 iterations),
+// not a bare unsalted hash — a random per-password salt means two employees who pick
+// the same password get different stored values, and the iteration count makes
+// offline brute-forcing / rainbow-table attacks against a leaked employee list
+// impractical. Everything runs client-side with the browser's built-in Web Crypto
+// API — no server involved. Stored format: "pbkdf2:<iterations>:<saltHex>:<hashHex>".
+const PBKDF2_PREFIX = "pbkdf2:";
+const PBKDF2_ITERATIONS = 100000;
+const LEGACY_SHA256_PREFIX = "sha256:"; // old unsalted format — verifyPassword still reads it so pre-existing accounts aren't locked out; needsRehash() flags it for silent upgrade
+
+const bufToHex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+const hexToBuf = (hex) => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return bytes;
+};
+const derivePbkdf2Hex = async (plain, saltBytes, iterations) => {
+  const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(plain), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: saltBytes, iterations, hash: "SHA-256" }, keyMaterial, 256);
+  return bufToHex(bits);
+};
 
 const hashPassword = async (plain) => {
-  const data = new TextEncoder().encode(plain);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  const hex = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  return HASH_PREFIX + hex;
+  const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+  const hashHex = await derivePbkdf2Hex(plain, saltBytes, PBKDF2_ITERATIONS);
+  return `${PBKDF2_PREFIX}${PBKDF2_ITERATIONS}:${bufToHex(saltBytes)}:${hashHex}`;
 };
 
 // Compares a plain-text password the user just typed against a stored value. Supports
-// both the new hashed format and legacy plain-text entries (e.g. from an older backup),
-// so nothing breaks for accounts created before this change.
+// the current salted PBKDF2 format plus two legacy formats (old unsalted SHA-256, and
+// plain-text from very old backups) so existing accounts keep working. Pair with
+// needsRehash() after a successful verify to silently upgrade older accounts.
 const verifyPassword = async (storedValue, plainAttempt) => {
   if (typeof storedValue !== "string") return false;
-  if (storedValue.startsWith(HASH_PREFIX)) {
-    return (await hashPassword(plainAttempt)) === storedValue;
+  if (storedValue.startsWith(PBKDF2_PREFIX)) {
+    const [, iterationsStr, saltHex, hashHex] = storedValue.split(":");
+    const iterations = parseInt(iterationsStr, 10);
+    if (!saltHex || !hashHex || !iterations) return false;
+    return (await derivePbkdf2Hex(plainAttempt, hexToBuf(saltHex), iterations)) === hashHex;
+  }
+  if (storedValue.startsWith(LEGACY_SHA256_PREFIX)) {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(plainAttempt));
+    return LEGACY_SHA256_PREFIX + bufToHex(digest) === storedValue;
   }
   return storedValue === plainAttempt; // legacy plain-text account
+};
+
+// True if a stored password value is in an older, weaker format (or missing) and
+// should be silently re-hashed with the current PBKDF2 scheme the next time we have
+// the plaintext in hand (i.e. right after a successful login or password change).
+const needsRehash = (storedValue) => typeof storedValue !== "string" || !storedValue.startsWith(PBKDF2_PREFIX);
+
+// ---------- Workspace encryption (data at rest) ----------
+// Customer records (tickets/hotels/visas/cars/files) and financial records (expenses,
+// payments, treasury) are encrypted client-side with AES-GCM before they're ever
+// written to shared storage. Everyone with the artifact open can technically still
+// call the storage API directly, but without a valid login they only get ciphertext.
+//
+// There's a single random 256-bit "workspace key" (WK) for the whole account. WK
+// itself is never stored anywhere in the clear — instead, every employee record
+// carries its own wrapped (encrypted) copy of WK, sealed with a key derived from
+// THAT employee's own password (keyWrap: { salt, iv, data }). Only someone who
+// actually knows a valid password can unwrap WK and decrypt anything. A wrapped key
+// sitting in storage is safe to expose the same way a salted password hash is: useless
+// without the matching plaintext password.
+//
+// Employees themselves (usernames, password hashes, wrapped keys) are deliberately
+// NOT encrypted this way, because the login screen has to be able to look up a
+// username and check a password before any key exists to decrypt anything with.
+const ENC_MARKER = "wenc1"; // envelope format version tag
+
+const b64FromBuf = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const bufFromB64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+
+const deriveAesKeyFromPassword = async (plain, saltBytes) => {
+  const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(plain), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: saltBytes, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["wrapKey", "unwrapKey"]
+  );
+};
+
+// Generates a brand-new random workspace key. Happens exactly once per workspace —
+// either at first-admin setup, or (for a workspace upgrading from before this feature
+// existed) the first time anyone logs in and no employee has a keyWrap yet.
+const generateWorkspaceKey = () => crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+
+// Wraps (encrypts) the workspace key for storage on one employee's record.
+const wrapWorkspaceKey = async (workspaceKey, plainPassword) => {
+  const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+  const ivBytes = crypto.getRandomValues(new Uint8Array(12));
+  const wrappingKey = await deriveAesKeyFromPassword(plainPassword, saltBytes);
+  const wrapped = await crypto.subtle.wrapKey("raw", workspaceKey, wrappingKey, { name: "AES-GCM", iv: ivBytes });
+  return { salt: b64FromBuf(saltBytes), iv: b64FromBuf(ivBytes), data: b64FromBuf(wrapped) };
+};
+
+// Unwraps an employee's stored keyWrap using the plaintext password just entered at
+// login. Returns null (never throws) if there's no keyWrap yet, or it doesn't unwrap.
+const unwrapWorkspaceKey = async (keyWrap, plainPassword) => {
+  if (!keyWrap || !keyWrap.salt || !keyWrap.iv || !keyWrap.data) return null;
+  try {
+    const wrappingKey = await deriveAesKeyFromPassword(plainPassword, bufFromB64(keyWrap.salt));
+    return await crypto.subtle.unwrapKey(
+      "raw", bufFromB64(keyWrap.data), wrappingKey, { name: "AES-GCM", iv: bufFromB64(keyWrap.iv) },
+      { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+    );
+  } catch (e) {
+    return null;
+  }
+};
+
+const encryptForStorage = async (workspaceKey, value) => {
+  const ivBytes = crypto.getRandomValues(new Uint8Array(12));
+  const plaintext = new TextEncoder().encode(JSON.stringify(value));
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: ivBytes }, workspaceKey, plaintext);
+  return { __enc: ENC_MARKER, iv: b64FromBuf(ivBytes), data: b64FromBuf(ciphertext) };
+};
+
+// Returns undefined (never throws) if the workspace key isn't available or decryption
+// fails, so callers can show a "locked" state instead of crashing.
+const decryptFromStorage = async (workspaceKey, envelope) => {
+  if (!workspaceKey || !envelope || envelope.__enc !== ENC_MARKER) return undefined;
+  try {
+    const plaintextBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bufFromB64(envelope.iv) }, workspaceKey, bufFromB64(envelope.data));
+    return JSON.parse(new TextDecoder().decode(plaintextBuf));
+  } catch (e) {
+    return undefined;
+  }
+};
+
+// Reads one shared storage key and transparently decrypts it if it's an encrypted
+// envelope. `fallback` is returned if the key is empty, or if it's encrypted but we
+// don't have the workspace key yet (locked). If the key still holds pre-encryption
+// plaintext (saved before this feature existed) and we DO have the workspace key,
+// it's re-saved encrypted right away — a one-time, silent migration.
+const secureLoad = async (storageKey, workspaceKey, fallback) => {
+  const res = await window.storage.get(storageKey, true).catch(() => null);
+  if (!res || res.value === undefined || res.value === null || res.value === "") return fallback;
+  let parsed;
+  try { parsed = JSON.parse(res.value); } catch (e) { return fallback; }
+  if (parsed && parsed.__enc === ENC_MARKER) {
+    if (!workspaceKey) return fallback; // locked — no key available yet
+    const decrypted = await decryptFromStorage(workspaceKey, parsed);
+    return decrypted === undefined ? fallback : decrypted;
+  }
+  if (workspaceKey) {
+    encryptForStorage(workspaceKey, parsed).then((envelope) => {
+      window.storage.set(storageKey, JSON.stringify(envelope), true).catch(() => {});
+    });
+  }
+  return parsed;
+};
+
+// Encrypts (if we have the workspace key) and writes a value to shared storage. Falls
+// back to plaintext only if no key exists yet, which should only happen pre-login.
+const secureSave = async (storageKey, workspaceKey, value) => {
+  if (workspaceKey) {
+    const envelope = await encryptForStorage(workspaceKey, value);
+    return window.storage.set(storageKey, JSON.stringify(envelope), true);
+  }
+  return window.storage.set(storageKey, JSON.stringify(value), true);
 };
 
 const monthKey = (dateStr) => (dateStr ? dateStr.slice(0, 7) : "No date");
@@ -1648,6 +1790,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [tickets, setTickets] = useState([]);
   const [employees, setEmployees] = useState(null); // null = not loaded yet
   const [currentUser, setCurrentUser] = useState(null); // { username, name, isAdmin }
+  // In-memory only — NEVER persisted anywhere. Unwrapped from the logged-in employee's
+  // keyWrap at login time; lets secureLoad/secureSave decrypt and encrypt customer and
+  // financial records. Lost on every page reload by design (see handleLogin) — that's
+  // what makes it meaningful as a key: something you must log in again to obtain.
+  const [workspaceKey, setWorkspaceKey] = useState(null);
+  // Set when a logged-in employee has no keyWrap yet (their account pre-dates this
+  // feature, or was created before a workspace key existed) — an admin needs to reset
+  // their password once (Manage Employees) to grant them encrypted-data access.
+  const [keyAccessWarning, setKeyAccessWarning] = useState("");
   const [loading, setLoading] = useState(true);
 
   // Presence: which employees are currently connected (main account only)
@@ -2057,31 +2208,31 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   useEffect(() => {
     (async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, sessionRes, suggestionsRes, setupRes, licenseRes, requestsRes, expensesRes, supplierPaymentsRes, customerPaymentsRes, treasuryAccountsRes, treasuryEntriesRes, loginHistoryRes, activityLogRes] = await Promise.all([
-          window.storage.get("tickets:list", true).catch(() => null),
-          window.storage.get("tickets:hotels", true).catch(() => null),
-          window.storage.get("tickets:visas", true).catch(() => null),
-          window.storage.get("tickets:cars", true).catch(() => null),
-          window.storage.get("tickets:files", true).catch(() => null),
+        // The 10 encrypted collections (tickets/hotels/visas/cars/files/expenses/
+        // payments/treasury) can't actually be decrypted yet at this point — nobody
+        // has logged in, so there's no workspace key in memory. secureLoad with a null
+        // key correctly returns the given fallback ([]) without touching stored data.
+        // They get their real values moments later via the login-triggered poll effect.
+        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, employeesRes, sessionRes, suggestionsRes, setupRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes] = await Promise.all([
+          secureLoad("tickets:list", null, []),
+          secureLoad("tickets:hotels", null, []),
+          secureLoad("tickets:visas", null, []),
+          secureLoad("tickets:cars", null, []),
+          secureLoad("tickets:files", null, []),
+          secureLoad("tickets:expenses", null, []),
+          secureLoad("tickets:supplierPayments", null, []),
+          secureLoad("tickets:customerPayments", null, []),
+          secureLoad("tickets:treasuryAccounts", null, []),
+          secureLoad("tickets:treasuryEntries", null, []),
           window.storage.get("tickets:employees", true).catch(() => null),
           window.storage.get("session:user", false).catch(() => null),
           window.storage.get("tickets:suggestions", true).catch(() => null),
           window.storage.get("tickets:setupComplete", true).catch(() => null),
           window.storage.get("tickets:license", true).catch(() => null),
           window.storage.get("tickets:requests", true).catch(() => null),
-          window.storage.get("tickets:expenses", true).catch(() => null),
-          window.storage.get("tickets:supplierPayments", true).catch(() => null),
-          window.storage.get("tickets:customerPayments", true).catch(() => null),
-          window.storage.get("tickets:treasuryAccounts", true).catch(() => null),
-          window.storage.get("tickets:treasuryEntries", true).catch(() => null),
           window.storage.get("tickets:loginHistory", true).catch(() => null),
           window.storage.get("tickets:activityLog", true).catch(() => null),
         ]);
-        const ticketsData = ticketsRes && ticketsRes.value ? JSON.parse(ticketsRes.value) : [];
-        const hotelsData = hotelsRes && hotelsRes.value ? JSON.parse(hotelsRes.value) : [];
-        const visasData = visasRes && visasRes.value ? JSON.parse(visasRes.value) : [];
-        const carsData = carsRes && carsRes.value ? JSON.parse(carsRes.value) : [];
-        const filesData = filesRes && filesRes.value ? JSON.parse(filesRes.value) : [];
         const employeesData = employeesRes && employeesRes.value ? JSON.parse(employeesRes.value) : [];
         const requestsData = requestsRes && requestsRes.value ? JSON.parse(requestsRes.value) : [];
         setTickets(ticketsData);
@@ -2091,11 +2242,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         setFiles(filesData);
         setEmployees(employeesData);
         setRequests(requestsData);
-        setExpenses(expensesRes && expensesRes.value ? JSON.parse(expensesRes.value) : []);
-        setSupplierPayments(supplierPaymentsRes && supplierPaymentsRes.value ? JSON.parse(supplierPaymentsRes.value) : []);
-        setCustomerPayments(customerPaymentsRes && customerPaymentsRes.value ? JSON.parse(customerPaymentsRes.value) : []);
-        setTreasuryAccounts(treasuryAccountsRes && treasuryAccountsRes.value ? JSON.parse(treasuryAccountsRes.value) : []);
-        setTreasuryEntries(treasuryEntriesRes && treasuryEntriesRes.value ? JSON.parse(treasuryEntriesRes.value) : []);
+        setExpenses(expensesData);
+        setSupplierPayments(supplierPaymentsData);
+        setCustomerPayments(customerPaymentsData);
+        setTreasuryAccounts(treasuryAccountsData);
+        setTreasuryEntries(treasuryEntriesData);
         setLoginHistory(loginHistoryRes && loginHistoryRes.value ? JSON.parse(loginHistoryRes.value) : []);
         setActivityLog(activityLogRes && activityLogRes.value ? JSON.parse(activityLogRes.value) : []);
         requestsData.forEach((r) => seenRequestIdsRef.current.add(r.id));
@@ -2135,17 +2286,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           const savedUsername = sessionRes.value;
           const match = employeesData.find((e) => e.username === savedUsername);
           if (match) {
-            sessionStartedAtRef.current = Date.now();
-            setCurrentUser({ username: match.username, name: match.name, isAdmin: !!match.isAdmin });
-            try {
-              const lastSectionRes = await window.storage.get(`tickets:lastSection:${match.username}`, false).catch(() => null);
-              const lastSection = lastSectionRes && lastSectionRes.value;
-              if (["flights", "hotels", "visa", "cars", "files"].includes(lastSection)) {
-                setActiveSection(lastSection);
-              }
-            } catch (e) {
-              // Best-effort; falls back to the default "flights" section
-            }
+            // Previously this auto-restored the full session (no password needed) on
+            // every page reload. That's no longer possible now that customer/financial
+            // data is encrypted: the workspace key only lives in memory and can only be
+            // unwrapped with the plaintext password, which we don't have on a reload.
+            // So a remembered session now just pre-fills the username — the employee
+            // still re-enters their password once per reload to unlock the data.
+            setLoginUsername(match.username);
           }
         }
       } catch (e) {
@@ -2168,21 +2315,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     let cancelled = false;
     const loadCoreData = async () => {
       try {
-        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, employeesRes, suggestionsRes, licenseRes, requestsRes, expensesRes, supplierPaymentsRes, customerPaymentsRes, treasuryAccountsRes, treasuryEntriesRes, loginHistoryRes, activityLogRes] = await Promise.all([
-          window.storage.get("tickets:list", true).catch(() => null),
-          window.storage.get("tickets:hotels", true).catch(() => null),
-          window.storage.get("tickets:visas", true).catch(() => null),
-          window.storage.get("tickets:cars", true).catch(() => null),
-          window.storage.get("tickets:files", true).catch(() => null),
+        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, employeesRes, suggestionsRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes] = await Promise.all([
+          secureLoad("tickets:list", workspaceKey, null),
+          secureLoad("tickets:hotels", workspaceKey, null),
+          secureLoad("tickets:visas", workspaceKey, null),
+          secureLoad("tickets:cars", workspaceKey, null),
+          secureLoad("tickets:files", workspaceKey, null),
+          secureLoad("tickets:expenses", workspaceKey, null),
+          secureLoad("tickets:supplierPayments", workspaceKey, null),
+          secureLoad("tickets:customerPayments", workspaceKey, null),
+          secureLoad("tickets:treasuryAccounts", workspaceKey, null),
+          secureLoad("tickets:treasuryEntries", workspaceKey, null),
           window.storage.get("tickets:employees", true).catch(() => null),
           window.storage.get("tickets:suggestions", true).catch(() => null),
           window.storage.get("tickets:license", true).catch(() => null),
           window.storage.get("tickets:requests", true).catch(() => null),
-          window.storage.get("tickets:expenses", true).catch(() => null),
-          window.storage.get("tickets:supplierPayments", true).catch(() => null),
-          window.storage.get("tickets:customerPayments", true).catch(() => null),
-          window.storage.get("tickets:treasuryAccounts", true).catch(() => null),
-          window.storage.get("tickets:treasuryEntries", true).catch(() => null),
           currentUser.isAdmin ? window.storage.get("tickets:loginHistory", true).catch(() => null) : Promise.resolve(null),
           currentUser.isAdmin ? window.storage.get("tickets:activityLog", true).catch(() => null) : Promise.resolve(null),
         ]);
@@ -2193,56 +2340,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         if (activityLogRes && activityLogRes.value) {
           try { setActivityLog(JSON.parse(activityLogRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
         }
-        if (expensesRes && expensesRes.value) {
-          try { setExpenses(JSON.parse(expensesRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
-        }
-        if (supplierPaymentsRes && supplierPaymentsRes.value) {
-          try { setSupplierPayments(JSON.parse(supplierPaymentsRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
-        }
-        if (customerPaymentsRes && customerPaymentsRes.value) {
-          try { setCustomerPayments(JSON.parse(customerPaymentsRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
-        }
-        if (treasuryAccountsRes && treasuryAccountsRes.value) {
-          try { setTreasuryAccounts(JSON.parse(treasuryAccountsRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
-        }
-        if (treasuryEntriesRes && treasuryEntriesRes.value) {
-          try { setTreasuryEntries(JSON.parse(treasuryEntriesRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
-        }
-        if (ticketsRes && ticketsRes.value) {
-          try {
-            setTickets(JSON.parse(ticketsRes.value));
-          } catch (e) {
-            // ignore malformed data for this cycle, try again next poll
-          }
-        }
-        if (hotelsRes && hotelsRes.value) {
-          try {
-            setHotelBookings(JSON.parse(hotelsRes.value));
-          } catch (e) {
-            // ignore malformed data for this cycle, try again next poll
-          }
-        }
-        if (visasRes && visasRes.value) {
-          try {
-            setVisaBookings(JSON.parse(visasRes.value));
-          } catch (e) {
-            // ignore malformed data for this cycle, try again next poll
-          }
-        }
-        if (carsRes && carsRes.value) {
-          try {
-            setCarBookings(JSON.parse(carsRes.value));
-          } catch (e) {
-            // ignore malformed data for this cycle, try again next poll
-          }
-        }
-        if (filesRes && filesRes.value) {
-          try {
-            setFiles(JSON.parse(filesRes.value));
-          } catch (e) {
-            // ignore malformed data for this cycle, try again next poll
-          }
-        }
+        // These 10 collections are encrypted at rest — secureLoad returns null above if
+        // the workspace key isn't unlocked yet (nothing to apply this poll) rather than
+        // an error, so a plain null check is enough here.
+        if (expensesData) setExpenses(expensesData);
+        if (supplierPaymentsData) setSupplierPayments(supplierPaymentsData);
+        if (customerPaymentsData) setCustomerPayments(customerPaymentsData);
+        if (treasuryAccountsData) setTreasuryAccounts(treasuryAccountsData);
+        if (treasuryEntriesData) setTreasuryEntries(treasuryEntriesData);
+        if (ticketsData) setTickets(ticketsData);
+        if (hotelsData) setHotelBookings(hotelsData);
+        if (visasData) setVisaBookings(visasData);
+        if (carsData) setCarBookings(carsData);
+        if (filesData) setFiles(filesData);
         if (employeesRes && employeesRes.value) {
           try {
             setEmployees(JSON.parse(employeesRes.value));
@@ -2299,12 +2409,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         // Live refresh is best-effort; a failed poll just tries again next interval
       }
     };
+    loadCoreData(); // also run immediately (e.g. right after login/unlock) instead of waiting for the first interval tick
     const interval = setInterval(loadCoreData, LIVE_REFRESH_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [currentUser]);
+  }, [currentUser, workspaceKey]);
 
 
   const ONLINE_THRESHOLD_MS = 15 * 1000; // considered "connected" if seen in the last 15s
@@ -2519,7 +2630,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistTickets = async (next) => {
     setTickets(next);
     try {
-      await window.storage.set("tickets:list", JSON.stringify(next), true);
+      await secureSave("tickets:list", workspaceKey, next);
     } catch (e) {
       setError("Could not save data, please try again");
     }
@@ -2645,7 +2756,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistHotelBookings = async (next) => {
     setHotelBookings(next);
     try {
-      await window.storage.set("tickets:hotels", JSON.stringify(next), true);
+      await secureSave("tickets:hotels", workspaceKey, next);
     } catch (e) {
       setHotelError("Could not save data, please try again");
     }
@@ -2654,7 +2765,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistVisaBookings = async (next) => {
     setVisaBookings(next);
     try {
-      await window.storage.set("tickets:visas", JSON.stringify(next), true);
+      await secureSave("tickets:visas", workspaceKey, next);
     } catch (e) {
       setVisaError("Could not save data, please try again");
     }
@@ -2663,7 +2774,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistCarBookings = async (next) => {
     setCarBookings(next);
     try {
-      await window.storage.set("tickets:cars", JSON.stringify(next), true);
+      await secureSave("tickets:cars", workspaceKey, next);
     } catch (e) {
       setCarError("Could not save data, please try again");
     }
@@ -2672,7 +2783,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistFiles = async (next) => {
     setFiles(next);
     try {
-      await window.storage.set("tickets:files", JSON.stringify(next), true);
+      await secureSave("tickets:files", workspaceKey, next);
     } catch (e) {
       setFileError("Could not save data, please try again");
     }
@@ -2797,7 +2908,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistExpenses = async (next) => {
     setExpenses(next);
     try {
-      await window.storage.set("tickets:expenses", JSON.stringify(next), true);
+      await secureSave("tickets:expenses", workspaceKey, next);
     } catch (e) {
       setAccountsError("Could not save data, please try again");
     }
@@ -2805,7 +2916,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistSupplierPayments = async (next) => {
     setSupplierPayments(next);
     try {
-      await window.storage.set("tickets:supplierPayments", JSON.stringify(next), true);
+      await secureSave("tickets:supplierPayments", workspaceKey, next);
     } catch (e) {
       setAccountsError("Could not save data, please try again");
     }
@@ -2813,7 +2924,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistCustomerPayments = async (next) => {
     setCustomerPayments(next);
     try {
-      await window.storage.set("tickets:customerPayments", JSON.stringify(next), true);
+      await secureSave("tickets:customerPayments", workspaceKey, next);
     } catch (e) {
       setAccountsError("Could not save data, please try again");
     }
@@ -2821,7 +2932,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistTreasuryAccounts = async (next) => {
     setTreasuryAccounts(next);
     try {
-      await window.storage.set("tickets:treasuryAccounts", JSON.stringify(next), true);
+      await secureSave("tickets:treasuryAccounts", workspaceKey, next);
     } catch (e) {
       setAccountsError("Could not save data, please try again");
     }
@@ -2829,7 +2940,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistTreasuryEntries = async (next) => {
     setTreasuryEntries(next);
     try {
-      await window.storage.set("tickets:treasuryEntries", JSON.stringify(next), true);
+      await secureSave("tickets:treasuryEntries", workspaceKey, next);
     } catch (e) {
       setAccountsError("Could not save data, please try again");
     }
@@ -3747,12 +3858,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     // The first account created becomes the main/admin account.
     // Only this account (or another account it later promotes) can manage employees.
+    // A workspace encryption key is generated right here, once, and wrapped for this
+    // admin — see the "Workspace encryption" section near the top of this file.
+    const workspaceKeyObj = await generateWorkspaceKey();
     const admin = {
       name: setupName.trim(),
       username: setupUsername.trim(),
       password: await hashPassword(setupPassword),
       isAdmin: true,
+      keyWrap: await wrapWorkspaceKey(workspaceKeyObj, setupPassword),
     };
+    setWorkspaceKey(workspaceKeyObj);
     await persistEmployees([admin]);
     await window.storage.set("tickets:setupComplete", "true", true).catch(() => {});
     setSetupComplete(true);
@@ -3786,6 +3902,37 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     setLoginFailCount(0);
     setLoginLockUntil(0);
+    setKeyAccessWarning("");
+    // Quietly upgrade older/weaker stored password formats (unsalted SHA-256, or
+    // plain-text from very old backups) to the current salted PBKDF2 format now that
+    // we have the plaintext in hand. Invisible to the employee — just a stronger
+    // stored value from this point on.
+    if (needsRehash(match.password)) {
+      const upgradedHash = await hashPassword(loginPassword);
+      await persistEmployees((employees || []).map((e) => (e.username === match.username ? { ...e, password: upgradedHash } : e)));
+      match.password = upgradedHash;
+    }
+    // Unwrap this employee's copy of the workspace encryption key using the password
+    // they just typed. If nobody in the whole account has a keyWrap yet (a workspace
+    // upgrading from before this feature existed), bootstrap a brand-new workspace key
+    // right here and claim it for this employee. Otherwise, if THIS employee simply
+    // doesn't have a keyWrap yet, they need an admin to reset their password once
+    // (Manage Employees) before they can see encrypted customer/financial data.
+    if (match.keyWrap) {
+      const unwrapped = await unwrapWorkspaceKey(match.keyWrap, loginPassword);
+      if (unwrapped) {
+        setWorkspaceKey(unwrapped);
+      } else {
+        setKeyAccessWarning("Could not unlock encrypted data for this account. Please contact an admin.");
+      }
+    } else if (!(employees || []).some((e) => e.keyWrap)) {
+      const workspaceKeyObj = await generateWorkspaceKey();
+      const wrap = await wrapWorkspaceKey(workspaceKeyObj, loginPassword);
+      await persistEmployees((employees || []).map((e) => (e.username === match.username ? { ...e, keyWrap: wrap } : e)));
+      setWorkspaceKey(workspaceKeyObj);
+    } else {
+      setKeyAccessWarning("Your account doesn't have access to encrypted data yet — ask an admin to reset your password once (Manage Employees) to enable it.");
+    }
     await window.storage.set("session:user", match.username, false);
     sessionStartedAtRef.current = Date.now();
     setCurrentUser({ username: match.username, name: match.name, isAdmin: !!match.isAdmin });
@@ -3850,6 +3997,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         username: newEmployee.username.trim(),
         password: await hashPassword(newEmployee.password),
         isAdmin: false,
+        // We have the new employee's plaintext password right here, plus the
+        // workspace key in memory (the admin creating them is logged in) — so wrap it
+        // for them immediately. No manual "grant access" step needed for new hires.
+        ...(workspaceKey ? { keyWrap: await wrapWorkspaceKey(workspaceKey, newEmployee.password) } : {}),
         ...reconcilePermissions(newEmployee),
       },
     ];
@@ -4025,9 +4176,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return;
     }
     const targetPassword = editDraft.password ? await hashPassword(editDraft.password) : targetBeingEdited.password;
+    // Setting a new password is also how a pre-existing employee (created before
+    // workspace encryption existed, or who otherwise lost their keyWrap) gets a fresh
+    // wrapped copy of the workspace key — we have their new plaintext right here.
+    const targetKeyWrap = editDraft.password && workspaceKey ? await wrapWorkspaceKey(workspaceKey, editDraft.password) : targetBeingEdited.keyWrap;
     const next = (employees || []).map((e) =>
       e.username === editingUsername
-        ? { ...e, name: trimmedName, username: trimmedUsername, password: targetPassword }
+        ? { ...e, name: trimmedName, username: trimmedUsername, password: targetPassword, keyWrap: targetKeyWrap }
         : e
     );
     await persistEmployees(next);
@@ -4064,9 +4219,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return "That username is already taken by another account";
     }
     const targetPassword = draft.password ? await hashPassword(draft.password) : target.password;
+    const targetKeyWrap = draft.password && workspaceKey ? await wrapWorkspaceKey(workspaceKey, draft.password) : target.keyWrap;
     const next = (employees || []).map((e) =>
       e.username === username
-        ? { ...e, name: trimmedName, username: trimmedUsername, password: targetPassword }
+        ? { ...e, name: trimmedName, username: trimmedUsername, password: targetPassword, keyWrap: targetKeyWrap }
         : e
     );
     await persistEmployees(next);
@@ -4101,8 +4257,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return;
     }
     const hashedNew = await hashPassword(newPasswordInput);
+    // Re-wrap the workspace key under the new password too, so it stays unlockable
+    // with whatever password is current.
+    const rewrapped = workspaceKey ? await wrapWorkspaceKey(workspaceKey, newPasswordInput) : me.keyWrap;
     const next = (employees || []).map((e) =>
-      e.username === currentUser.username ? { ...e, password: hashedNew } : e
+      e.username === currentUser.username ? { ...e, password: hashedNew, keyWrap: rewrapped } : e
     );
     await persistEmployees(next);
     setPasswordSuccess("Password updated successfully");
