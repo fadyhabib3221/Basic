@@ -6226,6 +6226,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         sortDate: t.date || "",
         type: "ticket",
         rid: `${t.id}-${i}`,
+        bookingId: t.id,
+        orderIndex: i,
         render: (rn) => (
         <tr
           key={`${t.id}-${i}`}
@@ -6321,6 +6323,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         sortDate: refund.date || t.date || "",
         type: "refund",
         rid: `${t.id}-refund-${ri}`,
+        bookingId: t.id,
+        orderIndex: 1000 + ri,
         render: (rn) => (
         <tr
           key={`${t.id}-refund-${ri}`}
@@ -8343,7 +8347,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       if (!a.sortDate && !b.sortDate) return 0;
                       if (!a.sortDate) return 1;
                       if (!b.sortDate) return -1;
-                      return a.sortDate.localeCompare(b.sortDate);
+                      if (a.sortDate !== b.sortDate) return a.sortDate.localeCompare(b.sortDate);
+                      // Same date: rows from the same booking always keep customer
+                      // entry order (first customer = first ticket), regardless of
+                      // which direction the surrounding dates are being sorted in.
+                      if (a.bookingId === b.bookingId) return a.orderIndex - b.orderIndex;
+                      return 0;
                     });
                     const rnByRid = {};
                     let ticketCount = 0;
@@ -8366,7 +8375,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         if (!a.sortDate && !b.sortDate) return 0;
                         if (!a.sortDate) return 1;
                         if (!b.sortDate) return -1;
-                        return b.sortDate.localeCompare(a.sortDate);
+                        if (a.sortDate !== b.sortDate) return b.sortDate.localeCompare(a.sortDate);
+                        // Same date: keep customer entry order within a booking (first
+                        // customer's ticket shown first) even though dates otherwise sort newest-first.
+                        if (a.bookingId === b.bookingId) return a.orderIndex - b.orderIndex;
+                        return 0;
                       })
                       .map((row) => row.render(rnByRid[row.rid]));
                   })()}
