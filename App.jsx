@@ -124,6 +124,19 @@ const formatDateTime = (iso) => {
   return `${dd}-${monthAbbr}-${yyyy} ${hh}:${min}`;
 };
 
+// Used on blur for every price/amount input: if the typed value has no decimal
+// point at all (a plain whole number like "150"), it's rewritten as "150.00" so
+// prices always show cents. Values already containing a "." (e.g. "150.5") are
+// left exactly as typed, and empty/invalid values are left untouched.
+const addCentsOnBlur = (value) => {
+  if (value === "" || value === null || value === undefined) return value;
+  const str = String(value);
+  if (str.includes(".")) return str;
+  const num = parseFloat(str);
+  if (isNaN(num)) return str;
+  return num.toFixed(2);
+};
+
 // ==================== License / Activation ====================
 // This app requires an activation code before it can be used at all.
 // Add, remove, or edit codes below yourself — no coding needed beyond this list.
@@ -7610,6 +7623,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 onChange={(e) =>
                                   setRefundRows(refundRows.map((r, i) => (i === index ? { ...r, airlineAmount: e.target.value } : r)))
                                 }
+                                onBlur={(e) =>
+                                  setRefundRows(refundRows.map((r, i) => (i === index ? { ...r, airlineAmount: addCentsOnBlur(e.target.value) } : r)))
+                                }
                                 placeholder="0"
                               />
                             </div>
@@ -7621,6 +7637,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 value={row.customerAmount}
                                 onChange={(e) =>
                                   setRefundRows(refundRows.map((r, i) => (i === index ? { ...r, customerAmount: e.target.value } : r)))
+                                }
+                                onBlur={(e) =>
+                                  setRefundRows(refundRows.map((r, i) => (i === index ? { ...r, customerAmount: addCentsOnBlur(e.target.value) } : r)))
                                 }
                                 placeholder="0"
                               />
@@ -7956,6 +7975,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                 value={form.netPrice}
                 onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
+                onBlur={(e) => setForm({ ...form, netPrice: addCentsOnBlur(e.target.value) })}
                 placeholder="0"
               />
             </div>
@@ -7966,6 +7986,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                 value={form.soldPrice}
                 onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
+                onBlur={(e) => setForm({ ...form, soldPrice: addCentsOnBlur(e.target.value) })}
                 placeholder="0"
               />
             </div>
@@ -8000,6 +8021,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                 value={form.netPrice}
                 onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
+                onBlur={(e) => setForm({ ...form, netPrice: addCentsOnBlur(e.target.value) })}
                 placeholder="0"
               />
             </div>
@@ -8010,6 +8032,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                 value={form.soldPrice}
                 onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
+                onBlur={(e) => setForm({ ...form, soldPrice: addCentsOnBlur(e.target.value) })}
                 placeholder="0"
               />
             </div>
@@ -8767,6 +8790,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         className="w-28 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                         value={line.netPrice}
                         onChange={(e) => updateHotelRoomLine(line.id, { netPrice: e.target.value })}
+                        onBlur={(e) => updateHotelRoomLine(line.id, { netPrice: addCentsOnBlur(e.target.value) })}
                         placeholder="0"
                       />
                     </div>
@@ -8777,6 +8801,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         className="w-28 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                         value={line.soldPrice}
                         onChange={(e) => updateHotelRoomLine(line.id, { soldPrice: e.target.value })}
+                        onBlur={(e) => updateHotelRoomLine(line.id, { soldPrice: addCentsOnBlur(e.target.value) })}
                         placeholder="0"
                       />
                       <div className="flex items-center justify-between gap-2 mt-3">
@@ -9452,6 +9477,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={visaForm.netPrice}
                   onChange={(e) => setVisaForm({ ...visaForm, netPrice: e.target.value })}
+                  onBlur={(e) => setVisaForm({ ...visaForm, netPrice: addCentsOnBlur(e.target.value) })}
                   placeholder="0"
                 />
               </div>
@@ -9462,6 +9488,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={visaForm.soldPrice}
                   onChange={(e) => setVisaForm({ ...visaForm, soldPrice: e.target.value })}
+                  onBlur={(e) => setVisaForm({ ...visaForm, soldPrice: addCentsOnBlur(e.target.value) })}
                   placeholder="0"
                 />
               </div>
@@ -10119,6 +10146,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={carForm.collection}
                   onChange={(e) => setCarForm({ ...carForm, collection: e.target.value })}
+                  onBlur={(e) => setCarForm({ ...carForm, collection: addCentsOnBlur(e.target.value) })}
                   placeholder="0"
                 />
               </div>
@@ -10129,6 +10157,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={carForm.netPrice}
                   onChange={(e) => setCarForm({ ...carForm, netPrice: e.target.value })}
+                  onBlur={(e) => setCarForm({ ...carForm, netPrice: addCentsOnBlur(e.target.value) })}
                   placeholder="0"
                 />
               </div>
@@ -10139,6 +10168,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={carForm.soldPrice}
                   onChange={(e) => setCarForm({ ...carForm, soldPrice: e.target.value })}
+                  onBlur={(e) => setCarForm({ ...carForm, soldPrice: addCentsOnBlur(e.target.value) })}
                   placeholder="0"
                 />
               </div>
@@ -10149,6 +10179,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                   value={carForm.driverTip}
                   onChange={(e) => setCarForm({ ...carForm, driverTip: e.target.value })}
+                  onBlur={(e) => setCarForm({ ...carForm, driverTip: addCentsOnBlur(e.target.value) })}
                   placeholder="0"
                 />
               </div>
@@ -12299,7 +12330,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">{at("amountEgp")}</label>
-                <input type="number" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
+                <input type="number" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} onBlur={(e) => setExpenseForm({ ...expenseForm, amount: addCentsOnBlur(e.target.value) })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">{at("payFromAccount")}</label>
@@ -12341,7 +12372,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">{at("openingBalance")}</label>
-                <input type="number" value={treasuryForm.openingBalance} onChange={(e) => setTreasuryForm({ ...treasuryForm, openingBalance: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
+                <input type="number" value={treasuryForm.openingBalance} onChange={(e) => setTreasuryForm({ ...treasuryForm, openingBalance: e.target.value })} onBlur={(e) => setTreasuryForm({ ...treasuryForm, openingBalance: addCentsOnBlur(e.target.value) })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
               </div>
             </div>
             <button onClick={handleSaveTreasuryAccount} className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl py-2.5">
@@ -12395,7 +12426,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">{at("amountEgp")}</label>
-                <input type="number" value={treasuryEntryForm.amount} onChange={(e) => setTreasuryEntryForm({ ...treasuryEntryForm, amount: e.target.value })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
+                <input type="number" value={treasuryEntryForm.amount} onChange={(e) => setTreasuryEntryForm({ ...treasuryEntryForm, amount: e.target.value })} onBlur={(e) => setTreasuryEntryForm({ ...treasuryEntryForm, amount: addCentsOnBlur(e.target.value) })} className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">{at("notes")}</label>
@@ -12442,7 +12473,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <h3 className="text-xs font-bold text-teal-900 mb-3">{at("recordNewPayment")}</h3>
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <input type="date" value={supplierPaymentForm.date} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, date: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
-                      <input type="number" placeholder={at("colAmount")} value={supplierPaymentForm.amount} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, amount: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
+                      <input type="number" placeholder={at("colAmount")} value={supplierPaymentForm.amount} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, amount: e.target.value })} onBlur={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, amount: addCentsOnBlur(e.target.value) })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
                       <select value={supplierPaymentForm.accountId} onChange={(e) => setSupplierPaymentForm({ ...supplierPaymentForm, supplier: viewingSupplier, accountId: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm col-span-2">
                         <option value="">{at("payFrom")}</option>
                         {treasuryAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -12525,7 +12556,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <h3 className="text-xs font-bold text-teal-900 mb-3">{at("recordNewCollection")}</h3>
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <input type="date" value={customerPaymentForm.date} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, date: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
-                      <input type="number" placeholder={at("colAmount")} value={customerPaymentForm.amount} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, amount: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
+                      <input type="number" placeholder={at("colAmount")} value={customerPaymentForm.amount} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, amount: e.target.value })} onBlur={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, amount: addCentsOnBlur(e.target.value) })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm" />
                       <select value={customerPaymentForm.accountId} onChange={(e) => setCustomerPaymentForm({ ...customerPaymentForm, customer: viewingCustomer, accountId: e.target.value })} className="border border-stone-300 rounded-lg px-2.5 py-2 text-sm col-span-2">
                         <option value="">{at("collectInto")}</option>
                         {treasuryAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
