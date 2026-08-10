@@ -2147,7 +2147,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // the main account can tell at a glance what someone is actually working on.
   const myActivity = (() => {
     if (showManage) return "Managing employees";
-    if (showManageCompanies) return "Managing companies";
+    if (showManageCompanies) return "Managing corporates";
     if (showManageSuppliers) return "Managing suppliers";
     if (activeSection === "hotels") {
       if (viewingHotelBooking) {
@@ -6577,7 +6577,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
               {canManageCompanies && (
                 <div className="flex flex-col items-end gap-1.5 sm:gap-2">
-                  <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage companies"
+                  <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage Corporates"
                     className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
                     <Factory size={15} /> <span className="hidden sm:inline">Corporates</span>
                   </button>
@@ -7293,7 +7293,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </button>
           <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
             <h2 className="font-semibold text-stone-900 mb-1 flex items-center gap-2">
-              <Factory size={18} className="text-stone-500" /> Companies
+              <Factory size={18} className="text-stone-500" /> Corporates
             </h2>
             <p className="text-xs text-stone-400 mb-4">
               Register each company's details here so they're always available to pick from the Company field and filter, even before any ticket has been entered for them.
