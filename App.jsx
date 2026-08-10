@@ -6562,20 +6562,36 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <Plane size={140} className="pointer-events-none absolute -bottom-8 -right-6 text-white/[0.06] rotate-45" />
           <Compass size={90} className="pointer-events-none absolute -top-6 left-[38%] text-white/[0.05]" />
           <Luggage size={70} className="pointer-events-none absolute -bottom-4 left-[18%] text-white/[0.05] hidden md:block" />
-          {activeSection === "accounts" && canAccessAccounts && (
-            <button
-              type="button"
-              onClick={() => setAccountsLang((l) => (l === "ar" ? "en" : "ar"))}
-              title={accountsLang === "ar" ? "Switch to English" : "التحويل للعربية"}
-              className="absolute top-2.5 right-2.5 z-10 border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center gap-1 transition-colors"
-            >
-              <Globe size={15} />
-              <span className="text-xs font-semibold">{accountsLang === "ar" ? "EN" : "AR"}</span>
-            </button>
+          {(canManageCompanies || (activeSection === "accounts" && canAccessAccounts)) && (
+            <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5 sm:gap-2">
+              {canManageCompanies && (
+                <>
+                  <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage companies"
+                    className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
+                    <Factory size={15} /> <span className="hidden sm:inline">Corporates</span>
+                  </button>
+                  <button onClick={() => setShowManageSuppliers(!showManageSuppliers)} title="Manage suppliers"
+                    className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
+                    <Truck size={15} /> <span className="hidden sm:inline">Suppliers</span>
+                  </button>
+                </>
+              )}
+              {activeSection === "accounts" && canAccessAccounts && (
+                <button
+                  type="button"
+                  onClick={() => setAccountsLang((l) => (l === "ar" ? "en" : "ar"))}
+                  title={accountsLang === "ar" ? "Switch to English" : "التحويل للعربية"}
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center gap-1 transition-colors"
+                >
+                  <Globe size={15} />
+                  <span className="text-xs font-semibold">{accountsLang === "ar" ? "EN" : "AR"}</span>
+                </button>
+              )}
+            </div>
           )}
           <header className="relative flex flex-col gap-2 sm:gap-3 px-3 py-2.5 sm:px-4 sm:py-3 md:px-6 md:py-4">
             <div className="flex items-start justify-between flex-wrap gap-2 sm:gap-3">
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 pr-20 sm:pr-0">
               <div className="bg-white rounded-2xl px-2 py-1 sm:px-2.5 sm:py-1.5 md:px-3 md:py-2 shadow-sm shrink-0">
                 <img src={LOGO_DATA_URL} alt="TANIS International Travel" className="w-[110px] h-[34px] sm:w-[150px] sm:h-[46px] md:w-[260px] md:h-[80px] lg:w-[320px] lg:h-[98px] object-contain" />
               </div>
@@ -6613,18 +6629,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </p>
               </div>
             </div>
-            {canManageCompanies && (
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage companies"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
-                  <Factory size={15} /> <span className="hidden sm:inline">Corporates</span>
-                </button>
-                <button onClick={() => setShowManageSuppliers(!showManageSuppliers)} title="Manage suppliers"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
-                  <Truck size={15} /> <span className="hidden sm:inline">Suppliers</span>
-                </button>
-              </div>
-            )}
             </div>
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
