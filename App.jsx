@@ -13,7 +13,7 @@ import {
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
   History, Bell, Send, Landmark, Receipt, PieChart, ArrowUpCircle, ArrowDownCircle,
-  Banknote, HandCoins, ClipboardList, Globe, Key, Truck,
+  Banknote, HandCoins, ClipboardList, Globe, Key, Truck, Filter,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -1421,6 +1421,96 @@ function MultiSelectDropdown({ label, icon: Icon, options, selected, onChange, p
   );
 }
 
+// A <th> with a small funnel icon that opens a checkbox dropdown of the column's
+// distinct values — an Excel-style "filter inside the table" control, as opposed
+// to the MultiSelectDropdown filters that sit in the panel above the table. Turns
+// teal (and the funnel fills in) once at least one value is selected, and click-
+// outside closes the popover the same way MultiSelectDropdown does.
+function ThFilter({ label, align = "left", options, selected, onChange, className = "", padding = "px-1 py-0.5" }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e) => {
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  const normalized = options.map((opt) =>
+    typeof opt === "object" && opt !== null ? opt : { value: opt, label: opt }
+  );
+  const toggleValue = (value) => {
+    if (selected.includes(value)) onChange(selected.filter((v) => v !== value));
+    else onChange([...selected, value]);
+  };
+  const active = selected.length > 0;
+
+  return (
+    <th
+      className={`text-${align} ${padding} font-semibold whitespace-nowrap relative ${className}`}
+    >
+      <div className={`flex items-center gap-1 ${align === "right" ? "justify-end" : ""}`} ref={rootRef}>
+        {align === "right" && (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className={`shrink-0 rounded p-0.5 hover:bg-teal-100 ${active ? "text-teal-700" : "text-stone-400"}`}
+            title={`Filter ${label}`}
+          >
+            <Filter size={11} className={active ? "fill-current" : ""} />
+          </button>
+        )}
+        <span>{label}</span>
+        {align !== "right" && (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className={`shrink-0 rounded p-0.5 hover:bg-teal-100 ${active ? "text-teal-700" : "text-stone-400"}`}
+            title={`Filter ${label}`}
+          >
+            <Filter size={11} className={active ? "fill-current" : ""} />
+          </button>
+        )}
+        {open && (
+          <div
+            className={`absolute z-30 top-full mt-1 ${align === "right" ? "right-0" : "left-0"} w-48 max-h-64 overflow-auto bg-white border border-stone-200 rounded-lg shadow-lg py-1 normal-case font-normal text-stone-700`}
+          >
+            {normalized.length === 0 && (
+              <div className="px-3 py-2 text-xs text-stone-400">No options</div>
+            )}
+            {normalized.map((opt) => (
+              <label
+                key={opt.value}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-stone-50 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(opt.value)}
+                  onChange={() => toggleValue(opt.value)}
+                  className="accent-teal-700"
+                />
+                <span className="truncate">{opt.label}</span>
+              </label>
+            ))}
+            {selected.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="w-full text-left px-3 py-1.5 text-xs text-teal-700 hover:bg-stone-50 border-t border-stone-100 mt-1"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </th>
+  );
+}
+
 export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Prevent the mouse/trackpad scroll wheel from changing the value of a focused
   // number input. Browsers normally let scrolling over a focused number field
@@ -1860,6 +1950,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [selectedCompany, setSelectedCompany] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState([]);
   const [selectedSupplier, setSelectedSupplier] = useState([]);
+  const [selectedAirline, setSelectedAirline] = useState([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Search + filter state for the Hotels, Visa, Transportation, and Files sections —
@@ -5760,6 +5851,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     new Set(visibleTickets.map((t) => (t.supplier || "").trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
+  // Filter by the raw stored airline value, but show its IATA code (matching what
+  // the Airline column itself displays) as the checkbox label.
+  const airlinesAvailable = Array.from(
+    new Set(visibleTickets.map((t) => (t.airline || "").trim()).filter(Boolean))
+  )
+    .sort((a, b) => (getAirlineIata(a) || a).localeCompare(getAirlineIata(b) || b))
+    .map((a) => ({ value: a, label: getAirlineIata(a) || a }));
+
   const byMonth = selectedMonth.length
     ? visibleTickets.filter((t) => selectedMonth.includes(monthKey(t.date)))
     : visibleTickets;
@@ -5780,7 +5879,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     ? byEmployee.filter((t) => selectedSupplier.includes((t.supplier || "").trim()))
     : byEmployee;
 
-  const filtered = bySupplier.filter((t) => {
+  const byAirline = selectedAirline.length
+    ? bySupplier.filter((t) => selectedAirline.includes((t.airline || "").trim()))
+    : bySupplier;
+
+  const filtered = byAirline.filter((t) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
     const customers = getCustomers(t);
@@ -6153,12 +6256,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // employee / supplier filters AND the search box (any combination) — the same set of
   // tickets currently shown on screen — sorted by issue date (same-day tickets ordered
   // by ticket number ascending), as a single sheet ending with a totals row.
-  const hasActiveFilter = !!(selectedMonth.length || selectedYear.length || selectedCompany.length || selectedEmployee.length || selectedSupplier.length || query.trim());
+  const hasActiveFilter = !!(selectedMonth.length || selectedYear.length || selectedCompany.length || selectedEmployee.length || selectedSupplier.length || selectedAirline.length || query.trim());
 
   // Count of active filters/search, shown as a badge on the "Filters" toggle button so
   // the person can see at a glance how many are applied without opening the panel.
   const activeFilterCount =
-    selectedYear.length + selectedMonth.length + selectedCompany.length + selectedEmployee.length + selectedSupplier.length + (query.trim() ? 1 : 0);
+    selectedYear.length + selectedMonth.length + selectedCompany.length + selectedEmployee.length + selectedSupplier.length + selectedAirline.length + (query.trim() ? 1 : 0);
 
   // Resets every filter and the search box at once — used by the "Clear all" action
   // in the filter chips row.
@@ -6168,6 +6271,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setSelectedCompany([]);
     setSelectedEmployee([]);
     setSelectedSupplier([]);
+    setSelectedAirline([]);
     setQuery("");
   };
 
@@ -8704,6 +8808,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <button onClick={() => setSelectedSupplier(selectedSupplier.filter((v) => v !== s))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
                 </span>
               ))}
+              {selectedAirline.map((a) => (
+                <span key={`airline-${a}`} className="inline-flex items-center gap-1 text-stone-600">
+                  Airline: <span className="font-semibold text-stone-800">{getAirlineIata(a) || a}</span>
+                  <button onClick={() => setSelectedAirline(selectedAirline.filter((v) => v !== a))} className="text-stone-400 hover:text-red-600"><X size={12} /></button>
+                </span>
+              ))}
               {query.trim() && (
                 <span className="inline-flex items-center gap-1 text-stone-600">
                   Search: <span className="font-semibold text-stone-800">"{query.trim()}"</span>
@@ -8754,17 +8864,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <thead>
                   <tr className="bg-teal-50/60 text-teal-800 text-[11px] uppercase tracking-wide border-b-2 border-teal-200">
                     <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">RN</th>
-                    <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">By</th>
+                    <ThFilter label="By" options={employeesAvailable} selected={selectedEmployee} onChange={setSelectedEmployee} />
                     <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Date</th>
                     <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Customer</th>
                     <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Ticket #</th>
-                    <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Airline</th>
+                    <ThFilter label="Airline" options={airlinesAvailable} selected={selectedAirline} onChange={setSelectedAirline} />
                     <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Route</th>
                     <th className="text-right px-1 py-0.5 font-semibold whitespace-nowrap">Sold price</th>
                     <th className="text-right px-1 py-0.5 font-semibold whitespace-nowrap">Net price</th>
                     <th className="text-right px-1 py-0.5 font-semibold whitespace-nowrap">Profit</th>
-                    <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Company</th>
-                    <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Supplier</th>
+                    <ThFilter label="Company" options={companiesAvailable} selected={selectedCompany} onChange={setSelectedCompany} />
+                    <ThFilter label="Supplier" options={suppliersAvailable} selected={selectedSupplier} onChange={setSelectedSupplier} />
                   </tr>
                 </thead>
                 <tbody>
@@ -9558,8 +9668,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <tr className="bg-stone-50 border-b border-stone-200 text-stone-500">
                 <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">RN</th>
                 <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Company</th>
-                <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Hotel</th>
-                <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Supplier</th>
+                <ThFilter label="Hotel" options={hotelNamesAvailable} selected={hotelSelectedHotelName} onChange={setHotelSelectedHotelName} padding="px-1.5 py-0.5" />
+                <ThFilter label="Supplier" options={hotelSuppliersAvailable} selected={hotelSelectedSupplier} onChange={setHotelSelectedSupplier} padding="px-1.5 py-0.5" />
                 <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Rooms</th>
                 <th className="text-right px-1.5 py-0.5 font-semibold whitespace-nowrap"># rooms</th>
                 <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Booking date</th>
@@ -10144,12 +10254,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <thead className="bg-stone-50 text-stone-500 text-xs">
                   <tr>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">RN</th>
-                    <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">By</th>
+                    <ThFilter label="By" options={visaEmployeesAvailable} selected={visaSelectedEmployee} onChange={setVisaSelectedEmployee} padding="px-1.5 py-0.5" />
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap"># Customers</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Names</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Visa</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Booking date</th>
-                    <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Supplier</th>
+                    <ThFilter label="Supplier" options={visaSuppliersAvailable} selected={visaSelectedSupplier} onChange={setVisaSelectedSupplier} padding="px-1.5 py-0.5" />
                     <th className="text-right px-1.5 py-0.5 font-semibold whitespace-nowrap">Net</th>
                     <th className="text-right px-1.5 py-0.5 font-semibold whitespace-nowrap">Sold</th>
                     <th className="text-right px-1.5 py-0.5 font-semibold whitespace-nowrap">Profit</th>
@@ -10808,7 +10918,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Phone</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Route</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Car type</th>
-                    <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Supplier</th>
+                    <ThFilter label="Supplier" options={carSuppliersAvailable} selected={carSelectedSupplier} onChange={setCarSelectedSupplier} padding="px-1.5 py-0.5" />
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Trip</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Waiting</th>
                     <th className="text-left px-1.5 py-0.5 font-semibold whitespace-nowrap">Flight #</th>
