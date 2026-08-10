@@ -169,7 +169,9 @@ const checkLicenseCode = (rawCode) => {
 
 const emptyCustomerRow = () => ({ name: "", ticketNumber: "", conjunction: false, ticketNumber2: "", pnrReference: "" });
 
-// Ticket supplier / booking source options.
+// Default Flights supplier / booking source options — seeded into suggestions.flightSuppliers
+// the first time an account loads (before that list has ever been saved), so existing
+// behavior is preserved. From then on the list is editable via the Manage Suppliers panel.
 const SUPPLIERS = ["Amadeus", "Sabre", "NDC", "Lowcost"];
 
 const CAR_TYPES = ["Sedan", "Mini Van", "H1", "Coaster", "Bus"];
@@ -1608,10 +1610,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [showCompaniesList, setShowCompaniesList] = useState(false);
   // Global "Manage suppliers" panel — lets an admin/owner add or remove supplier names
   // for each department from one place, instead of only inline on each section's ticket
-  // form. Flights and Hotels share one supplier pool (suggestions.suppliers); Visa and
-  // Transportation each have their own.
+  // form. Flights, Hotels, Visa, and Transportation each keep their own supplier pool.
   const [showManageSuppliers, setShowManageSuppliers] = useState(false);
   const [supplierManageTab, setSupplierManageTab] = useState("flights");
+  // Draft text for adding a new name to the Flights supplier list, from the Manage
+  // Suppliers panel's "Flights" tab.
+  const [newFlightSupplierDraft, setNewFlightSupplierDraft] = useState("");
   const [newCompanyDraft, setNewCompanyDraft] = useState(emptyCompanyDraft);
   const [editingCompanyName, setEditingCompanyName] = useState(null);
   const [companyError, setCompanyError] = useState("");
@@ -1854,7 +1858,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Every value ever entered (companies, customers, airlines, cities) is kept here so it
   // can be offered as an autocomplete suggestion later, even if the original ticket is deleted.
-  const [suggestions, setSuggestions] = useState({ companies: [], customers: [], airlines: [], cities: [], suppliers: [], hotelNames: [], visaSuppliers: [], carSuppliers: [] });
+  const [suggestions, setSuggestions] = useState({ companies: [], customers: [], airlines: [], cities: [], suppliers: [], flightSuppliers: [...SUPPLIERS], hotelNames: [], visaSuppliers: [], carSuppliers: [] });
 
   // Tracks whether the one-time "create the main account" step has ever been completed.
   // Once true, the first-run setup screen must never be shown again — even if the employee
@@ -1945,6 +1949,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               airlines: parsed.airlines || [],
               cities: parsed.cities || [],
               suppliers: parsed.suppliers || [],
+              // Seed with the legacy fixed list only if this account has never saved its
+              // own Flights supplier list yet, so existing tickets keep working.
+              flightSuppliers: parsed.flightSuppliers || [...SUPPLIERS],
               hotelNames: parsed.hotelNames || [],
               visaSuppliers: parsed.visaSuppliers || [],
               carSuppliers: parsed.carSuppliers || [],
@@ -2082,6 +2089,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               airlines: parsed.airlines || [],
               cities: parsed.cities || [],
               suppliers: parsed.suppliers || [],
+              flightSuppliers: parsed.flightSuppliers || [...SUPPLIERS],
               hotelNames: parsed.hotelNames || [],
               visaSuppliers: parsed.visaSuppliers || [],
               carSuppliers: parsed.carSuppliers || [],
@@ -2696,7 +2704,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       airlines: [...suggestions.airlines],
       cities: [...suggestions.cities],
       suppliers: [...(suggestions.suppliers || [])],
+      flightSuppliers: [...(suggestions.flightSuppliers || [])],
       hotelNames: [...(suggestions.hotelNames || [])],
+      visaSuppliers: [...(suggestions.visaSuppliers || [])],
+      carSuppliers: [...(suggestions.carSuppliers || [])],
     };
     next.airlines = addUnique(next.airlines, record.airline);
     next.cities = addUnique(next.cities, record.from);
@@ -2957,6 +2968,28 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const handleDeleteSupplierName = (name) => {
     requestConfirm(`Delete supplier "${name}"? This cannot be undone.`, () => {
       persistSuggestions({ ...suggestions, suppliers: (suggestions.suppliers || []).filter((s) => s !== name) });
+    });
+  };
+
+  // Registers a new supplier name in the Flights page's OWN supplier list — kept
+  // separate from the Hotels/Visa/Transportation supplier lists, via the Manage
+  // Suppliers panel's "Flights" tab.
+  const handleAddFlightSupplierName = () => {
+    const name = newFlightSupplierDraft.trim();
+    if (!name) return;
+    const duplicate = (suggestions.flightSuppliers || []).some((s) => s.toLowerCase() === name.toLowerCase());
+    if (duplicate) {
+      setError("This supplier already exists");
+      return;
+    }
+    persistSuggestions({ ...suggestions, flightSuppliers: [...(suggestions.flightSuppliers || []), name] });
+    setNewFlightSupplierDraft("");
+    setError("");
+  };
+
+  const handleDeleteFlightSupplierName = (name) => {
+    requestConfirm(`Delete supplier "${name}"? This cannot be undone.`, () => {
+      persistSuggestions({ ...suggestions, flightSuppliers: (suggestions.flightSuppliers || []).filter((s) => s !== name) });
     });
   };
 
@@ -4082,7 +4115,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const destinations =
       Array.isArray(t.destinations) && t.destinations.length >= 2 ? t.destinations : [t.from || "", t.to || ""];
     setForm({ ...t, customers, customersCount: customers.length, multiDestination: !!t.multiDestination, destinations, tripType: t.tripType || "oneWay", returnAirport: t.returnAirport || "" });
-    setSupplierOther(!!t.supplier && !SUPPLIERS.includes(t.supplier));
+    setSupplierOther(!!t.supplier && !(suggestions.flightSuppliers || []).includes(t.supplier));
     if (afterConfirm) afterConfirm();
     setTimeout(() => {
       const el = document.getElementById("ticket-form");
@@ -6680,7 +6713,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
             </div>
             {canManageCompanies && (
-              <div className="flex flex-col items-stretch gap-1.5 sm:gap-2">
+              <div className="absolute top-1/2 -translate-y-1/2 right-3 sm:right-4 md:right-6 flex flex-col items-stretch gap-1.5 sm:gap-2 z-10">
                 <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage companies"
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
                   <Factory size={15} /> <span className="hidden sm:inline">Corporates</span>
@@ -6691,7 +6724,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </button>
               </div>
             )}
-            </div>
           </header>
         </div>
         {/* Perforated tear line, like separating a boarding-pass stub from the rest */}
@@ -7384,12 +7416,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <Truck size={18} className="text-stone-500" /> Suppliers
             </h2>
             <p className="text-xs text-stone-400 mb-4">
-              Manage the supplier names available to pick from each department's Supplier field. Flights and Hotels share one supplier list; Visa and Transportation each keep their own.
+              Manage the supplier names available to pick from each department's Supplier field. Flights, Hotels, Visa, and Transportation each keep their own list.
             </p>
 
             <div className="flex gap-2 mb-4 flex-wrap">
               {[
-                { key: "flights", label: "Flights & Hotels" },
+                { key: "flights", label: "Flights" },
+                { key: "hotels", label: "Hotels" },
                 { key: "visa", label: "Visa" },
                 { key: "cars", label: "Transportation" },
               ].map((t) => (
@@ -7408,6 +7441,40 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
 
             {supplierManageTab === "flights" && (
+              <div>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    className="w-full max-w-xs border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={newFlightSupplierDraft}
+                    onChange={(e) => setNewFlightSupplierDraft(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddFlightSupplierName()}
+                    placeholder="Supplier name"
+                  />
+                  <button
+                    onClick={handleAddFlightSupplierName}
+                    className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110"
+                  >
+                    Add
+                  </button>
+                </div>
+                {(suggestions.flightSuppliers || []).length === 0 ? (
+                  <p className="text-xs text-stone-400">No suppliers saved yet</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {(suggestions.flightSuppliers || []).map((s) => (
+                      <span key={s} className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700">
+                        {s}
+                        <button onClick={() => handleDeleteFlightSupplierName(s)} className="text-red-500 hover:text-red-700">
+                          <Trash2 size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {supplierManageTab === "hotels" && (
               <div>
                 <div className="flex gap-2 mb-3">
                   <input
@@ -7970,7 +8037,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   }}
                 >
                   <option value="">Select supplier</option>
-                  {SUPPLIERS.map((s) => (
+                  {(suggestions.flightSuppliers || []).map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
                   <option value="__other__">Other</option>
