@@ -714,7 +714,7 @@ const MANAGER_GRADE_LABELS = {
 // Every section that has bookings tagged with an owning employee (see
 // SECTIONS_WITH_OWNERSHIP) gets its own dedicated Employee, Supervisor, and Manager
 // grade — Files is the one exception for all three, since it's normally reached
-// through the other sections' "Copy to a file" action rather than worked directly by
+// through the other sections' "Link to a file" action rather than worked directly by
 // an Employee, Supervisor, or Manager.
 const SECTIONS_WITH_EMPLOYEE_GRADE = ["flights", "hotels", "visa", "cars"];
 const SECTIONS_WITH_SUPERVISOR_GRADE = ["flights", "hotels", "visa", "cars"];
@@ -9559,7 +9559,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <button
                     onClick={() => setCopyPickerSource({ type: "hotels", record: viewingHotelBooking })}
                     className="text-stone-400 hover:text-amber-600 p-1.5"
-                    title="Copy to a file"
+                    title="Link to a file"
                   >
                     <FileText size={18} />
                   </button>
@@ -10131,7 +10131,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <button
                     onClick={() => setCopyPickerSource({ type: "visa", record: viewingVisaBooking })}
                     className="text-stone-400 hover:text-amber-600 p-1.5"
-                    title="Copy to a file"
+                    title="Link to a file"
                   >
                     <FileText size={18} />
                   </button>
@@ -10814,7 +10814,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <button
                     onClick={() => setCopyPickerSource({ type: "cars", record: viewingCarBooking })}
                     className="text-stone-400 hover:text-amber-600 p-1.5"
-                    title="Copy to a file"
+                    title="Link to a file"
                   >
                     <FileText size={18} />
                   </button>
@@ -12088,7 +12088,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 onClick={() => setCopyPickerSource({ type: "flights", record: viewingTicket })}
                 className="border border-stone-300 text-stone-600 hover:text-amber-700 hover:border-amber-400 text-sm font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
               >
-                <FileText size={15} /> Copy to a file
+                <FileText size={15} /> Link to a file
               </button>
               {(currentUser.isAdmin || canEditTickets) && (
                 <button
@@ -12602,7 +12602,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             onClick={(ev) => ev.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-1">
-              <h3 className="font-semibold text-stone-900">Copy to which file?</h3>
+              <h3 className="font-semibold text-stone-900">Link to which file?</h3>
               <button onClick={() => { setCopyPickerSource(null); setCopyPickerSearch(""); }} className="text-stone-400 hover:text-stone-700 p-1">
                 <X size={16} />
               </button>
