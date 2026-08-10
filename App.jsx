@@ -6562,9 +6562,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <Plane size={140} className="pointer-events-none absolute -bottom-8 -right-6 text-white/[0.06] rotate-45" />
           <Compass size={90} className="pointer-events-none absolute -top-6 left-[38%] text-white/[0.05]" />
           <Luggage size={70} className="pointer-events-none absolute -bottom-4 left-[18%] text-white/[0.05] hidden md:block" />
-          {(canManageCompanies || (activeSection === "accounts" && canAccessAccounts)) && (
+          {(canManageCompanies || canAccessAccounts) && (
             <div className="absolute top-2.5 right-2.5 z-10 flex flex-col items-end gap-1.5 sm:gap-2">
-              {activeSection === "accounts" && canAccessAccounts && (
+              {canAccessAccounts && (
                 <button
                   type="button"
                   onClick={() => setAccountsLang((l) => (l === "ar" ? "en" : "ar"))}
