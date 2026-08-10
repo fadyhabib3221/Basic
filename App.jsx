@@ -6573,7 +6573,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <span className="text-xs font-semibold">{accountsLang === "ar" ? "EN" : "AR"}</span>
             </button>
           )}
-          <header className="relative flex items-center justify-between flex-wrap gap-2 sm:gap-3 px-3 py-2.5 sm:px-4 sm:py-3 md:px-6 md:py-4">
+          <header className="relative flex flex-col gap-2 sm:gap-3 px-3 py-2.5 sm:px-4 sm:py-3 md:px-6 md:py-4">
+            <div className="flex items-start justify-between flex-wrap gap-2 sm:gap-3">
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="bg-white rounded-2xl px-2 py-1 sm:px-2.5 sm:py-1.5 md:px-3 md:py-2 shadow-sm shrink-0">
                 <img src={LOGO_DATA_URL} alt="TANIS International Travel" className="w-[110px] h-[34px] sm:w-[150px] sm:h-[46px] md:w-[260px] md:h-[80px] lg:w-[320px] lg:h-[98px] object-contain" />
@@ -6611,6 +6612,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   )}
                 </p>
               </div>
+            </div>
+            {canManageCompanies && (
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage companies"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
+                  <Factory size={15} /> <span className="hidden sm:inline">Corporates</span>
+                </button>
+                <button onClick={() => setShowManageSuppliers(!showManageSuppliers)} title="Manage suppliers"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
+                  <Truck size={15} /> <span className="hidden sm:inline">Suppliers</span>
+                </button>
+              </div>
+            )}
             </div>
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -6712,18 +6726,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </button>
               )}
             </div>
-            {canManageCompanies && (
-              <div className="flex flex-col items-stretch gap-1.5 sm:gap-2">
-                <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage companies"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
-                  <Factory size={15} /> <span className="hidden sm:inline">Corporates</span>
-                </button>
-                <button onClick={() => setShowManageSuppliers(!showManageSuppliers)} title="Manage suppliers"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
-                  <Truck size={15} /> <span className="hidden sm:inline">Suppliers</span>
-                </button>
-              </div>
-            )}
             </div>
           </header>
         </div>
