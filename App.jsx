@@ -6224,6 +6224,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const nameText = t.isReissued ? "text-sky-950" : "text-stone-800";
       rows.push({
         sortDate: t.date || "",
+        type: "ticket",
+        rid: `${t.id}-${i}`,
         render: (rn) => (
         <tr
           key={`${t.id}-${i}`}
@@ -6317,6 +6319,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         : "text-red-800 bg-red-200 border border-red-400 hover:bg-red-300";
       rows.push({
         sortDate: refund.date || t.date || "",
+        type: "refund",
+        rid: `${t.id}-refund-${ri}`,
         render: (rn) => (
         <tr
           key={`${t.id}-refund-${ri}`}
@@ -8330,19 +8334,42 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedFiltered
-                    .flatMap((t) => buildTicketRows(t))
-                    .sort((a, b) => {
-                      // Places every row — including refund rows — by its own date, so a
-                      // refund lands where it belongs in the date order rather than always
-                      // staying pinned directly under its parent ticket's row(s). Rows with
-                      // no date are pushed to the end, matching sortedFiltered above.
+                  {(() => {
+                    const allRows = sortedFiltered.flatMap((t) => buildTicketRows(t));
+                    // RN reflects each row's position in date order (oldest = 1), kept
+                    // stable regardless of how the table itself is currently sorted —
+                    // tickets and refunds are numbered in their own separate sequence.
+                    const byDateAsc = [...allRows].sort((a, b) => {
                       if (!a.sortDate && !b.sortDate) return 0;
                       if (!a.sortDate) return 1;
                       if (!b.sortDate) return -1;
-                      return b.sortDate.localeCompare(a.sortDate);
-                    })
-                    .map((row, idx) => row.render(idx + 1))}
+                      return a.sortDate.localeCompare(b.sortDate);
+                    });
+                    const rnByRid = {};
+                    let ticketCount = 0;
+                    let refundCount = 0;
+                    byDateAsc.forEach((row) => {
+                      if (row.type === "refund") {
+                        refundCount += 1;
+                        rnByRid[row.rid] = `R${refundCount}`;
+                      } else {
+                        ticketCount += 1;
+                        rnByRid[row.rid] = ticketCount;
+                      }
+                    });
+                    return allRows
+                      .sort((a, b) => {
+                        // Places every row — including refund rows — by its own date, so a
+                        // refund lands where it belongs in the date order rather than always
+                        // staying pinned directly under its parent ticket's row(s). Rows with
+                        // no date are pushed to the end, matching sortedFiltered above.
+                        if (!a.sortDate && !b.sortDate) return 0;
+                        if (!a.sortDate) return 1;
+                        if (!b.sortDate) return -1;
+                        return b.sortDate.localeCompare(a.sortDate);
+                      })
+                      .map((row) => row.render(rnByRid[row.rid]));
+                  })()}
                 </tbody>
               </table>
             </div>
