@@ -923,7 +923,19 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
           </button>
         </div>
 
-        <p className="text-xs text-stone-500 mb-1">Account details</p>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs text-stone-500">Account details</p>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              title="Delete employee"
+              className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg p-1 transition-colors"
+            >
+              <Trash2 size={15} />
+            </button>
+          )}
+        </div>
         <div className="border border-stone-200 rounded-xl p-3 mb-4 space-y-2">
           <div>
             <label className="text-xs text-stone-500 block mb-1">Full name</label>
@@ -961,40 +973,38 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
             </div>
           </div>
           <div>
-            <label className="text-xs text-stone-500 block mb-1">Category</label>
+            <label className="text-xs text-stone-500 block mb-1">Grade</label>
             <select
               className="w-full border border-stone-300 rounded-xl px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
-              value={expandedSection || ""}
+              value={emp.role || ""}
               onChange={(ev) => {
                 const val = ev.target.value;
                 if (!val) return;
-                if (!sections[val]) onSetSection(val, true);
-                setExpandedSection(val);
+                onSetRole(val);
               }}
             >
-              <option value="">Choose a category to edit...</option>
-              {SECTION_OPTIONS.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
+              {EMPLOYEE_ROLES.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
               ))}
             </select>
           </div>
           {saveError && <p className="text-xs text-red-600">{saveError}</p>}
           <button
             type="button"
+            onClick={onClose}
+            className="w-full border border-stone-300 hover:bg-stone-50 text-stone-700 text-sm font-semibold rounded-xl px-4 py-1.5 transition-colors"
+          >
+            Don't save
+          </button>
+          <button
+            type="button"
             onClick={handleSaveDetails}
             disabled={saving}
-            className="w-full border border-stone-300 hover:bg-stone-50 text-stone-700 text-sm font-semibold rounded-xl px-4 py-1.5 transition-colors disabled:opacity-50"
+            className="w-full bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-1.5 shadow-sm shadow-teal-800/30 transition-colors disabled:opacity-50"
           >
-            Done
+            Save
           </button>
         </div>
-
-        {/* The clickable Grade grid was removed from this screen — grades are now
-            assigned when the employee is first added, from the three tier dropdowns on
-            the Add employee page. This just shows the grade as read-only info; every
-            individual permission below can still be changed by hand regardless of it. */}
-        <p className="text-xs text-stone-500 mb-1">Grade</p>
-        <p className="text-sm font-medium text-stone-700 mb-4">{roleLabel(emp.role)}</p>
 
         <p className="text-xs text-stone-500 mb-1">Section access &amp; permissions</p>
         <p className="text-[11px] text-stone-400 mb-2">
@@ -1068,25 +1078,6 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
             );
           })}
         </div>
-
-        {onDelete && (
-          <div className="flex gap-2 mt-4">
-            <button
-              type="button"
-              onClick={onDelete}
-              className="flex-1 flex items-center justify-center gap-1.5 border border-red-200 hover:bg-red-50 text-red-600 text-sm font-semibold rounded-xl px-4 py-2 transition-colors"
-            >
-              <Trash2 size={14} /> Delete
-            </button>
-          </div>
-        )}
-
-        <button
-          onClick={onClose}
-          className="mt-2 w-full bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 transition-colors"
-        >
-          Don't save
-        </button>
       </div>
     </div>
   );
