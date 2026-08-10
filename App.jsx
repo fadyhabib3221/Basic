@@ -13,7 +13,7 @@ import {
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
   History, Bell, Send, Landmark, Receipt, PieChart, ArrowUpCircle, ArrowDownCircle,
-  Banknote, HandCoins, ClipboardList, Globe, Key,
+  Banknote, HandCoins, ClipboardList, Globe, Key, Truck,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -1606,6 +1606,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const [showManageCompanies, setShowManageCompanies] = useState(false);
   const [showCompaniesList, setShowCompaniesList] = useState(false);
+  // Global "Manage suppliers" panel — lets an admin/owner add or remove supplier names
+  // for each department from one place, instead of only inline on each section's ticket
+  // form. Flights and Hotels share one supplier pool (suggestions.suppliers); Visa and
+  // Transportation each have their own.
+  const [showManageSuppliers, setShowManageSuppliers] = useState(false);
+  const [supplierManageTab, setSupplierManageTab] = useState("flights");
   const [newCompanyDraft, setNewCompanyDraft] = useState(emptyCompanyDraft);
   const [editingCompanyName, setEditingCompanyName] = useState(null);
   const [companyError, setCompanyError] = useState("");
@@ -2134,6 +2140,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const myActivity = (() => {
     if (showManage) return "Managing employees";
     if (showManageCompanies) return "Managing companies";
+    if (showManageSuppliers) return "Managing suppliers";
     if (activeSection === "hotels") {
       if (viewingHotelBooking) {
         return `Viewing hotel booking — ${viewingHotelBooking.hotel || "hotel"}${
@@ -6624,8 +6631,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
               {canManageCompanies && (
                 <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage companies"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
-                  <Factory size={15} />
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
+                  <Factory size={15} /> <span className="hidden sm:inline">Corporates</span>
+                </button>
+              )}
+              {canManageCompanies && (
+                <button onClick={() => setShowManageSuppliers(!showManageSuppliers)} title="Manage suppliers"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
+                  <Truck size={15} /> <span className="hidden sm:inline">Suppliers</span>
                 </button>
               )}
               <button
@@ -6926,13 +6939,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           );
         })()}
 
-        {(showManage || showManageCompanies) && (
+        {(showManage || showManageCompanies || showManageSuppliers) && (
           <div
             className="fixed inset-0 z-50 bg-black/40 flex items-start md:items-center justify-center p-4 overflow-y-auto"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
                 setShowManage(false);
                 setShowManageCompanies(false);
+                setShowManageSuppliers(false);
               }
             }}
           >
@@ -7356,11 +7370,150 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
           </div>
         )}
+
+        {showManageSuppliers && canManageCompanies && (
+          <div className="bg-stone-50">
+            <button onClick={() => setShowManageSuppliers(false)}
+              className="mb-4 border border-stone-300 text-stone-600 text-sm rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-stone-100">
+              <X size={15} /> Close
+            </button>
+          <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6">
+            <h2 className="font-semibold text-stone-900 mb-1 flex items-center gap-2">
+              <Truck size={18} className="text-stone-500" /> Suppliers
+            </h2>
+            <p className="text-xs text-stone-400 mb-4">
+              Manage the supplier names available to pick from each department's Supplier field. Flights and Hotels share one supplier list; Visa and Transportation each keep their own.
+            </p>
+
+            <div className="flex gap-2 mb-4 flex-wrap">
+              {[
+                { key: "flights", label: "Flights & Hotels" },
+                { key: "visa", label: "Visa" },
+                { key: "cars", label: "Transportation" },
+              ].map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setSupplierManageTab(t.key)}
+                  className={`text-xs font-semibold rounded-xl px-3 py-2 border transition-colors ${
+                    supplierManageTab === t.key
+                      ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-transparent"
+                      : "text-teal-800 border-teal-700 hover:bg-teal-50"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {supplierManageTab === "flights" && (
+              <div>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    className="w-full max-w-xs border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={newSupplierDraft}
+                    onChange={(e) => setNewSupplierDraft(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddSupplierName()}
+                    placeholder="Supplier name"
+                  />
+                  <button
+                    onClick={handleAddSupplierName}
+                    className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110"
+                  >
+                    Add
+                  </button>
+                </div>
+                {suggestions.suppliers.length === 0 ? (
+                  <p className="text-xs text-stone-400">No suppliers saved yet</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.suppliers.map((s) => (
+                      <span key={s} className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700">
+                        {s}
+                        <button onClick={() => handleDeleteSupplierName(s)} className="text-red-500 hover:text-red-700">
+                          <Trash2 size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {supplierManageTab === "visa" && (
+              <div>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    className="w-full max-w-xs border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={newVisaSupplierDraft}
+                    onChange={(e) => setNewVisaSupplierDraft(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddVisaSupplierName()}
+                    placeholder="Supplier name"
+                  />
+                  <button
+                    onClick={handleAddVisaSupplierName}
+                    className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110"
+                  >
+                    Add
+                  </button>
+                </div>
+                {suggestions.visaSuppliers.length === 0 ? (
+                  <p className="text-xs text-stone-400">No suppliers saved yet</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.visaSuppliers.map((s) => (
+                      <span key={s} className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700">
+                        {s}
+                        <button onClick={() => handleDeleteVisaSupplierName(s)} className="text-red-500 hover:text-red-700">
+                          <Trash2 size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {supplierManageTab === "cars" && (
+              <div>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    className="w-full max-w-xs border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={newCarSupplierDraft}
+                    onChange={(e) => setNewCarSupplierDraft(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddCarSupplierName()}
+                    placeholder="Supplier name"
+                  />
+                  <button
+                    onClick={handleAddCarSupplierName}
+                    className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110"
+                  >
+                    Add
+                  </button>
+                </div>
+                {suggestions.carSuppliers.length === 0 ? (
+                  <p className="text-xs text-stone-400">No suppliers saved yet</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.carSuppliers.map((s) => (
+                      <span key={s} className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700">
+                        {s}
+                        <button onClick={() => handleDeleteCarSupplierName(s)} className="text-red-500 hover:text-red-700">
+                          <Trash2 size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          </div>
+        )}
           </div>
           </div>
         )}
 
-        {!showManage && !showManageCompanies && !showLicensePanel && (
+        {!showManage && !showManageCompanies && !showManageSuppliers && !showLicensePanel && (
         <>
         {isLicensed ? (
         <>
