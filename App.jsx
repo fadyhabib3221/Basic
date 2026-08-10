@@ -960,6 +960,24 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
               </button>
             </div>
           </div>
+          <div>
+            <label className="text-xs text-stone-500 block mb-1">Category</label>
+            <select
+              className="w-full border border-stone-300 rounded-xl px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+              value={expandedSection || ""}
+              onChange={(ev) => {
+                const val = ev.target.value;
+                if (!val) return;
+                if (!sections[val]) onSetSection(val, true);
+                setExpandedSection(val);
+              }}
+            >
+              <option value="">Choose a category to edit...</option>
+              {SECTION_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
           {saveError && <p className="text-xs text-red-600">{saveError}</p>}
           <button
             type="button"
@@ -967,7 +985,7 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
             disabled={saving}
             className="w-full border border-stone-300 hover:bg-stone-50 text-stone-700 text-sm font-semibold rounded-xl px-4 py-1.5 transition-colors disabled:opacity-50"
           >
-            Save details
+            Done
           </button>
         </div>
 
@@ -1067,7 +1085,7 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
           onClick={onClose}
           className="mt-2 w-full bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 transition-colors"
         >
-          Done
+          Don't save
         </button>
       </div>
     </div>
