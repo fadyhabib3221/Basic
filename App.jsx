@@ -8382,8 +8382,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         // Same date: keep customer entry order within a booking (first
                         // customer's ticket shown first) even though dates otherwise sort newest-first.
                         if (a.bookingId === b.bookingId) return a.orderIndex - b.orderIndex;
-                        // Different bookings on the same date: order by ticket number.
-                        return (a.ticketNumber || "").localeCompare(b.ticketNumber || "", undefined, { numeric: true, sensitivity: "base" });
+                        // Different bookings on the same date: order by ticket number, reversed
+                        // relative to the ascending RN assignment above, so RN keeps counting down
+                        // consistently as you read down the (newest-first) table instead of
+                        // jumping back up within a tied date (e.g. showing 4, 3, 1, 2).
+                        return (b.ticketNumber || "").localeCompare(a.ticketNumber || "", undefined, { numeric: true, sensitivity: "base" });
                       })
                       .map((row) => row.render(rnByRid[row.rid]));
                   })()}
