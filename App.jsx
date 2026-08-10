@@ -6982,11 +6982,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       <div className="xl:flex xl:justify-center xl:gap-4">
       <div className="relative max-w-5xl mx-auto xl:mx-0 xl:w-[64rem] xl:shrink-0 p-4 md:p-6">
         {/* Boarding-pass style banner */}
-        <div className="relative rounded-2xl bg-gradient-to-r from-teal-800 via-teal-800 to-teal-900 shadow-lg shadow-teal-900/20 overflow-hidden mb-0">
-          <Plane size={140} className="pointer-events-none absolute -bottom-8 -right-6 text-white/[0.06] rotate-45" />
-          <Compass size={90} className="pointer-events-none absolute -top-6 left-[38%] text-white/[0.05]" />
-          <Luggage size={70} className="pointer-events-none absolute -bottom-4 left-[18%] text-white/[0.05] hidden md:block" />
-          <div className="absolute top-2.5 right-2.5 z-10 flex flex-col items-end gap-1.5 sm:gap-2">
+        <div className="relative rounded-2xl bg-gradient-to-r from-teal-800 via-teal-800 to-teal-900 shadow-lg shadow-teal-900/20 mb-0">
+          <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+            <Plane size={140} className="absolute -bottom-8 -right-6 text-white/[0.06] rotate-45" />
+            <Compass size={90} className="absolute -top-6 left-[38%] text-white/[0.05]" />
+            <Luggage size={70} className="absolute -bottom-4 left-[18%] text-white/[0.05] hidden md:block" />
+          </div>
+          <header className="relative flex flex-col gap-2 sm:gap-3 px-3 py-2.5 sm:px-4 sm:py-3 md:px-6 md:py-4">
+            <div className="flex items-start justify-between flex-wrap gap-2 sm:gap-3">
+            <div className="flex flex-col items-end gap-1.5 sm:gap-2 z-10 order-2">
               <div className="flex items-center gap-1.5 sm:gap-2">
                 {canAccessAccounts && (
                   <button
@@ -7116,9 +7120,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 )}
               </div>
           </div>
-          <header className="relative flex flex-col gap-2 sm:gap-3 px-3 py-2.5 sm:px-4 sm:py-3 md:px-6 md:py-4">
-            <div className="flex items-start justify-between flex-wrap gap-2 sm:gap-3">
-            <div className="flex items-center gap-2 sm:gap-3 pr-20 sm:pr-0">
+            <div className="flex items-center gap-2 sm:gap-3 order-1">
               <div className="bg-white rounded-2xl px-2 py-1 sm:px-2.5 sm:py-1.5 md:px-3 md:py-2 shadow-sm shrink-0">
                 <img src={LOGO_DATA_URL} alt="TANIS International Travel" className="w-[110px] h-[34px] sm:w-[150px] sm:h-[46px] md:w-[260px] md:h-[80px] lg:w-[320px] lg:h-[98px] object-contain" />
               </div>
