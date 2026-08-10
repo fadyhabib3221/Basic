@@ -7007,6 +7007,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
                   <LogOut size={15} />
                 </button>
+                <button
+                  onClick={() => {
+                    setShowChangePassword(!showChangePassword);
+                    setPasswordError("");
+                    setPasswordSuccess("");
+                    setCurrentPasswordInput("");
+                    setNewPasswordInput("");
+                    setConfirmPasswordInput("");
+                  }}
+                  title="Change password"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  <Lock size={15} />
+                </button>
               </div>
               {canManageCompanies && (
                 <div className="flex flex-col items-end gap-1.5 sm:gap-2">
@@ -7100,20 +7113,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             {myPendingRequestsCount}
                           </span>
                         )}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setShowChangePassword(!showChangePassword);
-                          setPasswordError("");
-                          setPasswordSuccess("");
-                          setCurrentPasswordInput("");
-                          setNewPasswordInput("");
-                          setConfirmPasswordInput("");
-                          setShowManagementMenu(false);
-                        }}
-                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
-                      >
-                        <Lock size={15} className="text-teal-800" /> Change password
                       </button>
                     </div>
                   </>
