@@ -6811,13 +6811,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         })()}
 
         {showActivityLog && currentUser.isAdmin && (() => {
-          const ACTIVITY_MODULES = ["all", "Tickets", "Hotels", "Visa", "Employees", "Login/Logout"];
+          const ACTIVITY_MODULES = ["all", "Tickets", "Hotels", "Visa", "Employees", "Transportation", "Accounts", "Login/Logout"];
           // Collapses the many granular module tags used when recording activity
           // (Flights, Visas, Transportation, Files, Expenses, Treasury, Payments,
           // Companies, Requests, License, Backup, ...) down to the simpler set of
           // filter chips shown here. Anything not explicitly mapped keeps its own
           // tag text and still shows up under "All".
-          const MODULE_BUCKET = { Flights: "Tickets", Visas: "Visa", Hotels: "Hotels", Employees: "Employees" };
+          const MODULE_BUCKET = { Flights: "Tickets", Visas: "Visa", Hotels: "Hotels", Employees: "Employees", Expenses: "Accounts", Treasury: "Accounts", Payments: "Accounts" };
           const moduleBucket = (m) => MODULE_BUCKET[m] || m;
           // Combines the activity log with the login/logout history into a single
           // feed, tagged as "Login/Logout" with a plain "Logged in"/"Logged out"
