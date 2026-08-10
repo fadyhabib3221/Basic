@@ -1679,10 +1679,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [newCarSupplierDraft, setNewCarSupplierDraft] = useState("");
 
   // ---------- Files ----------
-  // A "file" bundles together copies (snapshots) of records already entered under
+  // A "file" bundles together LINKS to records already entered under
   // Flights/Hotels/Visa/Transportation, so their prices can be gathered and reviewed
-  // together without touching the original records — nothing here feeds back into the
-  // totals shown in those other sections.
+  // together. Each item only stores which record it points to — its label/date/price is
+  // always read live from that record (see resolveFileItem), so editing the original
+  // instantly updates every file it's linked into. Nothing here feeds back the other
+  // way: adding/removing a link from a file never touches the original record.
   const [files, setFiles] = useState([]);
   // When a service's detail modal (hotel/visa/car/ticket) is opened from INSIDE a file
   // (via viewFileItemDetails) rather than from that service's own section, this holds
@@ -3460,13 +3462,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   // Opens a printable summary of a whole File — its info plus every item it
-  // contains (each a snapshot pulled from Flights/Hotels/Visa) and the file's totals.
+  // contains (each item is a LINK to a live Flights/Hotels/Visa record, resolved here
+  // so the printout always reflects current prices) and the file's totals.
   const handlePrintFile = (f) => {
     const t = fileTotals(f);
-    const itemRows = (f.items || []).map((it) => [
-      `${FILE_SOURCE_LABELS[it.sourceType] || it.sourceType} — ${it.label}`,
-      `${it.date ? formatDisplayDate(it.date) : "-"}<br/>Net ${fmt(it.netPrice)} ${it.currency} &middot; Sold ${fmt(it.soldPrice)} ${it.currency}`,
-    ]);
+    const itemRows = (f.items || []).map((it) => {
+      const r = resolveFileItem(it);
+      return [
+        `${FILE_SOURCE_LABELS[it.sourceType] || it.sourceType} — ${r.label}`,
+        `${r.date ? formatDisplayDate(r.date) : "-"}<br/>Net ${fmt(r.netPrice)} ${r.currency} &middot; Sold ${fmt(r.soldPrice)} ${r.currency}`,
+      ];
+    });
 
     openPrintPreview(`File ${f.serial || ""}`, "File Summary", [
       {
@@ -5393,15 +5399,29 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return `${prefix}${String(maxN + 1).padStart(5, "0")}`;
   };
 
-  // Builds a read-only price snapshot of a ticket/hotel/visa record to drop into a
-  // file. This is a COPY only — it never references or mutates the original record, so
-  // adding it to a file has no effect whatsoever on the Flights/Hotels/Visa totals.
-  const buildFileItem = (sourceType, record) => {
-    const base = { id: `FI-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sourceType, sourceId: record.id };
-    if (sourceType === "flights") {
+  // Adds a file item as a LINK, not a copy: it stores only which service record it
+  // points to (sourceType + sourceId). No price/label/date is duplicated here — that's
+  // always read live from the original record via resolveFileItem below, so editing the
+  // Flights/Hotels/Visa/Transportation record is instantly reflected in every file it's
+  // linked into.
+  const buildFileItem = (sourceType, record) => ({
+    id: `FI-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    sourceType,
+    sourceId: record.id,
+  });
+
+  // Looks a file item's LIVE display data (label/date/currency/net/sold) up from the
+  // actual Flights/Hotels/Visa/Transportation record it's linked to — this is the single
+  // place that turns a link into something displayable, used everywhere a file item is
+  // shown or totaled. If the original record was since deleted, returns a "missing" stub
+  // instead of throwing, so the file just shows the item as gone rather than crashing.
+  const resolveFileItem = (it) => {
+    const missing = { label: "(record deleted)", date: "", currency: "EGP", netPrice: 0, soldPrice: 0, missing: true };
+    if (it.sourceType === "flights") {
+      const record = tickets.find((x) => x.id === it.sourceId);
+      if (!record) return missing;
       const names = getCustomers(record).map((c) => c.name).filter(Boolean).join(", ");
       return {
-        ...base,
         label: `${routeLabel(record)}${names ? " · " + names : ""}`,
         date: record.date,
         currency: "EGP",
@@ -5409,9 +5429,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         soldPrice: parseFloat(record.soldPrice) || 0,
       };
     }
-    if (sourceType === "hotels") {
+    if (it.sourceType === "hotels") {
+      const record = hotelBookings.find((x) => x.id === it.sourceId);
+      if (!record) return missing;
       return {
-        ...base,
         label: `${record.hotel || "Hotel"}${record.customer ? " · " + record.customer : ""}`,
         date: record.bookingDate,
         currency: "EGP",
@@ -5419,10 +5440,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         soldPrice: hotelSoldTotal(record),
       };
     }
-    if (sourceType === "visa") {
+    if (it.sourceType === "visa") {
+      const record = visaBookings.find((x) => x.id === it.sourceId);
+      if (!record) return missing;
       const names = (record.customers || []).map((c) => c.name).filter(Boolean).join(", ");
       return {
-        ...base,
         label: `${record.visaType || "Visa"}${names ? " · " + names : ""}`,
         date: record.bookingDate,
         currency: record.currency || "EGP",
@@ -5430,9 +5452,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         soldPrice: visaSoldTotal(record),
       };
     }
-    if (sourceType === "cars") {
+    if (it.sourceType === "cars") {
+      const record = carBookings.find((x) => x.id === it.sourceId);
+      if (!record) return missing;
       return {
-        ...base,
         label: `${record.routeFrom || "-"} → ${record.routeTo || "-"}${record.customerName ? " · " + record.customerName : ""}`,
         date: record.bookingDate,
         currency: record.currency || "EGP",
@@ -5440,16 +5463,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         soldPrice: parseFloat(record.soldPrice) || 0,
       };
     }
-    return { ...base, label: "-", date: "", currency: "EGP", netPrice: 0, soldPrice: 0 };
+    return missing;
   };
 
   // Every item's amount converted into EGP (same conversion hotels already use), so a
-  // file mixing EGP and USD items still totals correctly.
+  // file mixing EGP and USD items still totals correctly. Prices are resolved live from
+  // each item's linked record, so totals always match the source's current price.
   const fileTotals = (f) =>
     (f.items || []).reduce(
       (acc, it) => {
-        acc.net += hotelInEgp(it.netPrice, it.currency);
-        acc.sold += hotelInEgp(it.soldPrice, it.currency);
+        const r = resolveFileItem(it);
+        acc.net += hotelInEgp(r.netPrice, r.currency);
+        acc.sold += hotelInEgp(r.soldPrice, r.currency);
         acc.profit = acc.sold - acc.net;
         return acc;
       },
@@ -5501,7 +5526,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // (the same one used in the Flights/Hotels/Visa sections) by looking the original
   // record up via the item's stored sourceId — but WITHOUT switching activeSection,
   // so the user stays on the Files section underneath the modal. The file item
-  // itself only ever stores a lightweight price snapshot, not the full record, so
+  // itself only ever stores a link (sourceType + sourceId), not the full record, so
   // this look-up is what makes "see full details" possible. If the original record
   // was since deleted, there's nothing to jump to — surface a toast instead.
   //
@@ -5544,8 +5569,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const openFile = openFileId ? files.find((f) => f.id === openFileId) : null;
 
-  // Used by the "copy to a file" button on the Flights/Hotels/Visa tables: drops a
-  // snapshot of that one record into the chosen file, without touching the record itself.
+  // Used by the "copy to a file" button on the Flights/Hotels/Visa tables: links that
+  // one record into the chosen file (no data is duplicated, and the record itself is
+  // never touched — the file will always show its current price live).
   const copySourceToFile = async (fileId) => {
     if (!copyPickerSource) return;
     await addItemToFile(fileId, copyPickerSource.type, copyPickerSource.record);
@@ -11197,7 +11223,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   {(draftFile.items || []).length === 0 ? (
                     <p className="text-sm text-stone-400 text-center py-10">No services added yet — use "Add services" above.</p>
                   ) : (
-                    (draftFile.items || []).map((it) => (
+                    (draftFile.items || []).map((it) => {
+                      const r = resolveFileItem(it);
+                      return (
                       <div key={it.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-stone-50 transition-colors">
                         <button
                           type="button"
@@ -11205,13 +11233,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           className="min-w-0 text-left flex-1"
                         >
                           <p className="text-xs text-teal-800 font-semibold">{FILE_SOURCE_LABELS[it.sourceType] || it.sourceType}</p>
-                          <p className="text-sm text-stone-900 truncate">{it.label}</p>
-                          <p className="text-xs text-stone-400">{formatDisplayDate(it.date)}</p>
+                          <p className="text-sm text-stone-900 truncate">{r.label}</p>
+                          <p className="text-xs text-stone-400">{r.date ? formatDisplayDate(r.date) : "-"}</p>
                         </button>
                         <div className="flex items-center gap-3 shrink-0">
                           <button type="button" onClick={() => viewFileItemDetails(it, { draft: true, itemId: it.id })} className="text-right">
-                            <p className="text-sm font-bold">{fmt(it.soldPrice)} {it.currency}</p>
-                            <p className="text-xs text-emerald-700">net {fmt(it.netPrice)} {it.currency}</p>
+                            <p className="text-sm font-bold">{fmt(r.soldPrice)} {r.currency}</p>
+                            <p className="text-xs text-emerald-700">net {fmt(r.netPrice)} {r.currency}</p>
                           </button>
                           <button
                             onClick={() => removeDraftItem(it.id)}
@@ -11221,7 +11249,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           </button>
                         </div>
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -11352,7 +11381,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   {(openFile.items || []).length === 0 ? (
                     <p className="text-sm text-stone-400 text-center py-10">No items added to this file yet.</p>
                   ) : (
-                    (openFile.items || []).map((it) => (
+                    (openFile.items || []).map((it) => {
+                      const r = resolveFileItem(it);
+                      return (
                       <div key={it.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-stone-50 transition-colors">
                         <button
                           type="button"
@@ -11360,13 +11391,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           className="min-w-0 text-left flex-1"
                         >
                           <p className="text-xs text-teal-800 font-semibold">{FILE_SOURCE_LABELS[it.sourceType] || it.sourceType}</p>
-                          <p className="text-sm text-stone-900 truncate">{it.label}</p>
-                          <p className="text-xs text-stone-400">{formatDisplayDate(it.date)}</p>
+                          <p className="text-sm text-stone-900 truncate">{r.label}</p>
+                          <p className="text-xs text-stone-400">{r.date ? formatDisplayDate(r.date) : "-"}</p>
                         </button>
                         <div className="flex items-center gap-3 shrink-0">
                           <button type="button" onClick={() => viewFileItemDetails(it, { fileId: openFile.id, itemId: it.id })} className="text-right">
-                            <p className="text-sm font-bold">{fmt(it.soldPrice)} {it.currency}</p>
-                            <p className="text-xs text-emerald-700">net {fmt(it.netPrice)} {it.currency}</p>
+                            <p className="text-sm font-bold">{fmt(r.soldPrice)} {r.currency}</p>
+                            <p className="text-xs text-emerald-700">net {fmt(r.netPrice)} {r.currency}</p>
                           </button>
                           {editingFileServices && filesPerm.canEdit && (
                             <button
@@ -11378,15 +11409,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           )}
                         </div>
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
             )}
 
-            {/* Picker: pull a read-only copy of an existing Flights/Hotels/Visa record into
-                the currently open file. Selecting a record only ever ADDS a snapshot here —
-                it never edits, deletes, or otherwise affects the original record or that
+            {/* Picker: pull a live-linked Flights/Hotels/Visa record into the currently
+                open file. Selecting a record only ever ADDS a link here — it never edits,
+                deletes, or otherwise affects the original record or that
                 section's own totals. */}
             {showFilePicker && (openFile || draftFile) && (
               <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50" onClick={() => setShowFilePicker(false)}>
@@ -12576,7 +12608,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </button>
             </div>
             <p className="text-xs text-stone-400 mb-3">
-              Adds a copy of this {FILE_SOURCE_LABELS[copyPickerSource.type] || copyPickerSource.type} record's price — the original stays untouched.
+              Links this {FILE_SOURCE_LABELS[copyPickerSource.type] || copyPickerSource.type} record into the file — its price stays live, and the original record is never touched.
             </p>
 
             <button
