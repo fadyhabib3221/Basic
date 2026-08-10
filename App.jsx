@@ -13,7 +13,7 @@ import {
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
   History, Bell, Send, Landmark, Receipt, PieChart, ArrowUpCircle, ArrowDownCircle,
-  Banknote, HandCoins, ClipboardList, Globe, Key, Truck, Filter,
+  Banknote, HandCoins, ClipboardList, Globe, Key, Truck, Filter, Settings,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -1914,6 +1914,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // for each department from one place, instead of only inline on each section's ticket
   // form. Flights, Hotels, Visa, and Transportation each keep their own supplier pool.
   const [showManageSuppliers, setShowManageSuppliers] = useState(false);
+  // "Management" flyout menu in the header — groups the account/admin icon buttons
+  // (backup, restore, employees, license, login history, activity log, requests,
+  // change password) behind a single labeled button instead of a row of bare icons.
+  const [showManagementMenu, setShowManagementMenu] = useState(false);
   const [supplierManageTab, setSupplierManageTab] = useState("flights");
   // Draft text for adding a new name to the Flights supplier list, from the Manage
   // Suppliers panel's "Flights" tab.
@@ -6982,19 +6986,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <Plane size={140} className="pointer-events-none absolute -bottom-8 -right-6 text-white/[0.06] rotate-45" />
           <Compass size={90} className="pointer-events-none absolute -top-6 left-[38%] text-white/[0.05]" />
           <Luggage size={70} className="pointer-events-none absolute -bottom-4 left-[18%] text-white/[0.05] hidden md:block" />
-          {(canManageCompanies || canAccessAccounts) && (
-            <div className="absolute top-2.5 right-2.5 z-10 flex flex-col items-end gap-1.5 sm:gap-2">
-              {canAccessAccounts && (
-                <button
-                  type="button"
-                  onClick={() => setAccountsLang((l) => (l === "ar" ? "en" : "ar"))}
-                  title={accountsLang === "ar" ? "Switch to English" : "التحويل للعربية"}
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center gap-1 transition-colors"
-                >
-                  <Globe size={15} />
-                  <span className="text-xs font-semibold">{accountsLang === "ar" ? "EN" : "AR"}</span>
+          <div className="absolute top-2.5 right-2.5 z-10 flex flex-col items-end gap-1.5 sm:gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {canAccessAccounts && (
+                  <button
+                    type="button"
+                    onClick={() => setAccountsLang((l) => (l === "ar" ? "en" : "ar"))}
+                    title={accountsLang === "ar" ? "Switch to English" : "التحويل للعربية"}
+                    className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <Globe size={15} />
+                    <span className="text-xs font-semibold">{accountsLang === "ar" ? "EN" : "AR"}</span>
+                  </button>
+                )}
+                <button onClick={handleLogout} title="Sign out"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  <LogOut size={15} />
                 </button>
-              )}
+              </div>
               {canManageCompanies && (
                 <div className="flex flex-col items-end gap-1.5 sm:gap-2">
                   <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage Corporates"
@@ -7007,8 +7016,106 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </button>
                 </div>
               )}
-            </div>
-          )}
+              {/* "Management" flyout — groups the account/admin icon actions behind one
+                  labeled button. Opens sideways (toward the left) with a small arrow
+                  pointer connecting the panel back to the button. */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowManagementMenu((v) => !v)}
+                  title="Management"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Settings size={15} /> <span className="hidden sm:inline">Management</span>
+                  <ChevronDown size={13} className={`transition-transform ${showManagementMenu ? "rotate-90" : ""}`} />
+                </button>
+                {showManagementMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowManagementMenu(false)} />
+                    <div className="absolute top-0 left-full ml-3 z-20 w-56 bg-white rounded-2xl border border-stone-200 shadow-xl p-1.5 anim-slide-right">
+                      <div className="absolute top-3 -left-1.5 w-3 h-3 bg-white border-b border-l border-stone-200 rotate-45" />
+                      {hasAdminAccess && (
+                        <button
+                          onClick={() => { handleBackup(); setShowManagementMenu(false); }}
+                          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
+                        >
+                          <Download size={15} className="text-teal-800" /> Backup
+                        </button>
+                      )}
+                      {hasAdminAccess && (
+                        <button
+                          onClick={() => { triggerRestore(); setShowManagementMenu(false); }}
+                          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
+                        >
+                          <Upload size={15} className="text-teal-800" /> Restore
+                        </button>
+                      )}
+                      {hasAdminAccess && (
+                        <button
+                          onClick={() => { setShowManage(!showManage); setShowManagementMenu(false); }}
+                          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
+                        >
+                          <Users size={15} className="text-teal-800" /> Manage employees
+                        </button>
+                      )}
+                      {currentUser.isAdmin && (
+                        <button
+                          onClick={() => { setShowLicensePanel(!showLicensePanel); setShowManagementMenu(false); }}
+                          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
+                        >
+                          <Key size={15} className="text-teal-800" /> {isLicensed ? "License" : "Activate license"}
+                        </button>
+                      )}
+                      {currentUser.isAdmin && (
+                        <button
+                          onClick={() => { setShowLoginHistory(!showLoginHistory); setShowManagementMenu(false); }}
+                          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
+                        >
+                          <History size={15} className="text-teal-800" /> Login history
+                        </button>
+                      )}
+                      {currentUser.isAdmin && (
+                        <button
+                          onClick={() => { setShowActivityLog(!showActivityLog); setShowManagementMenu(false); }}
+                          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
+                        >
+                          <ClipboardList size={15} className="text-teal-800" /> Activity log
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          setShowRequestsPanel(!showRequestsPanel);
+                          setRequestSendError("");
+                          setShowManagementMenu(false);
+                        }}
+                        className="w-full relative flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
+                      >
+                        <Bell size={15} className="text-teal-800" /> Requests
+                        {myPendingRequestsCount > 0 && (
+                          <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                            {myPendingRequestsCount}
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowChangePassword(!showChangePassword);
+                          setPasswordError("");
+                          setPasswordSuccess("");
+                          setCurrentPasswordInput("");
+                          setNewPasswordInput("");
+                          setConfirmPasswordInput("");
+                          setShowManagementMenu(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
+                      >
+                        <Lock size={15} className="text-teal-800" /> Change password
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+          </div>
           <header className="relative flex flex-col gap-2 sm:gap-3 px-3 py-2.5 sm:px-4 sm:py-3 md:px-6 md:py-4">
             <div className="flex items-start justify-between flex-wrap gap-2 sm:gap-3">
             <div className="flex items-center gap-2 sm:gap-3 pr-20 sm:pr-0">
@@ -7053,18 +7160,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               {hasAdminAccess && (
-                <button onClick={handleBackup} title="Backup"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
-                  <Download size={15} />
-                </button>
-              )}
-              {hasAdminAccess && (
-                <button onClick={triggerRestore} title="Restore"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
-                  <Upload size={15} />
-                </button>
-              )}
-              {hasAdminAccess && (
                 <input
                   type="file"
                   accept="application/json"
@@ -7073,65 +7168,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="hidden"
                 />
               )}
-              {hasAdminAccess && (
-                <button onClick={() => setShowManage(!showManage)} title="Manage employees"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
-                  <Users size={15} />
-                </button>
-              )}
-              {currentUser.isAdmin && (
-                <button onClick={() => setShowLicensePanel(!showLicensePanel)} title={isLicensed ? "License" : "Activate license"}
-                  className={`border text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors ${
-                    isLicensed
-                      ? "border-white/20 bg-white/10 hover:bg-white/20 text-white"
-                      : "border-amber-300/50 bg-amber-500/20 hover:bg-amber-500/30 text-amber-100"
-                  }`}>
-                  <Key size={15} />
-                </button>
-              )}
-              {currentUser.isAdmin && (
-                <button onClick={() => setShowLoginHistory(!showLoginHistory)} title="Login history"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
-                  <History size={15} />
-                </button>
-              )}
-              {currentUser.isAdmin && (
-                <button onClick={() => setShowActivityLog(!showActivityLog)} title="Activity log"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
-                  <ClipboardList size={15} />
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setShowRequestsPanel(!showRequestsPanel);
-                  setRequestSendError("");
-                }}
-                title="Requests"
-                className="relative border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
-                <Bell size={15} />
-                {myPendingRequestsCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-                    {myPendingRequestsCount}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => {
-                  setShowChangePassword(!showChangePassword);
-                  setPasswordError("");
-                  setPasswordSuccess("");
-                  setCurrentPasswordInput("");
-                  setNewPasswordInput("");
-                  setConfirmPasswordInput("");
-                }}
-                title="Change password"
-                className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
-                <Lock size={15} />
-              </button>
-              <button onClick={handleLogout} title="Sign out"
-                className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-1.5 sm:p-2 flex items-center justify-center transition-colors">
-                <LogOut size={15} />
-              </button>
               {onChangeServer && (
                 <button
                   onClick={() => {
