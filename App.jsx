@@ -1077,10 +1077,6 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
   const [showPassword, setShowPassword] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
-  // Which section's detail dropdown (View all/Edit/Delete) is currently open — only one
-  // at a time, so the list stays short and scannable instead of showing every section's
-  // toggles expanded all at once.
-  const [expandedSection, setExpandedSection] = useState(null);
 
   useEffect(() => {
     if (emp) {
@@ -1203,87 +1199,84 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
 
         <p className="text-xs text-stone-500 mb-1">Section access &amp; permissions</p>
         <p className="text-[11px] text-stone-400 mb-2">
-          Turn a section on or off, then set exactly what they can do inside it — View all services, Edit, and Delete are each independent per section.
+          Turn a permission on or off, then pick exactly which sections it applies to.
         </p>
-        <div className="space-y-2">
-          {SECTION_OPTIONS.map((s) => {
-            const sectionOn = !!sections[s.value];
-            const perm = employeeSectionPerm(emp, s.value);
-            const hasOwnership = SECTIONS_WITH_OWNERSHIP.includes(s.value);
-            const isOpen = expandedSection === s.value;
-            const Icon = s.icon;
-            return (
-              <div key={s.value} className="border border-stone-200 rounded-xl overflow-hidden">
-                <div className="flex items-center gap-2.5 px-3 py-2.5">
-                  <span className="shrink-0 bg-stone-100 text-stone-600 rounded-lg p-1.5">
-                    <Icon size={16} className={s.iconClassName || ""} />
-                  </span>
+        <div className={`space-y-3 ${emp.isAccounting ? "opacity-50 pointer-events-none" : ""}`}>
+          <div className="border border-stone-200 rounded-xl p-3">
+            <p className="text-sm text-stone-700 font-medium mb-0.5">Section access</p>
+            <p className="text-[11px] text-stone-400 mb-2">Turn a whole section on or off for this employee</p>
+            <div className="flex flex-wrap gap-1.5">
+              {SECTION_OPTIONS.map((s) => {
+                const sectionOn = !!sections[s.value];
+                const Icon = s.icon;
+                return (
                   <button
+                    key={s.value}
                     type="button"
-                    onClick={() => sectionOn && setExpandedSection(isOpen ? null : s.value)}
-                    disabled={!sectionOn}
-                    className={`flex-1 flex items-center justify-between gap-2 text-left ${sectionOn ? "cursor-pointer" : "cursor-default"}`}
-                  >
-                    <span className="text-sm text-stone-700 font-medium">{s.label}</span>
-                    {sectionOn && (
-                      <ChevronDown size={15} className={`shrink-0 text-stone-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSetSection(s.value, !sectionOn);
-                      if (sectionOn) setExpandedSection((cur) => (cur === s.value ? null : cur));
-                    }}
-                    className={`shrink-0 relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                      sectionOn ? "bg-teal-700" : "bg-stone-300"
+                    onClick={() => onSetSection(s.value, !sectionOn)}
+                    className={`flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1.5 border transition-colors ${
+                      sectionOn ? "bg-teal-700 border-teal-700 text-white" : "bg-white border-stone-300 text-stone-500 hover:bg-stone-50"
                     }`}
                   >
-                    <span
-                      className="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
-                      style={{ transform: sectionOn ? "translateX(18px)" : "translateX(2px)" }}
-                    />
+                    <Icon size={13} className={s.iconClassName || ""} /> {s.label}
                   </button>
-                </div>
-                {sectionOn && isOpen && (
-                  <div className={`px-3 pb-2 divide-y divide-stone-100 border-t border-stone-100 ${emp.isAccounting ? "opacity-50 pointer-events-none" : ""}`}>
-                    {hasOwnership && (
-                      <ToggleSwitch
-                        label="View all services"
-                        description={`See every employee's ${s.label.toLowerCase()} records, not just their own`}
-                        checked={perm.canViewAll}
-                        onChange={(v) => onSetSectionPerm(s.value, "canViewAll", v)}
-                      />
-                    )}
-                    <ToggleSwitch
-                      label="Edit"
-                      description={`Edit ${s.label.toLowerCase()} records they can see`}
-                      checked={perm.canEdit}
-                      onChange={(v) => onSetSectionPerm(s.value, "canEdit", v)}
-                    />
-                    <ToggleSwitch
-                      label="Delete"
-                      description={`Permanently remove ${s.label.toLowerCase()} records they can see`}
-                      checked={perm.canDelete}
-                      onChange={(v) => onSetSectionPerm(s.value, "canDelete", v)}
-                    />
-                    <ToggleSwitch
-                      label="Corporates"
-                      description="Add, edit, and delete saved corporate accounts (this is the same Corporate Management access everywhere, not specific to this section)"
-                      checked={!!emp.canManageCompanies}
-                      onChange={(v) => onSetPermission("canManageCompanies", v)}
-                    />
-                    <ToggleSwitch
-                      label="Suppliers"
-                      description="Add, edit, and delete saved suppliers (this is the same Manage Suppliers access everywhere, not specific to this section)"
-                      checked={!!emp.canManageCompanies}
-                      onChange={(v) => onSetPermission("canManageCompanies", v)}
-                    />
-                  </div>
-                )}
+                );
+              })}
+            </div>
+          </div>
+
+          {[
+            { key: "canViewAll", label: "View all services", description: "See every employee's records, not just their own" },
+            { key: "canEdit", label: "Edit", description: "Edit records they can see" },
+            { key: "canDelete", label: "Delete", description: "Permanently remove records they can see" },
+          ].map((p) => (
+            <div key={p.key} className="border border-stone-200 rounded-xl p-3">
+              <p className="text-sm text-stone-700 font-medium mb-0.5">{p.label}</p>
+              <p className="text-[11px] text-stone-400 mb-2">{p.description}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {SECTION_OPTIONS.map((s) => {
+                  const sectionOn = !!sections[s.value];
+                  const perm = employeeSectionPerm(emp, s.value);
+                  const checked = !!perm[p.key];
+                  const Icon = s.icon;
+                  return (
+                    <button
+                      key={s.value}
+                      type="button"
+                      disabled={!sectionOn}
+                      onClick={() => onSetSectionPerm(s.value, p.key, !checked)}
+                      className={`flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1.5 border transition-colors ${
+                        !sectionOn
+                          ? "opacity-40 cursor-not-allowed bg-white border-stone-200 text-stone-400"
+                          : checked
+                          ? "bg-teal-700 border-teal-700 text-white"
+                          : "bg-white border-stone-300 text-stone-500 hover:bg-stone-50"
+                      }`}
+                    >
+                      <Icon size={13} className={s.iconClassName || ""} /> {s.label}
+                    </button>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          ))}
+
+          <div className="border border-stone-200 rounded-xl p-3">
+            <ToggleSwitch
+              label="Corporates"
+              description="Add, edit, and delete saved corporate accounts (this is the same Corporate Management access everywhere, not specific to any section)"
+              checked={!!emp.canManageCompanies}
+              onChange={(v) => onSetPermission("canManageCompanies", v)}
+            />
+          </div>
+          <div className="border border-stone-200 rounded-xl p-3">
+            <ToggleSwitch
+              label="Suppliers"
+              description="Add, edit, and delete saved suppliers (this is the same Manage Suppliers access everywhere, not specific to any section)"
+              checked={!!emp.canManageCompanies}
+              onChange={(v) => onSetPermission("canManageCompanies", v)}
+            />
+          </div>
         </div>
       </div>
     </div>
