@@ -2755,7 +2755,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setFetchingUsdRate(true);
     setFetchUsdRateError("");
     try {
-      const res = await fetch("https://open.er-api.com/v6/latest/USD");
+      const res = await fetch("https://api.exchangerate-api.com/v4/latest/USD");
       if (!res.ok) throw new Error("Request failed");
       const data = await res.json();
       const rate = data && data.rates && data.rates.EGP;
