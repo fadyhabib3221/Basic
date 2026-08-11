@@ -8515,14 +8515,29 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
           <div className="flex flex-wrap items-start gap-2 mt-4">
             <div className="flex-1 min-w-[160px]">
-              <label className="text-xs text-stone-500 block mb-1">Company (optional)</label>
-              <input
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              <label className="text-xs text-stone-500 block mb-1">Corporates (optional)</label>
+              <select
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
                 value={form.company}
-                onChange={(e) => setForm({ ...form, company: e.target.value.toUpperCase() })}
-                placeholder="e.g. Acme Corp"
-                list="company-suggestions"
-              />
+                onChange={(e) => setForm({ ...form, company: e.target.value })}
+              >
+                <option value="">— No corporate —</option>
+                {form.company && !suggestions.companies.some((c) => companyName(c) === form.company) && (
+                  // The ticket already has a company value that isn't (or is no longer) a
+                  // registered corporate — e.g. saved before Corporate Management existed,
+                  // or the corporate was later renamed/deleted. Keep it selectable/visible
+                  // instead of silently blanking the field.
+                  <option value={form.company}>{form.company} (not registered)</option>
+                )}
+                {[...suggestions.companies]
+                  .sort((a, b) => companyName(a).localeCompare(companyName(b)))
+                  .map((c) => {
+                    const name = companyName(c);
+                    return (
+                      <option key={name} value={name}>{name}</option>
+                    );
+                  })}
+              </select>
             </div>
             <div className="w-40 shrink-0">
               <label className="text-xs text-stone-500 block mb-1">Supplier</label>
@@ -9081,11 +9096,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           />
         </div>
 
-        <datalist id="company-suggestions">
-          {suggestions.companies.map((c) => (
-            <option key={companyName(c)} value={companyName(c)} />
-          ))}
-        </datalist>
         <datalist id="airline-suggestions">
           {suggestions.airlines.map((code) => (
             <option key={`u-${code}`} value={code} />
