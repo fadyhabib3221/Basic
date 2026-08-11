@@ -6990,7 +6990,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
           <header className="relative flex flex-col gap-2 sm:gap-3 px-3 py-2.5 sm:px-4 sm:py-3 md:px-6 md:py-4">
             <div className="flex items-start justify-between flex-wrap gap-2 sm:gap-3">
-            <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 z-10 order-2">
+            <div className="flex flex-col items-end gap-1.5 sm:gap-2 z-10 order-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 {canAccessAccounts && (
                   <button
                     type="button"
@@ -7002,19 +7003,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <span className="text-xs font-semibold">{accountsLang === "ar" ? "EN" : "AR"}</span>
                   </button>
                 )}
-                <button
-                  onClick={() => {
-                    setShowChangePassword(!showChangePassword);
-                    setPasswordError("");
-                    setPasswordSuccess("");
-                    setCurrentPasswordInput("");
-                    setNewPasswordInput("");
-                    setConfirmPasswordInput("");
-                  }}
-                  title="Change password"
-                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
-                  <Lock size={15} />
-                </button>
                 <button
                   onClick={() => {
                     setShowRequestsPanel(!showRequestsPanel);
@@ -7029,12 +7017,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     </span>
                   )}
                 </button>
+                <button
+                  onClick={() => {
+                    setShowChangePassword(!showChangePassword);
+                    setPasswordError("");
+                    setPasswordSuccess("");
+                    setCurrentPasswordInput("");
+                    setNewPasswordInput("");
+                    setConfirmPasswordInput("");
+                  }}
+                  title="Change password"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  <Lock size={15} />
+                </button>
                 <button onClick={handleLogout} title="Sign out"
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
                   <LogOut size={15} />
                 </button>
+              </div>
               {canManageCompanies && (
-                <>
+                <div className="flex flex-col items-end gap-1.5 sm:gap-2">
                   <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage Corporates"
                     className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
                     <Factory size={15} /> <span className="hidden sm:inline">Corporates</span>
@@ -7043,7 +7045,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
                     <Truck size={15} /> <span className="hidden sm:inline">Suppliers</span>
                   </button>
-                </>
+                </div>
               )}
               {/* "Management" flyout — groups the account/admin icon actions behind one
                   labeled button. Opens sideways (toward the left) with a small arrow
