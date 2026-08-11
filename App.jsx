@@ -739,8 +739,10 @@ const getEmptyHotelForm = () => ({
   customer: "",
   hotel: "",
   supplier: "",
-  // One currency for the whole booking — applies to every room line's net and sold price.
-  currency: "EGP",
+  // Net and sold price each have their own currency, applied across every room line
+  // in the booking.
+  netCurrency: "EGP",
+  soldCurrency: "EGP",
   roomLines: [emptyRoomLine()],
   // The date the reservation itself was made — separate from each room's own
   // check-in/check-out dates below.
@@ -771,7 +773,9 @@ const getEmptyVisaForm = () => ({
   customers: [emptyVisaCustomer()],
   visaType: "",
   supplier: "",
-  currency: "EGP",
+  // Net and sold price can each be entered in a different currency.
+  netCurrency: "EGP",
+  soldCurrency: "EGP",
   netPrice: "",
   soldPrice: "",
   bookingDate: todayDateStr(),
@@ -794,7 +798,11 @@ const getEmptyCarForm = () => ({
   driverTip: "",
   startsAtAirport: false,
   flightNumber: "",
+  // Currency for the collection & driver tip amounts (operational cash, not the
+  // net/sold sale price). Net and sold price each have their own currency below.
   currency: "EGP",
+  netCurrency: "EGP",
+  soldCurrency: "EGP",
   netPrice: "",
   soldPrice: "",
   bookingDate: todayDateStr(),
@@ -3324,9 +3332,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       customer: h.customer || "",
       hotel: h.hotel || "",
       supplier: h.supplier || "",
-      // Legacy bookings stored currency per room line — fall back to the first line's
-      // currency so older records still load with something sensible.
-      currency: h.currency || (Array.isArray(h.roomLines) && h.roomLines[0] && h.roomLines[0].currency) || "EGP",
+      // Legacy bookings stored one currency (per booking, or even per room line) for
+      // both net and sold — fall back to it so older records still load sensibly.
+      netCurrency: h.netCurrency || h.currency || (Array.isArray(h.roomLines) && h.roomLines[0] && h.roomLines[0].currency) || "EGP",
+      soldCurrency: h.soldCurrency || h.currency || (Array.isArray(h.roomLines) && h.roomLines[0] && h.roomLines[0].currency) || "EGP",
       roomLines:
         Array.isArray(h.roomLines) && h.roomLines.length > 0
           ? h.roomLines.map((l) => ({
@@ -3497,7 +3506,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       customers: v.customers && v.customers.length > 0 ? v.customers.map((c) => ({ ...c })) : [emptyVisaCustomer()],
       visaType: v.visaType || "",
       supplier: v.supplier || "",
-      currency: v.currency || "EGP",
+      // Legacy bookings stored one currency for both net and sold — fall back to it.
+      netCurrency: v.netCurrency || v.currency || "EGP",
+      soldCurrency: v.soldCurrency || v.currency || "EGP",
       netPrice: v.netPrice,
       soldPrice: v.soldPrice,
       bookingDate: v.bookingDate || todayDateStr(),
@@ -3618,6 +3629,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       startsAtAirport: !!c.startsAtAirport,
       flightNumber: c.flightNumber || "",
       currency: c.currency || "EGP",
+      // Legacy bookings stored one currency for both net and sold — fall back to it.
+      netCurrency: c.netCurrency || c.currency || "EGP",
+      soldCurrency: c.soldCurrency || c.currency || "EGP",
       netPrice: c.netPrice,
       soldPrice: c.soldPrice,
       bookingDate: c.bookingDate || todayDateStr(),
@@ -3837,8 +3851,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           ["Nights", nights],
           ["Guests", guestNames],
           ["Children", childrenText],
-          ["Net (per room/night)", `${fmt(hotelLineNetTotal(line, nights))} ${h.currency}`],
-          ["Sold (per room/night)", `${fmt(hotelLineSoldTotal(line, nights))} ${h.currency}`],
+          ["Net (per room/night)", `${fmt(hotelLineNetTotal(line, nights))} ${h.netCurrency || "EGP"}`],
+          ["Sold (per room/night)", `${fmt(hotelLineSoldTotal(line, nights))} ${h.soldCurrency || "EGP"}`],
         ],
       };
     });
@@ -3850,7 +3864,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           ["Company", h.customer && h.customer.trim() ? h.customer : "Individual"],
           ["Hotel", h.hotel || "-"],
           ["Supplier", h.supplier || "-"],
-          ["Currency", h.currency || "EGP"],
+          ["Net currency", h.netCurrency || "EGP"],
+          ["Sold currency", h.soldCurrency || "EGP"],
           ["Booking date", h.bookingDate ? formatDisplayDate(h.bookingDate) : "-"],
           ["Notes", h.notes || "-"],
         ],
@@ -3887,11 +3902,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         {
           heading: "Pricing",
           rows: [
-            ["Net (per person)", `${fmt(parseFloat(v.netPrice) || 0)} ${v.currency}`],
-            ["Sold (per person)", `${fmt(parseFloat(v.soldPrice) || 0)} ${v.currency}`],
-            ["Net total", `${fmt(visaNetTotal(v))} ${v.currency}`],
-            ["Sold total", `${fmt(visaSoldTotal(v))} ${v.currency}`],
-            ["Profit", `${fmt(visaProfitTotal(v))} ${v.currency}`],
+            ["Net (per person)", `${fmt(parseFloat(v.netPrice) || 0)} ${v.netCurrency || "EGP"}`],
+            ["Sold (per person)", `${fmt(parseFloat(v.soldPrice) || 0)} ${v.soldCurrency || "EGP"}`],
+            ["Net total", `${fmt(visaNetTotal(v))} ${v.netCurrency || "EGP"}`],
+            ["Sold total", `${fmt(visaSoldTotal(v))} ${v.soldCurrency || "EGP"}`],
+            ["Profit", `${fmt(visaProfitTotal(v))} EGP`],
           ],
         },
       ]
@@ -3907,7 +3922,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const r = resolveFileItem(it);
       return [
         `${FILE_SOURCE_LABELS[it.sourceType] || it.sourceType} — ${r.label}`,
-        `${r.date ? formatDisplayDate(r.date) : "-"}<br/>Net ${fmt(r.netPrice)} ${r.currency} &middot; Sold ${fmt(r.soldPrice)} ${r.currency}`,
+        `${r.date ? formatDisplayDate(r.date) : "-"}<br/>Net ${fmt(r.netPrice)} ${r.netCurrency} &middot; Sold ${fmt(r.soldPrice)} ${r.soldCurrency}`,
       ];
     });
 
@@ -5196,9 +5211,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const hotelLineNetTotal = (l, nights) => (parseFloat(l.netPrice) || 0) * (parseInt(l.count, 10) || 0) * nights;
   const hotelLineSoldTotal = (l, nights) => (parseFloat(l.soldPrice) || 0) * (parseInt(l.count, 10) || 0) * nights;
   const hotelNetTotal = (h) =>
-    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineNetTotal(l, roomLineNights(l, h)), h.currency), 0);
+    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineNetTotal(l, roomLineNights(l, h)), h.netCurrency), 0);
   const hotelSoldTotal = (h) =>
-    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineSoldTotal(l, roomLineNights(l, h)), h.currency), 0);
+    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineSoldTotal(l, roomLineNights(l, h)), h.soldCurrency), 0);
   const hotelProfitTotal = (h) => hotelSoldTotal(h) - hotelNetTotal(h);
 
   // Visa prices are entered per applicant, so a booking's real net/sold amounts are the
@@ -5207,7 +5222,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const visaCustomersCount = (v) => (v.customers || []).length || 1;
   const visaNetTotal = (v) => (parseFloat(v.netPrice) || 0) * visaCustomersCount(v);
   const visaSoldTotal = (v) => (parseFloat(v.soldPrice) || 0) * visaCustomersCount(v);
-  const visaProfitTotal = (v) => visaSoldTotal(v) - visaNetTotal(v);
+  // Net and sold can each be in a different currency, so profit converts both to EGP first.
+  const visaProfitTotal = (v) =>
+    hotelInEgp(visaSoldTotal(v), v.soldCurrency) - hotelInEgp(visaNetTotal(v), v.netCurrency);
+
+  // Car/transfer net, sold, and profit — net and sold can each be in a different
+  // currency, so profit converts both to EGP first (same convention as hotels/visas).
+  const carNetTotal = (c) => parseFloat(c.netPrice) || 0;
+  const carSoldTotal = (c) => parseFloat(c.soldPrice) || 0;
+  const carProfitTotal = (c) =>
+    hotelInEgp(carSoldTotal(c), c.soldCurrency) - hotelInEgp(carNetTotal(c), c.netCurrency);
+
   // A booking is Corporate when a company name was entered; otherwise it's an
   // Individual booking automatically — no separate toggle needed.
   const hotelBookingType = (h) => (h.customer && h.customer.trim() ? "Corporate" : "Individual");
@@ -5383,8 +5408,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // booking, and the number of bookings for transfers.
   const visaTotals = filteredVisaBookings.reduce(
     (acc, v) => {
-      const net = hotelInEgp(visaNetTotal(v), v.currency);
-      const sold = hotelInEgp(visaSoldTotal(v), v.currency);
+      const net = hotelInEgp(visaNetTotal(v), v.netCurrency);
+      const sold = hotelInEgp(visaSoldTotal(v), v.soldCurrency);
       acc.count += visaCustomersCount(v);
       acc.net += net;
       acc.sold += sold;
@@ -5395,8 +5420,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   );
   const carTotals = filteredCarBookings.reduce(
     (acc, c) => {
-      const net = hotelInEgp(parseFloat(c.netPrice) || 0, c.currency);
-      const sold = hotelInEgp(parseFloat(c.soldPrice) || 0, c.currency);
+      const net = hotelInEgp(carNetTotal(c), c.netCurrency);
+      const sold = hotelInEgp(carSoldTotal(c), c.soldCurrency);
       acc.count += 1;
       acc.net += net;
       acc.sold += sold;
@@ -5451,8 +5476,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       supplier: (v.supplier || "").trim(),
       customers: (v.customers || []).map((c) => (c.name || "").trim()).filter(Boolean),
       date: v.bookingDate || "",
-      net: hotelInEgp(visaNetTotal(v), v.currency),
-      sold: hotelInEgp(visaSoldTotal(v), v.currency),
+      net: hotelInEgp(visaNetTotal(v), v.netCurrency),
+      sold: hotelInEgp(visaSoldTotal(v), v.soldCurrency),
     })),
     ...carBookings.map((c) => ({
       key: `cars-${c.id}`,
@@ -5460,8 +5485,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       supplier: (c.supplier || "").trim(),
       customers: [(c.customerName || "").trim()].filter(Boolean),
       date: c.bookingDate || "",
-      net: hotelInEgp(parseFloat(c.netPrice) || 0, c.currency),
-      sold: hotelInEgp(parseFloat(c.soldPrice) || 0, c.currency),
+      net: hotelInEgp(carNetTotal(c), c.netCurrency),
+      sold: hotelInEgp(carSoldTotal(c), c.soldCurrency),
     })),
   ];
 
@@ -5598,10 +5623,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     hotels: hotelBookings.filter((h) => inReportsRange(h.bookingDate)).reduce((s, h) => s + hotelProfitTotal(h), 0),
     visa: visaBookings
       .filter((v) => inReportsRange(v.bookingDate))
-      .reduce((s, v) => s + hotelInEgp(visaProfitTotal(v), v.currency), 0),
+      .reduce((s, v) => s + visaProfitTotal(v), 0),
     cars: carBookings
       .filter((c) => inReportsRange(c.bookingDate))
-      .reduce((s, c) => s + hotelInEgp((parseFloat(c.soldPrice) || 0) - (parseFloat(c.netPrice) || 0), c.currency), 0),
+      .reduce((s, c) => s + carProfitTotal(c), 0),
   };
   const reportTotalRevenue = Object.values(reportRevenueBySection).reduce((a, b) => a + b, 0);
   const reportExpensesByCategory = {};
@@ -5628,10 +5653,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     hotelBookings.filter((h) => (h.bookingDate || "").slice(0, 7) === thisMonthPrefix).reduce((s, h) => s + hotelProfitTotal(h), 0) +
     visaBookings
       .filter((v) => (v.bookingDate || "").slice(0, 7) === thisMonthPrefix)
-      .reduce((s, v) => s + hotelInEgp(visaProfitTotal(v), v.currency), 0) +
+      .reduce((s, v) => s + visaProfitTotal(v), 0) +
     carBookings
       .filter((c) => (c.bookingDate || "").slice(0, 7) === thisMonthPrefix)
-      .reduce((s, c) => s + hotelInEgp((parseFloat(c.soldPrice) || 0) - (parseFloat(c.netPrice) || 0), c.currency), 0);
+      .reduce((s, c) => s + carProfitTotal(c), 0);
   const monthExpenses = expenses
     .filter((e) => (e.date || "").slice(0, 7) === thisMonthPrefix)
     .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
@@ -5908,7 +5933,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // shown or totaled. If the original record was since deleted, returns a "missing" stub
   // instead of throwing, so the file just shows the item as gone rather than crashing.
   const resolveFileItem = (it) => {
-    const missing = { label: "(record deleted)", date: "", currency: "EGP", netPrice: 0, soldPrice: 0, missing: true };
+    const missing = { label: "(record deleted)", date: "", netCurrency: "EGP", soldCurrency: "EGP", netPrice: 0, soldPrice: 0, missing: true };
     if (it.sourceType === "flights") {
       const record = tickets.find((x) => x.id === it.sourceId);
       if (!record) return missing;
@@ -5916,7 +5941,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return {
         label: `${routeLabel(record)}${names ? " · " + names : ""}`,
         date: record.date,
-        currency: "EGP",
+        netCurrency: "EGP",
+        soldCurrency: "EGP",
         netPrice: parseFloat(record.netPrice) || 0,
         soldPrice: parseFloat(record.soldPrice) || 0,
       };
@@ -5927,7 +5953,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return {
         label: `${record.hotel || "Hotel"}${record.customer ? " · " + record.customer : ""}`,
         date: record.bookingDate,
-        currency: "EGP",
+        // hotelNetTotal/hotelSoldTotal already convert every room line to EGP internally.
+        netCurrency: "EGP",
+        soldCurrency: "EGP",
         netPrice: hotelNetTotal(record),
         soldPrice: hotelSoldTotal(record),
       };
@@ -5939,7 +5967,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return {
         label: `${record.visaType || "Visa"}${names ? " · " + names : ""}`,
         date: record.bookingDate,
-        currency: record.currency || "EGP",
+        netCurrency: record.netCurrency || record.currency || "EGP",
+        soldCurrency: record.soldCurrency || record.currency || "EGP",
         netPrice: visaNetTotal(record),
         soldPrice: visaSoldTotal(record),
       };
@@ -5950,7 +5979,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return {
         label: `${record.routeFrom || "-"} → ${record.routeTo || "-"}${record.customerName ? " · " + record.customerName : ""}`,
         date: record.bookingDate,
-        currency: record.currency || "EGP",
+        netCurrency: record.netCurrency || record.currency || "EGP",
+        soldCurrency: record.soldCurrency || record.currency || "EGP",
         netPrice: parseFloat(record.netPrice) || 0,
         soldPrice: parseFloat(record.soldPrice) || 0,
       };
@@ -5960,13 +5990,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Every item's amount converted into EGP (same conversion hotels already use), so a
   // file mixing EGP and USD items still totals correctly. Prices are resolved live from
-  // each item's linked record, so totals always match the source's current price.
+  // each item's linked record, so totals always match the source's current price. Net
+  // and sold can each be in a different currency, so they're converted separately.
   const fileTotals = (f) =>
     (f.items || []).reduce(
       (acc, it) => {
         const r = resolveFileItem(it);
-        acc.net += hotelInEgp(r.netPrice, r.currency);
-        acc.sold += hotelInEgp(r.soldPrice, r.currency);
+        acc.net += hotelInEgp(r.netPrice, r.netCurrency);
+        acc.sold += hotelInEgp(r.soldPrice, r.soldCurrency);
         acc.profit = acc.sold - acc.net;
         return acc;
       },
@@ -9620,11 +9651,23 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 />
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">Currency</label>
+                <label className="text-xs text-stone-500 block mb-1">Net currency</label>
                 <select
                   className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                  value={hotelForm.currency}
-                  onChange={(e) => setHotelForm({ ...hotelForm, currency: e.target.value })}
+                  value={hotelForm.netCurrency}
+                  onChange={(e) => setHotelForm({ ...hotelForm, netCurrency: e.target.value })}
+                >
+                  {HOTEL_CURRENCIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Sold currency</label>
+                <select
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={hotelForm.soldCurrency}
+                  onChange={(e) => setHotelForm({ ...hotelForm, soldCurrency: e.target.value })}
                 >
                   {HOTEL_CURRENCIES.map((c) => (
                     <option key={c.value} value={c.value}>{c.label}</option>
@@ -9739,7 +9782,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       />
                       <div className="flex items-center justify-between gap-2 mt-3">
                         <div className="text-xs text-emerald-700 font-semibold">
-                          {roomLineNights(line, hotelForm)} night{roomLineNights(line, hotelForm) === 1 ? "" : "s"} · {fmt(hotelLineSoldTotal(line, roomLineNights(line, hotelForm)) - hotelLineNetTotal(line, roomLineNights(line, hotelForm)))} {hotelForm.currency}
+                          {roomLineNights(line, hotelForm)} night{roomLineNights(line, hotelForm) === 1 ? "" : "s"} · {fmt(hotelInEgp(hotelLineSoldTotal(line, roomLineNights(line, hotelForm)), hotelForm.soldCurrency) - hotelInEgp(hotelLineNetTotal(line, roomLineNights(line, hotelForm)), hotelForm.netCurrency))} EGP
                         </div>
                         <button
                           onClick={() => removeHotelRoomLine(line.id)}
@@ -10121,7 +10164,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <div><span className="text-stone-500">Supplier: </span>{viewingHotelBooking.supplier || "-"}</div>
                 <div><span className="text-stone-500">Booking date: </span>{viewingHotelBooking.bookingDate ? formatDisplayDate(viewingHotelBooking.bookingDate) : "-"}</div>
                 <div><span className="text-stone-500">Employee: </span>{viewingHotelBooking.employee || "-"}</div>
-                <div><span className="text-stone-500">Currency: </span>{viewingHotelBooking.currency || "EGP"}</div>
+                <div><span className="text-stone-500">Net currency: </span>{viewingHotelBooking.netCurrency || "EGP"}</div>
+                <div><span className="text-stone-500">Sold currency: </span>{viewingHotelBooking.soldCurrency || "EGP"}</div>
                 <div><span className="text-stone-500">Notes: </span>{viewingHotelBooking.notes || "-"}</div>
               </div>
 
@@ -10141,8 +10185,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         </span>
                       </div>
                       <div className="text-xs text-stone-600 mb-2">
-                        Net: {fmt(hotelLineNetTotal(l, nights))} {viewingHotelBooking.currency || "EGP"} · Sold:{" "}
-                        {fmt(hotelLineSoldTotal(l, nights))} {viewingHotelBooking.currency || "EGP"}
+                        Net: {fmt(hotelLineNetTotal(l, nights))} {viewingHotelBooking.netCurrency || "EGP"} · Sold:{" "}
+                        {fmt(hotelLineSoldTotal(l, nights))} {viewingHotelBooking.soldCurrency || "EGP"}
                       </div>
                       {Array.isArray(l.guests) && l.guests.some((g) => g.name) && (
                         <div className="text-xs text-stone-700 mb-1">
@@ -10390,13 +10434,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
               <div>
-                <label className="text-xs text-stone-500 block mb-1">Currency</label>
+                <label className="text-xs text-stone-500 block mb-1">Net currency</label>
                 <select
                   className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
-                  value={visaForm.currency}
-                  onChange={(e) => setVisaForm({ ...visaForm, currency: e.target.value })}
+                  value={visaForm.netCurrency}
+                  onChange={(e) => setVisaForm({ ...visaForm, netCurrency: e.target.value })}
                 >
                   {HOTEL_CURRENCIES.map((c) => (
                     <option key={c.value} value={c.value}>{c.label}</option>
@@ -10415,6 +10459,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 />
               </div>
               <div>
+                <label className="text-xs text-stone-500 block mb-1">Sold currency</label>
+                <select
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                  value={visaForm.soldCurrency}
+                  onChange={(e) => setVisaForm({ ...visaForm, soldCurrency: e.target.value })}
+                >
+                  {HOTEL_CURRENCIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="text-xs text-stone-500 block mb-1">Sold (per person)</label>
                 <input
                   type="number"
@@ -10428,19 +10484,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
 
             {/* Live total preview: per-person prices above multiplied by the number of
-                customers entered, same style as the Hotels form's totals box. */}
+                customers entered, same style as the Hotels form's totals box. Profit
+                converts both currencies to EGP since net/sold can now differ. */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-1 mb-4">
               <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                 <p className="text-[11px] text-stone-500">Net total (× {visaForm.customers.length || 1})</p>
-                <p className="text-sm font-bold text-stone-800">{fmt(visaNetTotal(visaForm))} {visaForm.currency}</p>
+                <p className="text-sm font-bold text-stone-800">{fmt(visaNetTotal(visaForm))} {visaForm.netCurrency}</p>
               </div>
               <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                 <p className="text-[11px] text-stone-500">Sold total (× {visaForm.customers.length || 1})</p>
-                <p className="text-sm font-bold text-stone-800">{fmt(visaSoldTotal(visaForm))} {visaForm.currency}</p>
+                <p className="text-sm font-bold text-stone-800">{fmt(visaSoldTotal(visaForm))} {visaForm.soldCurrency}</p>
               </div>
               <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                 <p className="text-[11px] text-stone-500">Profit (auto)</p>
-                <p className="text-sm font-bold text-emerald-700">{fmt(visaProfitTotal(visaForm))} {visaForm.currency}</p>
+                <p className="text-sm font-bold text-emerald-700">{fmt(visaProfitTotal(visaForm))} EGP</p>
               </div>
             </div>
 
@@ -10586,7 +10643,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     return sorted.map((v) => {
                     const net = visaNetTotal(v);
                     const sold = visaSoldTotal(v);
-                    const profit = sold - net;
+                    const profit = visaProfitTotal(v);
                     return (
                       <tr
                         key={v.id}
@@ -10604,9 +10661,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           {v.bookingDate ? formatDisplayDate(v.bookingDate) : "-"}
                         </td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">{v.supplier}</td>
-                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">{fmt(net)} {v.currency}</td>
-                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">{fmt(sold)} {v.currency}</td>
-                        <td className="px-1.5 py-0.5 text-right font-semibold text-emerald-700 whitespace-nowrap">{fmt(profit)} {v.currency}</td>
+                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">{fmt(net)} {v.netCurrency}</td>
+                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">{fmt(sold)} {v.soldCurrency}</td>
+                        <td className="px-1.5 py-0.5 text-right font-semibold text-emerald-700 whitespace-nowrap">{fmt(profit)} EGP</td>
                       </tr>
                     );
                     });
@@ -10705,6 +10762,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <span className="text-stone-500">Booking date: </span>
                   {viewingVisaBooking.bookingDate ? formatDisplayDate(viewingVisaBooking.bookingDate) : "-"}
                 </div>
+                <div><span className="text-stone-500">Net currency: </span>{viewingVisaBooking.netCurrency || "EGP"}</div>
+                <div><span className="text-stone-500">Sold currency: </span>{viewingVisaBooking.soldCurrency || "EGP"}</div>
               </div>
 
               <div className="border border-stone-200 rounded-xl p-3 mb-4">
@@ -10720,19 +10779,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Net total</p>
                   <p className="text-sm font-bold text-stone-800">
-                    {fmt(visaNetTotal(viewingVisaBooking))} {viewingVisaBooking.currency}
+                    {fmt(visaNetTotal(viewingVisaBooking))} {viewingVisaBooking.netCurrency}
                   </p>
                 </div>
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Sold total</p>
                   <p className="text-sm font-bold text-stone-800">
-                    {fmt(visaSoldTotal(viewingVisaBooking))} {viewingVisaBooking.currency}
+                    {fmt(visaSoldTotal(viewingVisaBooking))} {viewingVisaBooking.soldCurrency}
                   </p>
                 </div>
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Profit</p>
                   <p className="text-sm font-bold text-emerald-700">
-                    {fmt(visaProfitTotal(viewingVisaBooking))} {viewingVisaBooking.currency}
+                    {fmt(visaProfitTotal(viewingVisaBooking))} EGP
                   </p>
                 </div>
               </div>
@@ -11069,10 +11128,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             )}
 
-            {/* Currency, amount to collect from the customer, net/sold prices, and driver tip */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-4">
+            {/* Currency, amount to collect from the customer, net/sold prices (each with
+                its own currency), and driver tip. */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
               <div>
-                <label className="text-xs text-stone-500 block mb-1">Currency</label>
+                <label className="text-xs text-stone-500 block mb-1">Currency (collection/tip)</label>
                 <select
                   className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
                   value={carForm.currency}
@@ -11095,6 +11155,30 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 />
               </div>
               <div>
+                <label className="text-xs text-stone-500 block mb-1">Driver tip</label>
+                <input
+                  type="number"
+                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  value={carForm.driverTip}
+                  onChange={(e) => setCarForm({ ...carForm, driverTip: e.target.value })}
+                  onBlur={(e) => setCarForm({ ...carForm, driverTip: addCentsOnBlur(e.target.value) })}
+                  placeholder="0"
+                />
+              </div>
+              <div />
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Net currency</label>
+                <select
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                  value={carForm.netCurrency}
+                  onChange={(e) => setCarForm({ ...carForm, netCurrency: e.target.value })}
+                >
+                  {HOTEL_CURRENCIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="text-xs text-stone-500 block mb-1">Price net</label>
                 <input
                   type="number"
@@ -11104,6 +11188,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   onBlur={(e) => setCarForm({ ...carForm, netPrice: addCentsOnBlur(e.target.value) })}
                   placeholder="0"
                 />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Sold currency</label>
+                <select
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                  value={carForm.soldCurrency}
+                  onChange={(e) => setCarForm({ ...carForm, soldCurrency: e.target.value })}
+                >
+                  {HOTEL_CURRENCIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Sold</label>
@@ -11116,16 +11212,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   placeholder="0"
                 />
               </div>
-              <div>
-                <label className="text-xs text-stone-500 block mb-1">Driver tip</label>
-                <input
-                  type="number"
-                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                  value={carForm.driverTip}
-                  onChange={(e) => setCarForm({ ...carForm, driverTip: e.target.value })}
-                  onBlur={(e) => setCarForm({ ...carForm, driverTip: addCentsOnBlur(e.target.value) })}
-                  placeholder="0"
-                />
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+              <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
+                <p className="text-[11px] text-stone-500">Profit (auto, EGP)</p>
+                <p className="text-sm font-bold text-emerald-700">{fmt(carProfitTotal(carForm))} EGP</p>
               </div>
             </div>
 
@@ -11264,9 +11356,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   {(() => {
                     const { sorted, rnByRowId } = rankByServiceDate(filteredCarBookings, "entryDate");
                     return sorted.map((c) => {
-                    const net = parseFloat(c.netPrice) || 0;
-                    const sold = parseFloat(c.soldPrice) || 0;
-                    const profit = sold - net;
+                    const net = carNetTotal(c);
+                    const sold = carSoldTotal(c);
+                    const profit = carProfitTotal(c);
                     return (
                       <tr
                         key={c.id}
@@ -11304,9 +11396,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">
                           {c.driverTip ? `${fmt(parseFloat(c.driverTip) || 0)} ${c.currency}` : "-"}
                         </td>
-                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">{fmt(net)} {c.currency}</td>
-                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">{fmt(sold)} {c.currency}</td>
-                        <td className="px-1.5 py-0.5 text-right font-semibold text-emerald-700 whitespace-nowrap">{fmt(profit)} {c.currency}</td>
+                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">{fmt(net)} {c.netCurrency}</td>
+                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">{fmt(sold)} {c.soldCurrency}</td>
+                        <td className="px-1.5 py-0.5 text-right font-semibold text-emerald-700 whitespace-nowrap">{fmt(profit)} EGP</td>
                       </tr>
                     );
                     });
@@ -11452,19 +11544,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Net</p>
                   <p className="text-sm font-bold text-stone-800">
-                    {fmt(parseFloat(viewingCarBooking.netPrice) || 0)} {viewingCarBooking.currency}
+                    {fmt(carNetTotal(viewingCarBooking))} {viewingCarBooking.netCurrency}
                   </p>
                 </div>
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Sold</p>
                   <p className="text-sm font-bold text-stone-800">
-                    {fmt(parseFloat(viewingCarBooking.soldPrice) || 0)} {viewingCarBooking.currency}
+                    {fmt(carSoldTotal(viewingCarBooking))} {viewingCarBooking.soldCurrency}
                   </p>
                 </div>
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Profit</p>
                   <p className="text-sm font-bold text-emerald-700">
-                    {fmt((parseFloat(viewingCarBooking.soldPrice) || 0) - (parseFloat(viewingCarBooking.netPrice) || 0))} {viewingCarBooking.currency}
+                    {fmt(carProfitTotal(viewingCarBooking))} EGP
                   </p>
                 </div>
               </div>
@@ -11755,8 +11847,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         </button>
                         <div className="flex items-center gap-3 shrink-0">
                           <button type="button" onClick={() => viewFileItemDetails(it, { draft: true, itemId: it.id })} className="text-right">
-                            <p className="text-sm font-bold">{fmt(r.soldPrice)} {r.currency}</p>
-                            <p className="text-xs text-emerald-700">net {fmt(r.netPrice)} {r.currency}</p>
+                            <p className="text-sm font-bold">{fmt(r.soldPrice)} {r.soldCurrency}</p>
+                            <p className="text-xs text-emerald-700">net {fmt(r.netPrice)} {r.netCurrency}</p>
                           </button>
                           <button
                             onClick={() => removeDraftItem(it.id)}
@@ -11913,8 +12005,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         </button>
                         <div className="flex items-center gap-3 shrink-0">
                           <button type="button" onClick={() => viewFileItemDetails(it, { fileId: openFile.id, itemId: it.id })} className="text-right">
-                            <p className="text-sm font-bold">{fmt(r.soldPrice)} {r.currency}</p>
-                            <p className="text-xs text-emerald-700">net {fmt(r.netPrice)} {r.currency}</p>
+                            <p className="text-sm font-bold">{fmt(r.soldPrice)} {r.soldCurrency}</p>
+                            <p className="text-xs text-emerald-700">net {fmt(r.netPrice)} {r.netCurrency}</p>
                           </button>
                           {editingFileServices && filesPerm.canEdit && (
                             <button
@@ -12035,7 +12127,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <span className="text-sm text-stone-800 truncate">
                               {v.visaType || "Visa"} · {(v.customers || []).map((c) => c.name).filter(Boolean).join(", ") || "-"}
                             </span>
-                            <span className="text-xs text-stone-400 shrink-0">{fmt(visaSoldTotal(v))} {v.currency}</span>
+                            <span className="text-xs text-stone-400 shrink-0">{fmt(visaSoldTotal(v))} {v.soldCurrency}</span>
                           </button>
                         ))
                       )
@@ -12057,7 +12149,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <span className="text-sm text-stone-800 truncate">
                               {c.routeFrom || "-"} → {c.routeTo || "-"}{c.customerName ? ` · ${c.customerName}` : ""}
                             </span>
-                            <span className="text-xs text-stone-400 shrink-0">{fmt(parseFloat(c.soldPrice) || 0)} {c.currency}</span>
+                            <span className="text-xs text-stone-400 shrink-0">{fmt(parseFloat(c.soldPrice) || 0)} {c.soldCurrency}</span>
                           </button>
                         ))
                       )
@@ -12141,8 +12233,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     : sec === "hotels"
                     ? hotelBookings.filter((h) => (h.bookingDate || "").slice(0, 7) === thisMonthPrefix).reduce((s, h) => s + hotelProfitTotal(h), 0)
                     : sec === "visa"
-                    ? visaBookings.filter((v) => (v.bookingDate || "").slice(0, 7) === thisMonthPrefix).reduce((s, v) => s + hotelInEgp(visaProfitTotal(v), v.currency), 0)
-                    : carBookings.filter((c) => (c.bookingDate || "").slice(0, 7) === thisMonthPrefix).reduce((s, c) => s + hotelInEgp((parseFloat(c.soldPrice) || 0) - (parseFloat(c.netPrice) || 0), c.currency), 0);
+                    ? visaBookings.filter((v) => (v.bookingDate || "").slice(0, 7) === thisMonthPrefix).reduce((s, v) => s + visaProfitTotal(v), 0)
+                    : carBookings.filter((c) => (c.bookingDate || "").slice(0, 7) === thisMonthPrefix).reduce((s, c) => s + carProfitTotal(c), 0);
                 return (
                   <div key={sec} className="bg-white rounded-2xl border border-stone-200 p-4">
                     <p className="text-xs text-stone-500 mb-1">{sectionLabel(sec)}</p>
