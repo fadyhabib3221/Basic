@@ -2120,6 +2120,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // everyone signed in sees today's rate without re-typing it.
   const [usdToEgpRate, setUsdToEgpRate] = useState(null);
   const [usdToEgpRateDate, setUsdToEgpRateDate] = useState("");
+  const [fetchingUsdRate, setFetchingUsdRate] = useState(false);
+  const [fetchUsdRateError, setFetchUsdRateError] = useState("");
 
   // IATA balance tracker (Flights section): a running balance saved to shared storage,
   // and a separate "issued ticket value" box — entering an amount there deducts it from
@@ -2744,6 +2746,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       await window.storage.set("tickets:usdRate", JSON.stringify({ rate, date }), true);
     } catch (e) {
       // Saving the rate is best-effort; the typed value still applies locally either way
+    }
+  };
+
+  // Pulls today's USD -> EGP rate from a free public exchange-rate API, so an employee
+  // can grab the current rate with one click instead of typing it in by hand.
+  const fetchUsdRateOnline = async () => {
+    setFetchingUsdRate(true);
+    setFetchUsdRateError("");
+    try {
+      const res = await fetch("https://open.er-api.com/v6/latest/USD");
+      if (!res.ok) throw new Error("Request failed");
+      const data = await res.json();
+      const rate = data && data.rates && data.rates.EGP;
+      if (!rate || Number.isNaN(rate)) throw new Error("No rate in response");
+      const rounded = Math.round(rate * 100) / 100;
+      await persistUsdRate(rounded);
+    } catch (e) {
+      setFetchUsdRateError("Couldn't fetch the rate — enter it manually");
+    } finally {
+      setFetchingUsdRate(false);
     }
   };
 
@@ -9451,8 +9473,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           >
             Save rate
           </button>
+          <button
+            onClick={fetchUsdRateOnline}
+            disabled={fetchingUsdRate}
+            className="text-xs font-semibold text-stone-700 border border-stone-300 rounded-lg px-3 py-1.5 hover:bg-stone-50 disabled:opacity-50"
+          >
+            {fetchingUsdRate ? "Fetching..." : "Fetch online"}
+          </button>
           {usdToEgpRateDate && (
             <span className="text-xs text-stone-400">Last updated: {formatDisplayDate(usdToEgpRateDate)}</span>
+          )}
+          {fetchUsdRateError && (
+            <span className="text-xs text-red-500">{fetchUsdRateError}</span>
           )}
         </div>
 
