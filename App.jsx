@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useReducer } from "react";
 // xlsx-js-style is a drop-in replacement for "xlsx" (same API) that additionally
 // writes cell styles (fills/fonts) into the .xlsx file — needed for the export's
 // alternating row shading and the highlighted totals row. Plain "xlsx" silently
@@ -281,24 +281,44 @@ const addCentsOnBlur = (value) => {
 
 // ==================== License / Activation ====================
 // This app requires an activation code before it can be used at all.
-// Add, remove, or edit codes below yourself — no coding needed beyond this list.
-//   - expiresAt: null      -> the code works forever (permanent license)
-//   - expiresAt: "YYYY-MM-DD" -> the code stops working after that date (subscription-style)
-// You can list as many codes as you like — e.g. a different one per client, or one
-// permanent code plus a few time-limited trial codes.
+//
+// IMPORTANT — read before editing this list:
+// This is a client-side app, so this gate can never be a hard security boundary —
+// anyone with devtools open can eventually patch checkLicenseCode() to always
+// return valid. What we CAN do (and do below) is avoid shipping the raw codes in
+// plain text, so they can't just be read straight out of the page source / bundle
+// by anyone who never even opens a console. Treat this as a "keeps honest people
+// honest + stops casual code-sharing" gate, not real DRM.
+//
+// Codes are stored here as hashes, not plain text. To add or remove a code:
+//   1. Open this file's matching console helper (see hashLicenseCode below) OR
+//      any JS console, and run: await hashLicenseCode("YOUR-NEW-CODE")
+//   2. Paste the resulting hash string into LICENSE_KEYS below alongside its
+//      expiresAt (null = permanent, or "YYYY-MM-DD" = expires that day).
 const LICENSE_KEYS = [
-  { code: "PERLA-DIMARE-2026", expiresAt: null },
-  { code: "PERLA-TRIAL-30D", expiresAt: "2026-09-04" },
+  { hash: "52e1d330c8eeab1e6c34b334ea978feb7d2f225cfd69ef8877796f249248f10c", expiresAt: null }, // was: PERLA-DIMARE-2026
+  { hash: "2f6b5b65577fd0a2b1cb1df3c68281ac66d339034c59ca51df34c97fc1ea5d60", expiresAt: "2026-09-04" }, // was: PERLA-TRIAL-30D
 ];
 
 // The key under which the activated code is remembered in this browser, so the
 // activation screen doesn't reappear every time the app is opened.
 const LICENSE_STORAGE_KEY = "ftm_license_activation";
 
-const checkLicenseCode = (rawCode) => {
+// Normalizes + SHA-256 hashes a raw code for comparison against LICENSE_KEYS.
+// Also exposed as a console helper (window.hashLicenseCode) so you can generate
+// the hash for a brand-new code without touching any app logic.
+const hashLicenseCode = async (rawCode) => {
+  const normalized = (rawCode || "").trim().toUpperCase();
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalized));
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+};
+if (typeof window !== "undefined") window.hashLicenseCode = hashLicenseCode;
+
+const checkLicenseCode = async (rawCode) => {
   const code = (rawCode || "").trim().toUpperCase();
   if (!code) return { valid: false, reason: "Please enter an activation code" };
-  const entry = LICENSE_KEYS.find((l) => l.code.trim().toUpperCase() === code);
+  const codeHash = await hashLicenseCode(code);
+  const entry = LICENSE_KEYS.find((l) => l.hash === codeHash);
   if (!entry) return { valid: false, reason: "Invalid activation code" };
   if (entry.expiresAt) {
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -306,7 +326,10 @@ const checkLicenseCode = (rawCode) => {
       return { valid: false, reason: `This activation code expired on ${entry.expiresAt}` };
     }
   }
-  return { valid: true, code: entry.code, expiresAt: entry.expiresAt };
+  // Return the normalized input code itself (not a secret — the person who typed
+  // it already knows it) so callers can persist/re-check it later without needing
+  // the original LICENSE_KEYS list.
+  return { valid: true, code, expiresAt: entry.expiresAt };
 };
 
 const emptyCustomerRow = () => ({ name: "", ticketNumber: "", conjunction: false, ticketNumber2: "", pnrReference: "" });
@@ -1752,39 +1775,60 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // ---------- License / activation ----------
   // Stored centrally (shared storage) so activation applies to every employee,
   // not just the browser it was entered on. null = not loaded from storage yet.
-  const [licenseRecord, setLicenseRecord] = useState(null); // { code, expiresAt } | null
-  const [licenseLoaded, setLicenseLoaded] = useState(false);
-  const [showLicensePanel, setShowLicensePanel] = useState(false);
-  const [licenseInput, setLicenseInput] = useState("");
-  const [licenseError, setLicenseError] = useState("");
-  const [licenseSaving, setLicenseSaving] = useState(false);
+  //
+  // Consolidated from 7 separate useState calls into one useReducer. Every field
+  // keeps its original name (record/showPanel/input/error/saving/isLicensed) so
+  // the JSX further down — which still reads the destructured local variables
+  // licenseRecord, showLicensePanel, licenseInput, licenseError, licenseSaving,
+  // isLicensed — needed NO changes. Only the *setters* changed, to dispatch(...)
+  // calls. `licenseLoaded` was dropped: it was set once and never actually read
+  // anywhere else in the component, so it was dead state.
+  const licensePatchReducer = (state, patch) => ({ ...state, ...patch });
+  const [license, dispatchLicense] = useReducer(licensePatchReducer, {
+    record: null, // { code, expiresAt } | null
+    showPanel: false,
+    input: "",
+    error: "",
+    saving: false,
+    isLicensed: false,
+  });
+  const { record: licenseRecord, showPanel: showLicensePanel, input: licenseInput, error: licenseError, saving: licenseSaving, isLicensed } = license;
 
-  const licenseCheck = licenseRecord ? checkLicenseCode(licenseRecord.code) : { valid: false };
-  const isLicensed = licenseCheck.valid;
-
-  const handleActivateLicense = async () => {
-    const result = checkLicenseCode(licenseInput);
-    if (!result.valid) {
-      setLicenseError(result.reason);
+  // checkLicenseCode is async (it hashes the code before comparing), so validity
+  // is re-derived whenever licenseRecord changes rather than computed during render.
+  useEffect(() => {
+    let cancelled = false;
+    if (!licenseRecord) {
+      dispatchLicense({ isLicensed: false });
       return;
     }
-    setLicenseError("");
-    setLicenseSaving(true);
+    checkLicenseCode(licenseRecord.code).then((result) => {
+      if (!cancelled) dispatchLicense({ isLicensed: result.valid });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [licenseRecord]);
+
+  const handleActivateLicense = async () => {
+    const result = await checkLicenseCode(licenseInput);
+    if (!result.valid) {
+      dispatchLicense({ error: result.reason });
+      return;
+    }
+    dispatchLicense({ error: "", saving: true });
     try {
       await window.storage.set(
         "tickets:license",
         JSON.stringify({ code: result.code, expiresAt: result.expiresAt || null, activatedAt: Date.now() }),
         true
       );
-      setLicenseRecord({ code: result.code, expiresAt: result.expiresAt || null });
+      dispatchLicense({ record: { code: result.code, expiresAt: result.expiresAt || null }, input: "", showPanel: false, saving: false });
       recordActivity("License", "activated", `Activated app license${result.expiresAt ? ` (valid until ${result.expiresAt})` : " (permanent)"}`);
-      setLicenseInput("");
-      setShowLicensePanel(false);
     } catch (e) {
-      setLicenseError("Couldn't save the activation code — please try again.");
-    } finally {
-      setLicenseSaving(false);
+      dispatchLicense({ error: "Couldn't save the activation code — please try again.", saving: false });
     }
+
   };
 
   const [tickets, setTickets] = useState([]);
@@ -2256,12 +2300,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         requestsData.forEach((r) => seenRequestIdsRef.current.add(r.id));
         if (licenseRes && licenseRes.value) {
           try {
-            setLicenseRecord(JSON.parse(licenseRes.value));
+            dispatchLicense({ record: JSON.parse(licenseRes.value) });
           } catch (e) {
-            setLicenseRecord(null);
+            dispatchLicense({ record: null });
           }
         }
-        setLicenseLoaded(true);
         // If accounts already exist, the setup step has clearly already happened even if the
         // flag itself is missing (e.g. app used before this flag existed).
         setSetupComplete(!!(setupRes && setupRes.value === "true") || employeesData.length > 0);
@@ -2384,12 +2427,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         }
         if (licenseRes && licenseRes.value) {
           try {
-            setLicenseRecord(JSON.parse(licenseRes.value));
+            dispatchLicense({ record: JSON.parse(licenseRes.value) });
           } catch (e) {
             // ignore malformed data for this cycle, try again next poll
           }
         } else {
-          setLicenseRecord(null);
+          dispatchLicense({ record: null });
         }
         if (requestsRes && requestsRes.value) {
           try {
@@ -7080,7 +7123,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       )}
                       {currentUser.isAdmin && (
                         <button
-                          onClick={() => { setShowLicensePanel(!showLicensePanel); setShowManagementMenu(false); }}
+                          onClick={() => { dispatchLicense({ showPanel: !showLicensePanel }); setShowManagementMenu(false); }}
                           className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
                         >
                           <Key size={15} className="text-teal-800" /> {isLicensed ? "License" : "Activate license"}
@@ -7190,9 +7233,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             className="fixed inset-0 z-50 bg-black/40 flex items-start md:items-center justify-center p-4 overflow-y-auto"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
-                setShowLicensePanel(false);
-                setLicenseError("");
-                setLicenseInput("");
+                dispatchLicense({ showPanel: false, error: "", input: "" });
               }
             }}
           >
@@ -7202,7 +7243,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <Key size={16} className="text-teal-800" /> App license
                 </h2>
                 <button
-                  onClick={() => { setShowLicensePanel(false); setLicenseError(""); setLicenseInput(""); }}
+                  onClick={() => dispatchLicense({ showPanel: false, error: "", input: "" })}
                   className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
                 >
                   <X size={18} />
@@ -7228,7 +7269,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <input
                   className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 tracking-widest uppercase"
                   value={licenseInput}
-                  onChange={(e) => setLicenseInput(e.target.value)}
+                  onChange={(e) => dispatchLicense({ input: e.target.value })}
                   onKeyDown={(e) => e.key === "Enter" && handleActivateLicense()}
                   placeholder="XXXX-XXXX-XXXX"
                   autoFocus
@@ -12274,7 +12315,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </p>
             {currentUser.isAdmin && (
               <button
-                onClick={() => setShowLicensePanel(true)}
+                onClick={() => dispatchLicense({ showPanel: true })}
                 className="bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors"
               >
                 Activate license
