@@ -3417,35 +3417,36 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setHotelError("");
   };
 
-  // Loads a copy of an existing hotel booking into the form so the details (customer,
-  // corporate, room lines, etc.) can be tweaked and saved as a brand-new booking —
-  // the original booking is left untouched. Unlike handleEditHotelClick, this never
-  // sets hotelEditingId, so Save always creates a new record instead of overwriting.
+  // Loads a copy of an existing hotel booking into the form so it can be saved as a
+  // brand-new booking — the original booking is left untouched. Unlike
+  // handleEditHotelClick, this never sets hotelEditingId, so Save always creates a new
+  // record instead of overwriting. Only the corporate/customer field and the guest
+  // (and child) names are carried over; the room type/meal plan/count are kept just as
+  // containers for those names, while everything else — hotel, supplier, dates,
+  // currencies, prices, notes — starts fresh, same as a brand-new booking.
   const handleDuplicateHotelClick = (h) => {
     setHotelEditingId(null);
     setHotelForm({
-      employee: h.employee || "",
+      ...getEmptyHotelForm(),
       customer: h.customer || "",
-      hotel: h.hotel || "",
-      supplier: h.supplier || "",
-      netCurrency: h.netCurrency || h.currency || (Array.isArray(h.roomLines) && h.roomLines[0] && h.roomLines[0].currency) || "EGP",
-      soldCurrency: h.soldCurrency || h.currency || (Array.isArray(h.roomLines) && h.roomLines[0] && h.roomLines[0].currency) || "EGP",
       roomLines:
         Array.isArray(h.roomLines) && h.roomLines.length > 0
           ? h.roomLines.map((l) => ({
-              ...l,
-              id: emptyRoomLine().id,
-              checkIn: l.checkIn || h.checkIn || todayDateStr(),
-              checkOut: l.checkOut || h.checkOut || todayDateStr(),
-              guests: guestsForCapacity(l.guests, ROOM_CAPACITY[l.roomType] || 1),
-              children: Array.isArray(l.children) ? l.children : [],
+              ...emptyRoomLine(),
+              roomType: l.roomType || "single",
+              mealPlan: l.mealPlan || "bb",
+              count: l.count || 1,
+              guests: Array.isArray(l.guests) && l.guests.length > 0
+                ? l.guests.map((g) => ({ ...emptyGuest(), name: g.name || "" }))
+                : guestsForCapacity([], ROOM_CAPACITY[l.roomType] || 1),
+              children: Array.isArray(l.children)
+                ? l.children.map((c) => ({ ...emptyChild(), name: c.name || "", age: c.age || "" }))
+                : [],
             }))
           : [emptyRoomLine()],
-      bookingDate: todayDateStr(),
-      notes: h.notes || "",
     });
-    setHotelSupplierOther(!!h.supplier && !suggestions.suppliers.includes(h.supplier));
-    setHotelNameOther(!!h.hotel && !suggestions.hotelNames.includes(h.hotel));
+    setHotelSupplierOther(false);
+    setHotelNameOther(false);
     setHotelError("");
   };
 
@@ -3609,23 +3610,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   // Same idea as handleDuplicateHotelClick, but for visa bookings: loads a copy of an
-  // existing booking (customer/corporate, customers list, pricing) into the form for
-  // editing, and always saves it as a new booking since visaEditingId is left unset.
+  // existing booking into the form so it can be saved as a new booking (visaEditingId
+  // is left unset). Only the corporate/customer field and the customer names are
+  // carried over; visa type, supplier, currencies, prices, etc. start fresh.
   const handleDuplicateVisaClick = (v) => {
     setVisaEditingId(null);
+    const customers = v.customers && v.customers.length > 0
+      ? v.customers.map((c) => ({ name: c.name || "" }))
+      : [emptyVisaCustomer()];
     setVisaForm({
+      ...getEmptyVisaForm(),
       customer: v.customer || "",
-      customersCount: (v.customers || []).length || 1,
-      customers: v.customers && v.customers.length > 0 ? v.customers.map((c) => ({ ...c })) : [emptyVisaCustomer()],
-      visaType: v.visaType || "",
-      supplier: v.supplier || "",
-      netCurrency: v.netCurrency || v.currency || "EGP",
-      soldCurrency: v.soldCurrency || v.currency || "EGP",
-      netPrice: v.netPrice,
-      soldPrice: v.soldPrice,
-      bookingDate: todayDateStr(),
+      customersCount: customers.length,
+      customers,
     });
-    setVisaSupplierOther(!!v.supplier && !(suggestions.visaSuppliers || []).includes(v.supplier));
+    setVisaSupplierOther(false);
     setVisaError("");
   };
 
@@ -3758,37 +3757,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   // Same idea as handleDuplicateHotelClick, but for transfer bookings: loads a copy of
-  // an existing booking (customer/corporate, route, pricing) into the form for editing,
-  // and always saves it as a new booking since carEditingId is left unset.
+  // an existing booking into the form so it can be saved as a new booking (carEditingId
+  // is left unset). Only the corporate/customer field and the customer name are carried
+  // over; route, supplier, timing, currencies, prices, etc. start fresh.
   const handleDuplicateCarClick = (c) => {
     setCarEditingId(null);
     setCarForm({
+      ...getEmptyCarForm(),
       customer: c.customer || "",
       customerName: c.customerName || "",
-      phone: c.phone || "",
-      routeFrom: c.routeFrom || "",
-      routeTo: c.routeTo || "",
-      carType: c.carType || "",
-      supplier: c.supplier || "",
-      hasWaiting: !!c.hasWaiting,
-      waitingHours: c.waitingHours || "",
-      isRoundTrip: !!c.isRoundTrip,
-      driverTip: c.driverTip || "",
-      startsAtAirport: !!c.startsAtAirport,
-      flightNumber: c.flightNumber || "",
-      currency: c.currency || "EGP",
-      netCurrency: c.netCurrency || c.currency || "EGP",
-      soldCurrency: c.soldCurrency || c.currency || "EGP",
-      netPrice: c.netPrice,
-      soldPrice: c.soldPrice,
-      bookingDate: todayDateStr(),
-      bookingTime: c.bookingTime || "",
-      returnDate: c.returnDate || "",
-      returnTime: c.returnTime || "",
-      entryDate: todayDateStr(),
-      collection: c.collection || "",
     });
-    setCarSupplierOther(!!c.supplier && !(suggestions.carSuppliers || []).includes(c.supplier));
+    setCarSupplierOther(false);
     setCarError("");
   };
 
@@ -4815,34 +4794,24 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   // Same idea as the other sections' duplicate handlers: loads a copy of an existing
-  // ticket (customers, corporate company, route, pricing) into the form so it can be
-  // tweaked and saved as a brand-new ticket. The form's id is left blank, so
-  // handleSave/commitTicket treats it as a new ticket (wasEditing === false) instead
-  // of overwriting the original.
+  // ticket into the form so it can be saved as a brand-new ticket. The form's id is
+  // left blank, so handleSave/commitTicket treats it as a new ticket
+  // (wasEditing === false) instead of overwriting the original. Only the corporate
+  // company field and the customer names (and pax type) are carried over; route,
+  // airline, supplier, ticket numbers, dates, prices, notes, etc. start fresh.
   const handleDuplicateTicket = (t, afterConfirm) => {
     if (!currentUser.isAdmin && !canAddTickets) return;
     const customers =
       Array.isArray(t.customers) && t.customers.length > 0
-        ? t.customers.map((c) => ({ type: "adult", ...c }))
-        : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "", type: "adult" }];
-    const destinations =
-      Array.isArray(t.destinations) && t.destinations.length >= 2 ? t.destinations : [t.from || "", t.to || ""];
+        ? t.customers.map((c) => ({ ...emptyCustomerRow(), name: c.name || "", type: c.type || "adult" }))
+        : [{ ...emptyCustomerRow(), name: t.customer || "" }];
     setForm({
-      ...t,
-      id: "",
+      ...getEmptyForm(),
+      company: t.company || "",
       customers,
       customersCount: customers.length,
-      multiDestination: !!t.multiDestination,
-      destinations,
-      tripType: t.tripType || "oneWay",
-      returnAirport: t.returnAirport || "",
-      notesHistory: [],
-      childNetPrice: t.childNetPrice ?? "",
-      childSoldPrice: t.childSoldPrice ?? "",
-      infantNetPrice: t.infantNetPrice ?? "",
-      infantSoldPrice: t.infantSoldPrice ?? "",
     });
-    setSupplierOther(!!t.supplier && !(suggestions.flightSuppliers || []).includes(t.supplier));
+    setSupplierOther(false);
     if (afterConfirm) afterConfirm();
     setTimeout(() => {
       const el = document.getElementById("ticket-form");
