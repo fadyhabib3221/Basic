@@ -211,6 +211,33 @@ const secureSave = async (storageKey, workspaceKey, value) => {
 };
 
 const monthKey = (dateStr) => (dateStr ? dateStr.slice(0, 7) : "No date");
+
+// Shared by the Hotels/Visa/Transportation tables: gives every row an "RN" that
+// reflects its rank by service-entry date (oldest = 1), independent of whatever
+// order the underlying array happens to be in — same idea as the Flights table's
+// RN column. Returns both a display list (newest first, dateless rows pushed to
+// the end) and a lookup from row.id to its RN, so callers just do
+// `rnByRowId[row.id]` while mapping over `sorted`.
+const rankByServiceDate = (list, dateKey) => {
+  const hasDate = (row) => !!row[dateKey];
+  const byDateAsc = [...list].sort((a, b) => {
+    if (!hasDate(a) && !hasDate(b)) return 0;
+    if (!hasDate(a)) return 1;
+    if (!hasDate(b)) return -1;
+    return a[dateKey].localeCompare(b[dateKey]);
+  });
+  const rnByRowId = {};
+  byDateAsc.forEach((row, i) => {
+    rnByRowId[row.id] = i + 1;
+  });
+  const sorted = [...list].sort((a, b) => {
+    if (!hasDate(a) && !hasDate(b)) return 0;
+    if (!hasDate(a)) return 1;
+    if (!hasDate(b)) return -1;
+    return b[dateKey].localeCompare(a[dateKey]);
+  });
+  return { sorted, rnByRowId };
+};
 // Storage stays in the native YYYY-MM-DD format (required by <input type="date">),
 // but everywhere we display the date to the user we show it as DD-MMM-YYYY, with the
 // month written as its first three letters, capitalized (e.g. "03-AUG-2026").
@@ -9878,13 +9905,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </td>
                 </tr>
               )}
-              {filteredHotelBookings.map((h, hIdx) => (
+              {(() => {
+                const { sorted, rnByRowId } = rankByServiceDate(filteredHotelBookings, "bookingDate");
+                return sorted.map((h) => (
                 <tr
                   key={h.id}
                   className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer"
                   onClick={() => { setViewingFileContext(null); setViewingHotelBooking(h); }}
                 >
-                  <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{hIdx + 1}</td>
+                  <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{rnByRowId[h.id]}</td>
                   <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">
                     {h.customer && h.customer.trim() ? (
                       h.customer
@@ -9910,7 +9939,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     {fmt(hotelProfitTotal(h))}
                   </td>
                 </tr>
-              ))}
+                ));
+              })()}
             </tbody>
           </table>
         </div>
@@ -10429,7 +10459,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {filteredVisaBookings.map((v, vIdx) => {
+                  {(() => {
+                    const { sorted, rnByRowId } = rankByServiceDate(filteredVisaBookings, "bookingDate");
+                    return sorted.map((v) => {
                     const net = visaNetTotal(v);
                     const sold = visaSoldTotal(v);
                     const profit = sold - net;
@@ -10439,7 +10471,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         className="hover:bg-stone-50 cursor-pointer"
                         onClick={() => { setViewingFileContext(null); setViewingVisaBooking(v); }}
                       >
-                        <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{vIdx + 1}</td>
+                        <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{rnByRowId[v.id]}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap" title={v.employee || ""}>{employeeInitials(v.employee)}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">{(v.customers || []).length}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">
@@ -10455,7 +10487,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-1.5 py-0.5 text-right font-semibold text-emerald-700 whitespace-nowrap">{fmt(profit)} {v.currency}</td>
                       </tr>
                     );
-                  })}
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -11072,7 +11105,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {filteredCarBookings.map((c, cIdx) => {
+                  {(() => {
+                    const { sorted, rnByRowId } = rankByServiceDate(filteredCarBookings, "entryDate");
+                    return sorted.map((c) => {
                     const net = parseFloat(c.netPrice) || 0;
                     const sold = parseFloat(c.soldPrice) || 0;
                     const profit = sold - net;
@@ -11082,7 +11117,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         className="leading-tight hover:bg-stone-50 cursor-pointer"
                         onClick={() => { setViewingFileContext(null); setViewingCarBooking(c); }}
                       >
-                        <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{cIdx + 1}</td>
+                        <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{rnByRowId[c.id]}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">
                           {c.entryDate ? formatDisplayDate(c.entryDate) : "-"}
                         </td>
@@ -11118,7 +11153,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-1.5 py-0.5 text-right font-semibold text-emerald-700 whitespace-nowrap">{fmt(profit)} {c.currency}</td>
                       </tr>
                     );
-                  })}
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
