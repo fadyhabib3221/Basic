@@ -13,7 +13,7 @@ import {
   ShieldCheck, Wifi, User, Cloud, Globe2, List, Car, FileText, ArrowLeft,
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
   History, Bell, Send, Landmark, Receipt, PieChart, ArrowUpCircle, ArrowDownCircle,
-  Banknote, HandCoins, ClipboardList, Globe, Key, Truck, Filter, Settings,
+  Banknote, HandCoins, ClipboardList, Globe, Key, Truck, Filter, Settings, Clock, Copy,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -2753,7 +2753,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   }, []);
 
   const persistUsdRate = async (rate) => {
-    const date = todayDateStr();
+    const date = new Date().toISOString();
     setUsdToEgpRate(rate);
     setUsdToEgpRateDate(date);
     try {
@@ -3363,6 +3363,38 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setHotelError("");
   };
 
+  // Loads a copy of an existing hotel booking into the form so the details (customer,
+  // corporate, room lines, etc.) can be tweaked and saved as a brand-new booking —
+  // the original booking is left untouched. Unlike handleEditHotelClick, this never
+  // sets hotelEditingId, so Save always creates a new record instead of overwriting.
+  const handleDuplicateHotelClick = (h) => {
+    setHotelEditingId(null);
+    setHotelForm({
+      employee: h.employee || "",
+      customer: h.customer || "",
+      hotel: h.hotel || "",
+      supplier: h.supplier || "",
+      netCurrency: h.netCurrency || h.currency || (Array.isArray(h.roomLines) && h.roomLines[0] && h.roomLines[0].currency) || "EGP",
+      soldCurrency: h.soldCurrency || h.currency || (Array.isArray(h.roomLines) && h.roomLines[0] && h.roomLines[0].currency) || "EGP",
+      roomLines:
+        Array.isArray(h.roomLines) && h.roomLines.length > 0
+          ? h.roomLines.map((l) => ({
+              ...l,
+              id: emptyRoomLine().id,
+              checkIn: l.checkIn || h.checkIn || todayDateStr(),
+              checkOut: l.checkOut || h.checkOut || todayDateStr(),
+              guests: guestsForCapacity(l.guests, ROOM_CAPACITY[l.roomType] || 1),
+              children: Array.isArray(l.children) ? l.children : [],
+            }))
+          : [emptyRoomLine()],
+      bookingDate: todayDateStr(),
+      notes: h.notes || "",
+    });
+    setHotelSupplierOther(!!h.supplier && !suggestions.suppliers.includes(h.supplier));
+    setHotelNameOther(!!h.hotel && !suggestions.hotelNames.includes(h.hotel));
+    setHotelError("");
+  };
+
   const handleDeleteHotel = (id, onDeleted) => {
     requestConfirm("Delete this hotel booking?", async () => {
       const deleted = hotelBookings.find((h) => h.id === id);
@@ -3522,6 +3554,27 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setVisaError("");
   };
 
+  // Same idea as handleDuplicateHotelClick, but for visa bookings: loads a copy of an
+  // existing booking (customer/corporate, customers list, pricing) into the form for
+  // editing, and always saves it as a new booking since visaEditingId is left unset.
+  const handleDuplicateVisaClick = (v) => {
+    setVisaEditingId(null);
+    setVisaForm({
+      customer: v.customer || "",
+      customersCount: (v.customers || []).length || 1,
+      customers: v.customers && v.customers.length > 0 ? v.customers.map((c) => ({ ...c })) : [emptyVisaCustomer()],
+      visaType: v.visaType || "",
+      supplier: v.supplier || "",
+      netCurrency: v.netCurrency || v.currency || "EGP",
+      soldCurrency: v.soldCurrency || v.currency || "EGP",
+      netPrice: v.netPrice,
+      soldPrice: v.soldPrice,
+      bookingDate: todayDateStr(),
+    });
+    setVisaSupplierOther(!!v.supplier && !(suggestions.visaSuppliers || []).includes(v.supplier));
+    setVisaError("");
+  };
+
   const handleDeleteVisa = (id, onDeleted) => {
     requestConfirm("Delete this visa booking?", async () => {
       const deleted = visaBookings.find((v) => v.id === id);
@@ -3644,6 +3697,41 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       returnDate: c.returnDate || "",
       returnTime: c.returnTime || "",
       entryDate: c.entryDate || todayDateStr(),
+      collection: c.collection || "",
+    });
+    setCarSupplierOther(!!c.supplier && !(suggestions.carSuppliers || []).includes(c.supplier));
+    setCarError("");
+  };
+
+  // Same idea as handleDuplicateHotelClick, but for transfer bookings: loads a copy of
+  // an existing booking (customer/corporate, route, pricing) into the form for editing,
+  // and always saves it as a new booking since carEditingId is left unset.
+  const handleDuplicateCarClick = (c) => {
+    setCarEditingId(null);
+    setCarForm({
+      customer: c.customer || "",
+      customerName: c.customerName || "",
+      phone: c.phone || "",
+      routeFrom: c.routeFrom || "",
+      routeTo: c.routeTo || "",
+      carType: c.carType || "",
+      supplier: c.supplier || "",
+      hasWaiting: !!c.hasWaiting,
+      waitingHours: c.waitingHours || "",
+      isRoundTrip: !!c.isRoundTrip,
+      driverTip: c.driverTip || "",
+      startsAtAirport: !!c.startsAtAirport,
+      flightNumber: c.flightNumber || "",
+      currency: c.currency || "EGP",
+      netCurrency: c.netCurrency || c.currency || "EGP",
+      soldCurrency: c.soldCurrency || c.currency || "EGP",
+      netPrice: c.netPrice,
+      soldPrice: c.soldPrice,
+      bookingDate: todayDateStr(),
+      bookingTime: c.bookingTime || "",
+      returnDate: c.returnDate || "",
+      returnTime: c.returnTime || "",
+      entryDate: todayDateStr(),
       collection: c.collection || "",
     });
     setCarSupplierOther(!!c.supplier && !(suggestions.carSuppliers || []).includes(c.supplier));
@@ -4633,6 +4721,39 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 60);
   };
+
+  // Same idea as the other sections' duplicate handlers: loads a copy of an existing
+  // ticket (customers, corporate company, route, pricing) into the form so it can be
+  // tweaked and saved as a brand-new ticket. The form's id is left blank, so
+  // handleSave/commitTicket treats it as a new ticket (wasEditing === false) instead
+  // of overwriting the original.
+  const handleDuplicateTicket = (t, afterConfirm) => {
+    if (!currentUser.isAdmin && !canAddTickets) return;
+    const customers =
+      Array.isArray(t.customers) && t.customers.length > 0
+        ? t.customers
+        : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
+    const destinations =
+      Array.isArray(t.destinations) && t.destinations.length >= 2 ? t.destinations : [t.from || "", t.to || ""];
+    setForm({
+      ...t,
+      id: "",
+      customers,
+      customersCount: customers.length,
+      multiDestination: !!t.multiDestination,
+      destinations,
+      tripType: t.tripType || "oneWay",
+      returnAirport: t.returnAirport || "",
+      notesHistory: [],
+    });
+    setSupplierOther(!!t.supplier && !(suggestions.flightSuppliers || []).includes(t.supplier));
+    if (afterConfirm) afterConfirm();
+    setTimeout(() => {
+      const el = document.getElementById("ticket-form");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  };
+
   const handleDelete = (id, afterConfirm) => {
     if (!currentUser.isAdmin && !canDeleteTickets) {
       setError("You don't have permission to delete tickets");
@@ -8353,9 +8474,23 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           >
             {fetchingUsdRate ? "Fetching..." : "Fetch online"}
           </button>
-          {usdToEgpRateDate && (
-            <span className="text-xs text-stone-400">Last updated: {formatDisplayDate(usdToEgpRateDate)}</span>
-          )}
+          {usdToEgpRateDate && (() => {
+            const isStale = usdToEgpRateDate.slice(0, 10) !== todayDateStr();
+            return (
+              <span
+                className={`inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-2.5 py-1 border ${
+                  isStale
+                    ? "text-amber-800 bg-amber-50 border-amber-200"
+                    : "text-emerald-800 bg-emerald-50 border-emerald-200"
+                }`}
+                title={isStale ? "This rate wasn't updated today — double-check before relying on it" : "Rate updated today"}
+              >
+                <Clock size={12} />
+                Last updated: {formatDateTime(usdToEgpRateDate)}
+                {isStale && " (not today)"}
+              </span>
+            );
+          })()}
           {fetchUsdRateError && (
             <span className="text-xs text-red-500">{fetchUsdRateError}</span>
           )}
@@ -10223,6 +10358,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   >
                     <FileText size={18} />
                   </button>
+                  {hotelsPerm.canAdd && (
+                    <button
+                      onClick={() => { setActiveSection("hotels"); handleDuplicateHotelClick(viewingHotelBooking); setViewingHotelBooking(null); }}
+                      className="text-stone-400 hover:text-teal-800 p-1.5"
+                      title="Duplicate as new booking"
+                    >
+                      <Copy size={18} />
+                    </button>
+                  )}
                   {hotelsPerm.canEdit && (
                     <button
                       onClick={() => { setActiveSection("hotels"); handleEditHotelClick(viewingHotelBooking); setViewingHotelBooking(null); }}
@@ -10819,6 +10963,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   >
                     <FileText size={18} />
                   </button>
+                  {visaPerm.canAdd && (
+                    <button
+                      onClick={() => { setActiveSection("visa"); handleDuplicateVisaClick(viewingVisaBooking); setViewingVisaBooking(null); }}
+                      className="text-stone-400 hover:text-teal-800 p-1.5"
+                      title="Duplicate as new booking"
+                    >
+                      <Copy size={18} />
+                    </button>
+                  )}
                   {visaPerm.canEdit && (
                     <button
                       onClick={() => { setActiveSection("visa"); handleEditVisaClick(viewingVisaBooking); setViewingVisaBooking(null); }}
@@ -11551,6 +11704,15 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   >
                     <FileText size={18} />
                   </button>
+                  {carsPerm.canAdd && (
+                    <button
+                      onClick={() => { setActiveSection("cars"); handleDuplicateCarClick(viewingCarBooking); setViewingCarBooking(null); }}
+                      className="text-stone-400 hover:text-teal-800 p-1.5"
+                      title="Duplicate as new booking"
+                    >
+                      <Copy size={18} />
+                    </button>
+                  )}
                   {carsPerm.canEdit && (
                     <button
                       onClick={() => { setActiveSection("cars"); handleEditCarClick(viewingCarBooking); setViewingCarBooking(null); }}
@@ -12800,6 +12962,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               >
                 <FileText size={15} /> Link to a file
               </button>
+              {(currentUser.isAdmin || canAddTickets) && (
+                <button
+                  onClick={() => { setActiveSection("flights"); handleDuplicateTicket(viewingTicket, closeTicketDetail); }}
+                  className="border border-stone-300 text-stone-600 hover:text-teal-800 hover:border-teal-700 text-sm font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
+                >
+                  <Copy size={15} /> Duplicate
+                </button>
+              )}
               {(currentUser.isAdmin || canEditTickets) && (
                 <button
                   onClick={() => { setActiveSection("flights"); handleEdit(viewingTicket, closeTicketDetail); }}
