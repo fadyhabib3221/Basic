@@ -718,7 +718,6 @@ const emptyRoomLine = () => ({
   id: `RL-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   roomType: "single",
   mealPlan: "bb",
-  currency: "EGP",
   count: 1,
   netPrice: "",
   soldPrice: "",
@@ -740,6 +739,8 @@ const getEmptyHotelForm = () => ({
   customer: "",
   hotel: "",
   supplier: "",
+  // One currency for the whole booking — applies to every room line's net and sold price.
+  currency: "EGP",
   roomLines: [emptyRoomLine()],
   // The date the reservation itself was made — separate from each room's own
   // check-in/check-out dates below.
@@ -3323,12 +3324,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       customer: h.customer || "",
       hotel: h.hotel || "",
       supplier: h.supplier || "",
+      // Legacy bookings stored currency per room line — fall back to the first line's
+      // currency so older records still load with something sensible.
+      currency: h.currency || (Array.isArray(h.roomLines) && h.roomLines[0] && h.roomLines[0].currency) || "EGP",
       roomLines:
         Array.isArray(h.roomLines) && h.roomLines.length > 0
           ? h.roomLines.map((l) => ({
               ...l,
               id: l.id || emptyRoomLine().id,
-              currency: l.currency || h.currency || "EGP",
               // Legacy bookings kept dates on the booking itself rather than per room —
               // fall back to those so older records still show something sensible.
               checkIn: l.checkIn || h.checkIn || todayDateStr(),
@@ -3834,8 +3837,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           ["Nights", nights],
           ["Guests", guestNames],
           ["Children", childrenText],
-          ["Net (per room/night)", `${fmt(hotelLineNetTotal(line, nights))} ${line.currency}`],
-          ["Sold (per room/night)", `${fmt(hotelLineSoldTotal(line, nights))} ${line.currency}`],
+          ["Net (per room/night)", `${fmt(hotelLineNetTotal(line, nights))} ${h.currency}`],
+          ["Sold (per room/night)", `${fmt(hotelLineSoldTotal(line, nights))} ${h.currency}`],
         ],
       };
     });
@@ -3847,6 +3850,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           ["Company", h.customer && h.customer.trim() ? h.customer : "Individual"],
           ["Hotel", h.hotel || "-"],
           ["Supplier", h.supplier || "-"],
+          ["Currency", h.currency || "EGP"],
           ["Booking date", h.bookingDate ? formatDisplayDate(h.bookingDate) : "-"],
           ["Notes", h.notes || "-"],
         ],
@@ -5192,9 +5196,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const hotelLineNetTotal = (l, nights) => (parseFloat(l.netPrice) || 0) * (parseInt(l.count, 10) || 0) * nights;
   const hotelLineSoldTotal = (l, nights) => (parseFloat(l.soldPrice) || 0) * (parseInt(l.count, 10) || 0) * nights;
   const hotelNetTotal = (h) =>
-    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineNetTotal(l, roomLineNights(l, h)), l.currency), 0);
+    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineNetTotal(l, roomLineNights(l, h)), h.currency), 0);
   const hotelSoldTotal = (h) =>
-    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineSoldTotal(l, roomLineNights(l, h)), l.currency), 0);
+    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineSoldTotal(l, roomLineNights(l, h)), h.currency), 0);
   const hotelProfitTotal = (h) => hotelSoldTotal(h) - hotelNetTotal(h);
 
   // Visa prices are entered per applicant, so a booking's real net/sold amounts are the
@@ -5207,7 +5211,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // A booking is Corporate when a company name was entered; otherwise it's an
   // Individual booking automatically — no separate toggle needed.
   const hotelBookingType = (h) => (h.customer && h.customer.trim() ? "Corporate" : "Individual");
-  // A short readable summary of a booking's room lines, e.g. "1x Single (BB, EGP, 01-AUG-2026→05-AUG-2026), 2x Double (AI, USD, 01-AUG-2026→03-AUG-2026)".
+  // A short readable summary of a booking's room lines, e.g. "1x Single (BB, 01-AUG-2026→05-AUG-2026), 2x Double (AI, 01-AUG-2026→03-AUG-2026)".
+  // Currency is one per booking now, so it isn't repeated per room here.
   const hotelLinesSummary = (h) =>
     (h.roomLines || [])
       .map((l) => {
@@ -5216,7 +5221,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         const checkIn = l.checkIn || h.checkIn;
         const checkOut = l.checkOut || h.checkOut;
         const dates = checkIn && checkOut ? `, ${formatDisplayDate(checkIn)}→${formatDisplayDate(checkOut)}` : "";
-        return `${l.count}× ${type} (${meal}, ${l.currency}${dates})`;
+        return `${l.count}× ${type} (${meal}${dates})`;
       })
       .join(", ");
 
@@ -9615,6 +9620,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 />
               </div>
               <div>
+                <label className="text-xs text-stone-500 block mb-1">Currency</label>
+                <select
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={hotelForm.currency}
+                  onChange={(e) => setHotelForm({ ...hotelForm, currency: e.target.value })}
+                >
+                  {HOTEL_CURRENCIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="text-xs text-stone-500 block mb-1">Notes</label>
                 <input
                   className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
@@ -9628,14 +9645,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               Each room has its own check-in/check-out dates — price is per room, per night.
             </p>
 
-            {/* Room lines: one booking can mix different room types, meal plans, currencies,
-                prices, and stay dates — each room keeps its own check-in/check-out. */}
+            {/* Room lines: one booking can mix different room types, meal plans, prices, and
+                stay dates — each room keeps its own check-in/check-out. Currency is set once
+                for the whole booking above. */}
             <div className="space-y-3">
               <label className="text-xs text-stone-500 block">Rooms</label>
               {hotelForm.roomLines.map((line) => (
                 <div key={line.id} className="bg-stone-50 border border-stone-200 rounded-xl p-3 space-y-3">
-                  {/* Row 1: room type, meal plan, dates, currency. */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 items-end">
+                  {/* Row 1: room type, meal plan, dates. Currency is set once for the whole
+                      booking above, not per room line. */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
                     <div>
                       <label className="text-[11px] text-stone-500 block mb-1">Room type</label>
                       <select
@@ -9683,18 +9702,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         onChange={(e) => updateHotelRoomLine(line.id, { checkOut: e.target.value })}
                       />
                     </div>
-                    <div>
-                      <label className="text-[11px] text-stone-500 block mb-1">Currency</label>
-                      <select
-                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                        value={line.currency}
-                        onChange={(e) => updateHotelRoomLine(line.id, { currency: e.target.value })}
-                      >
-                        {HOTEL_CURRENCIES.map((c) => (
-                          <option key={c.value} value={c.value}>{c.label}</option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
 
                   {/* Row 2: # rooms, net, sold. */}
@@ -9732,7 +9739,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       />
                       <div className="flex items-center justify-between gap-2 mt-3">
                         <div className="text-xs text-emerald-700 font-semibold">
-                          {roomLineNights(line, hotelForm)} night{roomLineNights(line, hotelForm) === 1 ? "" : "s"} · {fmt(hotelLineSoldTotal(line, roomLineNights(line, hotelForm)) - hotelLineNetTotal(line, roomLineNights(line, hotelForm)))} {line.currency}
+                          {roomLineNights(line, hotelForm)} night{roomLineNights(line, hotelForm) === 1 ? "" : "s"} · {fmt(hotelLineSoldTotal(line, roomLineNights(line, hotelForm)) - hotelLineNetTotal(line, roomLineNights(line, hotelForm)))} {hotelForm.currency}
                         </div>
                         <button
                           onClick={() => removeHotelRoomLine(line.id)}
@@ -10114,6 +10121,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <div><span className="text-stone-500">Supplier: </span>{viewingHotelBooking.supplier || "-"}</div>
                 <div><span className="text-stone-500">Booking date: </span>{viewingHotelBooking.bookingDate ? formatDisplayDate(viewingHotelBooking.bookingDate) : "-"}</div>
                 <div><span className="text-stone-500">Employee: </span>{viewingHotelBooking.employee || "-"}</div>
+                <div><span className="text-stone-500">Currency: </span>{viewingHotelBooking.currency || "EGP"}</div>
                 <div><span className="text-stone-500">Notes: </span>{viewingHotelBooking.notes || "-"}</div>
               </div>
 
@@ -10133,8 +10141,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         </span>
                       </div>
                       <div className="text-xs text-stone-600 mb-2">
-                        Net: {fmt(hotelLineNetTotal(l, nights))} {l.currency} · Sold:{" "}
-                        {fmt(hotelLineSoldTotal(l, nights))} {l.currency}
+                        Net: {fmt(hotelLineNetTotal(l, nights))} {viewingHotelBooking.currency || "EGP"} · Sold:{" "}
+                        {fmt(hotelLineSoldTotal(l, nights))} {viewingHotelBooking.currency || "EGP"}
                       </div>
                       {Array.isArray(l.guests) && l.guests.some((g) => g.name) && (
                         <div className="text-xs text-stone-700 mb-1">
