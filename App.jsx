@@ -765,6 +765,7 @@ const resizeVisaCustomers = (customers, count) => {
 // date at the moment it's created, same rationale as getEmptyHotelForm() above.
 const getEmptyVisaForm = () => ({
   id: null,
+  customer: "",
   customersCount: 1,
   customers: [emptyVisaCustomer()],
   visaType: "",
@@ -779,6 +780,7 @@ const getEmptyVisaForm = () => ({
 // date at the moment it's created, same rationale as getEmptyVisaForm() above.
 const getEmptyCarForm = () => ({
   id: null,
+  customer: "",
   customerName: "",
   phone: "",
   routeFrom: "",
@@ -3465,6 +3467,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setVisaEditingId(v.id);
     setVisaForm({
       id: v.id,
+      customer: v.customer || "",
       customersCount: (v.customers || []).length || 1,
       customers: v.customers && v.customers.length > 0 ? v.customers.map((c) => ({ ...c })) : [emptyVisaCustomer()],
       visaType: v.visaType || "",
@@ -3576,6 +3579,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setCarEditingId(c.id);
     setCarForm({
       id: c.id,
+      customer: c.customer || "",
       customerName: c.customerName || "",
       phone: c.phone || "",
       routeFrom: c.routeFrom || "",
@@ -10224,6 +10228,33 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
               <div>
+                <label className="text-xs text-stone-500 block mb-1">
+                  Corporates <span className="font-normal text-stone-400">(optional — leave blank for Individual)</span>
+                </label>
+                <select
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                  value={visaForm.customer}
+                  onChange={(e) => setVisaForm({ ...visaForm, customer: e.target.value })}
+                >
+                  <option value="">— No corporate (Individual) —</option>
+                  {visaForm.customer && !suggestions.companies.some((c) => companyName(c) === visaForm.customer) && (
+                    // Booking already has a company value that isn't (or is no longer) a
+                    // registered corporate — e.g. saved before Corporate Management existed,
+                    // or the corporate was later renamed/deleted. Keep it selectable/visible
+                    // instead of silently blanking the field.
+                    <option value={visaForm.customer}>{visaForm.customer} (not registered)</option>
+                  )}
+                  {[...suggestions.companies]
+                    .sort((a, b) => companyName(a).localeCompare(companyName(b)))
+                    .map((c) => {
+                      const name = companyName(c);
+                      return (
+                        <option key={name} value={name}>{name}</option>
+                      );
+                    })}
+                </select>
+              </div>
+              <div>
                 <label className="text-xs text-stone-500 block mb-1">Number of customers</label>
                 <input
                   type="number"
@@ -10567,6 +10598,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     {(viewingVisaBooking.customers || []).length} customer
                     {(viewingVisaBooking.customers || []).length === 1 ? "" : "s"}
                   </p>
+                  <p className="text-sm text-stone-500">
+                    {viewingVisaBooking.customer && viewingVisaBooking.customer.trim() ? (
+                      <>Company: {viewingVisaBooking.customer} <span className="text-teal-700 font-semibold">(Corporate)</span></>
+                    ) : (
+                      <span className="italic">Individual booking</span>
+                    )}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
@@ -10748,7 +10786,34 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               {carEditingId ? "Edit transfer booking" : "New transfer booking"}
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">
+                  Corporates <span className="font-normal text-stone-400">(optional — leave blank for Individual)</span>
+                </label>
+                <select
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                  value={carForm.customer}
+                  onChange={(e) => setCarForm({ ...carForm, customer: e.target.value })}
+                >
+                  <option value="">— No corporate (Individual) —</option>
+                  {carForm.customer && !suggestions.companies.some((c) => companyName(c) === carForm.customer) && (
+                    // Booking already has a company value that isn't (or is no longer) a
+                    // registered corporate — e.g. saved before Corporate Management existed,
+                    // or the corporate was later renamed/deleted. Keep it selectable/visible
+                    // instead of silently blanking the field.
+                    <option value={carForm.customer}>{carForm.customer} (not registered)</option>
+                  )}
+                  {[...suggestions.companies]
+                    .sort((a, b) => companyName(a).localeCompare(companyName(b)))
+                    .map((c) => {
+                      const name = companyName(c);
+                      return (
+                        <option key={name} value={name}>{name}</option>
+                      );
+                    })}
+                </select>
+              </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Customer name</label>
                 <input
@@ -11230,6 +11295,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <div>
                   <h3 className="text-lg font-bold text-stone-800">{viewingCarBooking.customerName || "Transfer"}</h3>
                   <p className="text-sm text-stone-500">{viewingCarBooking.phone || "-"}</p>
+                  <p className="text-sm text-stone-500">
+                    {viewingCarBooking.customer && viewingCarBooking.customer.trim() ? (
+                      <>Company: {viewingCarBooking.customer} <span className="text-teal-700 font-semibold">(Corporate)</span></>
+                    ) : (
+                      <span className="italic">Individual booking</span>
+                    )}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
