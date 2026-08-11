@@ -2755,10 +2755,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setFetchingUsdRate(true);
     setFetchUsdRateError("");
     try {
-      const res = await fetch("https://api.exchangerate-api.com/v4/latest/USD");
+      const res = await fetch("https://api.frankfurter.dev/v2/rate/USD/EGP");
       if (!res.ok) throw new Error("Request failed");
       const data = await res.json();
-      const rate = data && data.rates && data.rates.EGP;
+      const rate = data && data.rate;
       if (!rate || Number.isNaN(rate)) throw new Error("No rate in response");
       const rounded = Math.round(rate * 100) / 100;
       await persistUsdRate(rounded);
