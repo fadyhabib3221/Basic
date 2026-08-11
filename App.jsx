@@ -8118,71 +8118,86 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <>
         {/* Top-level section switcher */}
         <div className="flex items-center gap-2 md:gap-3 mb-6 overflow-x-auto md:justify-center md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0">
-          {mySections.flights && (
           <button
-            onClick={() => setActiveSection("flights")}
-            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
-              activeSection === "flights"
+            onClick={() => mySections.flights && setActiveSection("flights")}
+            disabled={!mySections.flights}
+            title={!mySections.flights ? "You don't have access to Flights" : undefined}
+            className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+              !mySections.flights
+                ? "bg-stone-50 text-stone-300 border-stone-100 cursor-not-allowed"
+                : activeSection === "flights"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
             }`}
           >
+            {!mySections.flights && <Lock size={11} className="absolute top-1.5 right-1.5 text-stone-300" />}
             <Plane size={22} className="rotate-45" />
             Flights
           </button>
-          )}
-          {mySections.hotels && (
           <button
-            onClick={() => setActiveSection("hotels")}
-            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
-              activeSection === "hotels"
+            onClick={() => mySections.hotels && setActiveSection("hotels")}
+            disabled={!mySections.hotels}
+            title={!mySections.hotels ? "You don't have access to Hotels" : undefined}
+            className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+              !mySections.hotels
+                ? "bg-stone-50 text-stone-300 border-stone-100 cursor-not-allowed"
+                : activeSection === "hotels"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
             }`}
           >
+            {!mySections.hotels && <Lock size={11} className="absolute top-1.5 right-1.5 text-stone-300" />}
             <Building2 size={22} />
             Hotels
           </button>
-          )}
-          {mySections.visa && (
           <button
-            onClick={() => setActiveSection("visa")}
-            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
-              activeSection === "visa"
+            onClick={() => mySections.visa && setActiveSection("visa")}
+            disabled={!mySections.visa}
+            title={!mySections.visa ? "You don't have access to Visa" : undefined}
+            className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+              !mySections.visa
+                ? "bg-stone-50 text-stone-300 border-stone-100 cursor-not-allowed"
+                : activeSection === "visa"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
             }`}
           >
+            {!mySections.visa && <Lock size={11} className="absolute top-1.5 right-1.5 text-stone-300" />}
             <PassportIcon size={22} />
             Visa
           </button>
-          )}
-          {mySections.cars && (
           <button
-            onClick={() => setActiveSection("cars")}
-            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
-              activeSection === "cars"
+            onClick={() => mySections.cars && setActiveSection("cars")}
+            disabled={!mySections.cars}
+            title={!mySections.cars ? "You don't have access to Transportation" : undefined}
+            className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+              !mySections.cars
+                ? "bg-stone-50 text-stone-300 border-stone-100 cursor-not-allowed"
+                : activeSection === "cars"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
             }`}
           >
+            {!mySections.cars && <Lock size={11} className="absolute top-1.5 right-1.5 text-stone-300" />}
             <Car size={22} />
             Transportation
           </button>
-          )}
-          {mySections.files && (
           <button
-            onClick={() => setActiveSection("files")}
-            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
-              activeSection === "files"
+            onClick={() => mySections.files && setActiveSection("files")}
+            disabled={!mySections.files}
+            title={!mySections.files ? "You don't have access to Files" : undefined}
+            className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+              !mySections.files
+                ? "bg-stone-50 text-stone-300 border-stone-100 cursor-not-allowed"
+                : activeSection === "files"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
                 : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
             }`}
           >
+            {!mySections.files && <Lock size={11} className="absolute top-1.5 right-1.5 text-stone-300" />}
             <FileText size={22} />
             Files
           </button>
-          )}
           {canAccessAccounts && (
           <button
             onClick={() => setActiveSection("accounts")}
