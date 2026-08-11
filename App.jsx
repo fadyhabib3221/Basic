@@ -624,6 +624,11 @@ const getEmptyForm = () => ({
   date: todayDateStr(),
   netPrice: "",
   soldPrice: "",
+  // Net and sold price can each be entered in a different currency (same convention
+  // as Hotels/Visa/Transfers) — converted to EGP for totals using the shared
+  // USD -> EGP rate in the header.
+  netCurrency: "EGP",
+  soldCurrency: "EGP",
   notes: "",
   // Reissue tracking: when isReissued is on, oldTicketNumber is looked up against
   // existing tickets to auto-fill oldTicketIssueDate and every other field below
@@ -3769,9 +3774,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       {
         heading: "Pricing",
         rows: [
-          ["Price per ticket", fmt(t.soldPrice)],
+          ["Price per ticket", `${fmt(t.soldPrice)} ${t.soldCurrency || "EGP"}`],
           ...(customers.length > 1
-            ? [["Total", fmt((parseFloat(t.soldPrice) || 0) * customers.length)]]
+            ? [["Total", `${fmt((parseFloat(t.soldPrice) || 0) * customers.length)} ${t.soldCurrency || "EGP"}`]]
             : []),
         ],
       },
@@ -3780,11 +3785,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {
               heading: "Refund",
               rows: [
-                ["Refunded by airline", fmt(getRefunds(t)[0]?.airlineAmount)],
-                ["Refunded to customer", fmt(getRefunds(t)[0]?.customerAmount)],
-                ["Net after refund", fmt(netAfterRefund(t))],
-                ["Sold after refund", fmt(soldAfterRefund(t))],
-                ["Profit after refund", fmt(profitAfterRefund(t))],
+                ["Refunded by airline", `${fmt(getRefunds(t)[0]?.airlineAmount)} ${t.netCurrency || "EGP"}`],
+                ["Refunded to customer", `${fmt(getRefunds(t)[0]?.customerAmount)} ${t.soldCurrency || "EGP"}`],
+                ["Net after refund", `${fmt(netAfterRefund(t))} EGP`],
+                ["Sold after refund", `${fmt(soldAfterRefund(t))} EGP`],
+                ["Profit after refund", `${fmt(profitAfterRefund(t))} EGP`],
               ],
             },
           ]
@@ -4709,10 +4714,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // back to the customer reduces our revenue (sold price) — so sales/profit totals
   // everywhere (ticket rows, summary cards, monthly/company breakdowns, exports)
   // reflect the refund rather than the original pre-refund booking amounts.
+  // Net and sold can each be in a different currency (same convention as Hotels/Visa/
+  // Transfers), so both sides — and the refund amounts recorded against them — are
+  // converted to EGP with the shared USD -> EGP rate before being combined.
   const netAfterRefund = (t) =>
-    (parseFloat(t.netPrice) || 0) - getRefunds(t).reduce((sum, r) => sum + (parseFloat(r.airlineAmount) || 0), 0);
+    hotelInEgp(
+      (parseFloat(t.netPrice) || 0) - getRefunds(t).reduce((sum, r) => sum + (parseFloat(r.airlineAmount) || 0), 0),
+      t.netCurrency || "EGP"
+    );
   const soldAfterRefund = (t) =>
-    (parseFloat(t.soldPrice) || 0) - getRefunds(t).reduce((sum, r) => sum + (parseFloat(r.customerAmount) || 0), 0);
+    hotelInEgp(
+      (parseFloat(t.soldPrice) || 0) - getRefunds(t).reduce((sum, r) => sum + (parseFloat(r.customerAmount) || 0), 0),
+      t.soldCurrency || "EGP"
+    );
   const profitAfterRefund = (t) => soldAfterRefund(t) - netAfterRefund(t);
 
   const handleCustomersCountChange = (value) => {
@@ -4934,6 +4948,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       airline: form.airline || oldTicket.airline || "",
       netPrice: form.netPrice !== "" ? form.netPrice : oldTicket.netPrice ?? "",
       soldPrice: form.soldPrice !== "" ? form.soldPrice : oldTicket.soldPrice ?? "",
+      netCurrency: form.netPrice !== "" ? form.netCurrency : oldTicket.netCurrency || "EGP",
+      soldCurrency: form.soldPrice !== "" ? form.soldCurrency : oldTicket.soldCurrency || "EGP",
       customers,
     });
   };
@@ -5232,6 +5248,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const carSoldTotal = (c) => parseFloat(c.soldPrice) || 0;
   const carProfitTotal = (c) =>
     hotelInEgp(carSoldTotal(c), c.soldCurrency) - hotelInEgp(carNetTotal(c), c.netCurrency);
+
+  // Flight ticket net/sold, converted to EGP — raw (pre-refund) figures, used for
+  // per-ticket display and totals. See netAfterRefund/soldAfterRefund above for the
+  // refund-adjusted versions used in accounting/reports.
+  const ticketNetEgp = (t) => hotelInEgp(parseFloat(t.netPrice) || 0, t.netCurrency || "EGP");
+  const ticketSoldEgp = (t) => hotelInEgp(parseFloat(t.soldPrice) || 0, t.soldCurrency || "EGP");
+  const ticketProfitEgp = (t) => ticketSoldEgp(t) - ticketNetEgp(t);
 
   // A booking is Corporate when a company name was entered; otherwise it's an
   // Individual booking automatically — no separate toggle needed.
@@ -5941,8 +5964,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return {
         label: `${routeLabel(record)}${names ? " · " + names : ""}`,
         date: record.date,
-        netCurrency: "EGP",
-        soldCurrency: "EGP",
+        netCurrency: record.netCurrency || "EGP",
+        soldCurrency: record.soldCurrency || "EGP",
         netPrice: parseFloat(record.netPrice) || 0,
         soldPrice: parseFloat(record.soldPrice) || 0,
       };
@@ -6267,12 +6290,22 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     rows.reduce(
       (acc, t) => {
         const n = getCustomers(t).length || 1;
-        const refundCustomerAmt = getRefunds(t).reduce((s, r) => s + (parseFloat(r.customerAmount) || 0), 0);
-        const refundAirlineAmt = getRefunds(t).reduce((s, r) => s + (parseFloat(r.airlineAmount) || 0), 0);
+        const netCur = t.netCurrency || "EGP";
+        const soldCur = t.soldCurrency || "EGP";
+        const refundCustomerAmt = hotelInEgp(
+          getRefunds(t).reduce((s, r) => s + (parseFloat(r.customerAmount) || 0), 0),
+          soldCur
+        );
+        const refundAirlineAmt = hotelInEgp(
+          getRefunds(t).reduce((s, r) => s + (parseFloat(r.airlineAmount) || 0), 0),
+          netCur
+        );
+        const netEgp = hotelInEgp(parseFloat(t.netPrice) || 0, netCur);
+        const soldEgp = hotelInEgp(parseFloat(t.soldPrice) || 0, soldCur);
         acc.count += n;
-        acc.net += (parseFloat(t.netPrice) || 0) * n - refundAirlineAmt;
-        acc.total += (parseFloat(t.soldPrice) || 0) * n - refundCustomerAmt;
-        acc.profit += profit(t.netPrice, t.soldPrice) * n + refundAirlineAmt - refundCustomerAmt;
+        acc.net += netEgp * n - refundAirlineAmt;
+        acc.total += soldEgp * n - refundCustomerAmt;
+        acc.profit += (soldEgp - netEgp) * n + refundAirlineAmt - refundCustomerAmt;
         return acc;
       },
       { count: 0, net: 0, total: 0, profit: 0 }
@@ -6350,8 +6383,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           // Net price / Sold price / Profit, and the totals row below — a
           // plain sum of this column — adds them up exactly as displayed.
           "Sold price": round2(t.soldPrice),
+          "Sold currency": t.soldCurrency || "EGP",
           "Net price": round2(t.netPrice),
-          "Profit": round2(profit(t.netPrice, t.soldPrice)),
+          "Net currency": t.netCurrency || "EGP",
+          // EGP-converted figures (via the shared USD -> EGP rate) — these are what the
+          // totals row below sums, so mixed-currency tickets still total correctly.
+          "Sold (EGP)": round2(ticketSoldEgp(t)),
+          "Net (EGP)": round2(ticketNetEgp(t)),
+          "Profit (EGP)": round2(ticketProfitEgp(t)),
           "Company": t.company || "",
           "Supplier": t.supplier || "",
           "Status": ticketStatus(t, i),
@@ -6376,8 +6415,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             "Airline": airlineCode,
             "Route": routeLabel(t),
             "Sold price": round2(-customerAmt),
+            "Sold currency": t.soldCurrency || "EGP",
             "Net price": round2(-airlineAmt),
-            "Profit": round2(airlineAmt - customerAmt),
+            "Net currency": t.netCurrency || "EGP",
+            "Sold (EGP)": round2(-hotelInEgp(customerAmt, t.soldCurrency || "EGP")),
+            "Net (EGP)": round2(-hotelInEgp(airlineAmt, t.netCurrency || "EGP")),
+            "Profit (EGP)": round2(
+              hotelInEgp(airlineAmt, t.netCurrency || "EGP") - hotelInEgp(customerAmt, t.soldCurrency || "EGP")
+            ),
             "Company": t.company || "",
             "Supplier": t.supplier || "",
             "Status": "Refund",
@@ -6423,15 +6468,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const sumSheetRows = (sheetRows) =>
     sheetRows.reduce(
       (acc, r) => {
-        acc.net += parseFloat(r["Net price"]) || 0;
-        acc.sold += parseFloat(r["Sold price"]) || 0;
-        acc.profit += parseFloat(r["Profit"]) || 0;
+        acc.net += parseFloat(r["Net (EGP)"]) || 0;
+        acc.sold += parseFloat(r["Sold (EGP)"]) || 0;
+        acc.profit += parseFloat(r["Profit (EGP)"]) || 0;
         return acc;
       },
       { net: 0, sold: 0, profit: 0 }
     );
 
-  // Appends a totals row to the end of a sheet's rows.
+  // Appends a totals row to the end of a sheet's rows. Raw "Sold price"/"Net price"
+  // are left blank on the totals row since they can mix currencies — only the
+  // EGP-converted columns are meaningful to sum.
   const rowsWithTotals = (rows) => {
     const sheetRows = ticketRows(rows);
     const sums = sumSheetRows(sheetRows);
@@ -6439,9 +6486,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       ...sheetRows,
       {
         "RN": "", "Employee": "", "Date": "TOTAL", "Customer": "", "Ticket #": "", "Airline": "", "Route": "",
-        "Sold price": Math.round(sums.sold * 100) / 100,
-        "Net price": Math.round(sums.net * 100) / 100,
-        "Profit": Math.round(sums.profit * 100) / 100,
+        "Sold price": "", "Sold currency": "", "Net price": "", "Net currency": "",
+        "Sold (EGP)": Math.round(sums.sold * 100) / 100,
+        "Net (EGP)": Math.round(sums.net * 100) / 100,
+        "Profit (EGP)": Math.round(sums.profit * 100) / 100,
         "Company": "", "Supplier": "", "Status": "", "PNR reference": "", "Notes": "",
       },
     ];
@@ -6527,7 +6575,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // numeric columns — SUBTOTAL(109, ...) automatically recalculates to only include
     // rows currently visible through the sheet's own AutoFilter dropdowns, so the total
     // stays correct as soon as someone filters inside Excel itself.
-    const TOTAL_FORMULA_COLUMNS = ["Sold price", "Net price", "Profit"];
+    const TOTAL_FORMULA_COLUMNS = ["Sold (EGP)", "Net (EGP)", "Profit (EGP)"];
     const dataFirstRow0 = HEADER_ROW + 1; // 0-based row of the first data row
     const dataLastRow0 = HEADER_ROW + totalRowIdx; // 0-based row just above the totals row
     TOTAL_FORMULA_COLUMNS.forEach((colName) => {
@@ -6577,8 +6625,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       monthlyBreakdown.map((m) => ({
         "Month": monthLabel(m.key),
         "Tickets": m.count,
-        "Total sales": Math.round(m.total * 100) / 100,
-        "Total profit": Math.round(m.profit * 100) / 100,
+        "Total sales (EGP)": Math.round(m.total * 100) / 100,
+        "Total profit (EGP)": Math.round(m.profit * 100) / 100,
       }))
     );
     XLSX.utils.book_append_sheet(wb, summarySheet, "Monthly totals");
@@ -6922,9 +6970,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
           </td>
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`}>{routeLabel(t)}</td>
-          <td className={`px-1 py-0 ${cellText} text-right whitespace-nowrap`}>{fmt(t.soldPrice)}</td>
-          <td className={`px-1 py-0 ${cellText} text-right whitespace-nowrap`}>{fmt(t.netPrice)}</td>
-          <td className="px-1 py-0 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(profit(t.netPrice, t.soldPrice))}</td>
+          <td className={`px-1 py-0 ${cellText} text-right whitespace-nowrap`}>{fmt(t.soldPrice)} {t.soldCurrency || "EGP"}</td>
+          <td className={`px-1 py-0 ${cellText} text-right whitespace-nowrap`}>{fmt(t.netPrice)} {t.netCurrency || "EGP"}</td>
+          <td className="px-1 py-0 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(ticketProfitEgp(t))} EGP</td>
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`}>
             {t.company && t.company.trim() ? (
               t.company
@@ -8275,6 +8323,44 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           )}
         </div>
 
+        {/* USD -> EGP exchange rate bar — shown once above every section (not just
+            Hotels) since the rate is now applied across Flights/Hotels/Visa/Transfers
+            alike. Entered by hand each day (e.g. from the CBE's published rate), saved
+            to shared storage so every employee sees the same value. */}
+        <div className="bg-white border border-stone-200 rounded-2xl px-4 py-3 mb-4 flex flex-wrap items-center gap-3">
+          <span className="text-xs font-semibold text-stone-500">USD → EGP rate today:</span>
+          <input
+            type="number"
+            step="0.01"
+            className="w-28 border border-stone-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+            value={usdToEgpRate ?? ""}
+            onChange={(e) => setUsdToEgpRate(e.target.value === "" ? null : parseFloat(e.target.value))}
+            onBlur={() => {
+              if (usdToEgpRate !== null && !Number.isNaN(usdToEgpRate)) persistUsdRate(usdToEgpRate);
+            }}
+            placeholder="e.g. 51.20"
+          />
+          <button
+            onClick={() => usdToEgpRate !== null && !Number.isNaN(usdToEgpRate) && persistUsdRate(usdToEgpRate)}
+            className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-lg px-3 py-1.5 hover:bg-teal-50"
+          >
+            Save rate
+          </button>
+          <button
+            onClick={fetchUsdRateOnline}
+            disabled={fetchingUsdRate}
+            className="text-xs font-semibold text-stone-700 border border-stone-300 rounded-lg px-3 py-1.5 hover:bg-stone-50 disabled:opacity-50"
+          >
+            {fetchingUsdRate ? "Fetching..." : "Fetch online"}
+          </button>
+          {usdToEgpRateDate && (
+            <span className="text-xs text-stone-400">Last updated: {formatDisplayDate(usdToEgpRateDate)}</span>
+          )}
+          {fetchUsdRateError && (
+            <span className="text-xs text-red-500">{fetchUsdRateError}</span>
+          )}
+        </div>
+
         {activeSection === "flights" && (
         <>
         {currentUser.isAdmin && (restoreError || restoreSuccess) && (
@@ -8346,21 +8432,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
             <div className="bg-teal-50 rounded-xl p-1.5 sm:p-2 text-teal-900 shrink-0"><Wallet size={18} className="sm:hidden" /><Wallet size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
-              <p className="text-xs text-stone-500 whitespace-nowrap">Total sales</p>
+              <p className="text-xs text-stone-500 whitespace-nowrap">Total sales (EGP)</p>
               <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{fmt(totals.total)}</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
             <div className="bg-amber-50 rounded-xl p-1.5 sm:p-2 text-amber-700 shrink-0"><Receipt size={18} className="sm:hidden" /><Receipt size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
-              <p className="text-xs text-stone-500 whitespace-nowrap">Total net</p>
+              <p className="text-xs text-stone-500 whitespace-nowrap">Total net (EGP)</p>
               <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{fmt(totals.net)}</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
             <div className="bg-emerald-50 rounded-xl p-1.5 sm:p-2 text-emerald-700 shrink-0"><TrendingUp size={18} className="sm:hidden" /><TrendingUp size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
-              <p className="text-xs text-stone-500 whitespace-nowrap">Total profit</p>
+              <p className="text-xs text-stone-500 whitespace-nowrap">Total profit (EGP)</p>
               <p className="text-sm sm:text-lg font-bold text-emerald-700 whitespace-nowrap">{fmt(totals.profit)}</p>
             </div>
           </div>
@@ -8502,7 +8588,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <p className="text-xs text-sky-500 mb-1">Ticket found</p>
                             <p className="text-sky-900 font-medium">{routeLabel(target)}</p>
                             <p className="text-stone-600 text-xs mt-1">
-                              {targetCustomers.map((c) => c.name || "-").join(", ")} · {fmt(target.soldPrice)}
+                              {targetCustomers.map((c) => c.name || "-").join(", ")} · {fmt(target.soldPrice)} {target.soldCurrency || "EGP"}
                             </p>
                           </div>
                           {targetCustomers.length > 1 && (
@@ -8905,7 +8991,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               }}
             />
           </div>
-          <div className="sm:hidden grid grid-cols-3 gap-2 mt-3">
+          <div className="sm:hidden grid grid-cols-2 gap-2 mt-3">
+            <div>
+              <label className="text-xs text-stone-500 block mb-1">Net currency</label>
+              <select
+                className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                value={form.netCurrency}
+                onChange={(e) => setForm({ ...form, netCurrency: e.target.value })}
+              >
+                {HOTEL_CURRENCIES.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Net price</label>
               <input
@@ -8916,6 +9014,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 onBlur={(e) => setForm({ ...form, netPrice: addCentsOnBlur(e.target.value) })}
                 placeholder="0"
               />
+            </div>
+          </div>
+          <div className="sm:hidden grid grid-cols-2 gap-2 mt-2">
+            <div>
+              <label className="text-xs text-stone-500 block mb-1">Sold currency</label>
+              <select
+                className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                value={form.soldCurrency}
+                onChange={(e) => setForm({ ...form, soldCurrency: e.target.value })}
+              >
+                {HOTEL_CURRENCIES.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Sold price</label>
@@ -8928,29 +9040,42 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 placeholder="0"
               />
             </div>
-            <div>
-              <label className="text-xs text-stone-500 block mb-1">Profit (auto)</label>
-              <div className="w-full border border-stone-200 bg-stone-50 rounded-xl px-2 py-2 text-sm text-emerald-700 font-semibold truncate">
-                {fmt(profit(form.netPrice, form.soldPrice))}
-              </div>
+          </div>
+          <div className="sm:hidden mt-2">
+            <label className="text-xs text-stone-500 block mb-1">Profit (auto, EGP)</label>
+            <div className="w-full border border-stone-200 bg-stone-50 rounded-xl px-2 py-2 text-sm text-emerald-700 font-semibold truncate">
+              {fmt(ticketProfitEgp(form))} EGP
             </div>
           </div>
 
-          {/* Desktop/tablet layout: date, net, sold, profit back in a single row, as before. */}
-          <div className="hidden sm:grid sm:grid-cols-4 sm:gap-3 sm:mt-3">
+          {/* Desktop/tablet layout: date on its own row, then net/sold — each with its
+              own currency — plus the EGP profit preview. */}
+          <div className="hidden sm:block sm:mt-3">
+            <label className="text-xs text-stone-500 block mb-1">Ticket issue date</label>
+            <input
+              type="date"
+              lang="en-GB"
+              max={todayDateStr()}
+              className="w-full max-w-xs border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+              value={form.date}
+              onChange={(e) => {
+                const v = e.target.value;
+                setForm({ ...form, date: v > todayDateStr() ? todayDateStr() : v });
+              }}
+            />
+          </div>
+          <div className="hidden sm:grid sm:grid-cols-5 sm:gap-3 sm:mt-3">
             <div>
-              <label className="text-xs text-stone-500 block mb-1">Ticket issue date</label>
-              <input
-                type="date"
-                lang="en-GB"
-                max={todayDateStr()}
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                value={form.date}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setForm({ ...form, date: v > todayDateStr() ? todayDateStr() : v });
-                }}
-              />
+              <label className="text-xs text-stone-500 block mb-1">Net currency</label>
+              <select
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                value={form.netCurrency}
+                onChange={(e) => setForm({ ...form, netCurrency: e.target.value })}
+              >
+                {HOTEL_CURRENCIES.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Net price</label>
@@ -8964,6 +9089,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               />
             </div>
             <div>
+              <label className="text-xs text-stone-500 block mb-1">Sold currency</label>
+              <select
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                value={form.soldCurrency}
+                onChange={(e) => setForm({ ...form, soldCurrency: e.target.value })}
+              >
+                {HOTEL_CURRENCIES.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="text-xs text-stone-500 block mb-1">Sold price</label>
               <input
                 type="number"
@@ -8975,9 +9112,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               />
             </div>
             <div>
-              <label className="text-xs text-stone-500 block mb-1">Profit (auto)</label>
+              <label className="text-xs text-stone-500 block mb-1">Profit (auto, EGP)</label>
               <div className="w-full border border-stone-200 bg-stone-50 rounded-xl px-3 py-2 text-sm text-emerald-700 font-semibold">
-                {fmt(profit(form.netPrice, form.soldPrice))}
+                {fmt(ticketProfitEgp(form))} EGP
               </div>
             </div>
           </div>
@@ -9293,8 +9430,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <tr className="bg-stone-50 text-stone-500 text-xs">
                     <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Month</th>
                     <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Tickets</th>
-                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Total sales</th>
-                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Total profit</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Total sales (EGP)</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Total profit (EGP)</th>
                     <th className="text-left px-3 py-2 font-medium"></th>
                   </tr>
                 </thead>
@@ -9349,8 +9486,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <span className="text-xs text-stone-400">({c.count} tickets)</span>
                     </div>
                     <div className="flex items-center gap-4 text-xs text-stone-500">
-                      <span>Sales: <span className="font-semibold text-stone-700">{fmt(c.total)}</span></span>
-                      <span>Profit: <span className="font-semibold text-emerald-700">{fmt(c.profit)}</span></span>
+                      <span>Sales (EGP): <span className="font-semibold text-stone-700">{fmt(c.total)}</span></span>
+                      <span>Profit (EGP): <span className="font-semibold text-emerald-700">{fmt(c.profit)}</span></span>
                     </div>
                   </div>
                   <p className="text-xs text-stone-500 mt-1.5 pl-6">
@@ -9487,42 +9624,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             )}
           </div>
         )}
-
-        {/* USD -> EGP exchange rate bar — entered by hand each day (e.g. from the CBE's
-            published rate), saved to shared storage so every employee sees the same value. */}
-        <div className="bg-white border border-stone-200 rounded-2xl px-4 py-3 mb-4 flex flex-wrap items-center gap-3">
-          <span className="text-xs font-semibold text-stone-500">USD → EGP rate today:</span>
-          <input
-            type="number"
-            step="0.01"
-            className="w-28 border border-stone-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-            value={usdToEgpRate ?? ""}
-            onChange={(e) => setUsdToEgpRate(e.target.value === "" ? null : parseFloat(e.target.value))}
-            onBlur={() => {
-              if (usdToEgpRate !== null && !Number.isNaN(usdToEgpRate)) persistUsdRate(usdToEgpRate);
-            }}
-            placeholder="e.g. 51.20"
-          />
-          <button
-            onClick={() => usdToEgpRate !== null && !Number.isNaN(usdToEgpRate) && persistUsdRate(usdToEgpRate)}
-            className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-lg px-3 py-1.5 hover:bg-teal-50"
-          >
-            Save rate
-          </button>
-          <button
-            onClick={fetchUsdRateOnline}
-            disabled={fetchingUsdRate}
-            className="text-xs font-semibold text-stone-700 border border-stone-300 rounded-lg px-3 py-1.5 hover:bg-stone-50 disabled:opacity-50"
-          >
-            {fetchingUsdRate ? "Fetching..." : "Fetch online"}
-          </button>
-          {usdToEgpRateDate && (
-            <span className="text-xs text-stone-400">Last updated: {formatDisplayDate(usdToEgpRateDate)}</span>
-          )}
-          {fetchUsdRateError && (
-            <span className="text-xs text-red-500">{fetchUsdRateError}</span>
-          )}
-        </div>
 
         {hotelError && (
           <div className="text-sm rounded-xl px-3 py-2 mb-4 bg-red-50 text-red-700">{hotelError}</div>
@@ -11584,14 +11685,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
                     <div className="bg-teal-50 rounded-xl p-1.5 sm:p-2 text-teal-900 shrink-0"><Wallet size={18} className="sm:hidden" /><Wallet size={20} className="hidden sm:block" /></div>
                     <div className="min-w-0">
-                      <p className="text-xs text-stone-500">Total sales</p>
+                      <p className="text-xs text-stone-500">Total sales (EGP)</p>
                       <p className="text-sm sm:text-lg font-bold truncate">{fmt(filesGrandTotals.sold)}</p>
                     </div>
                   </div>
                   <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
                     <div className="bg-emerald-50 rounded-xl p-1.5 sm:p-2 text-emerald-700 shrink-0"><TrendingUp size={18} className="sm:hidden" /><TrendingUp size={20} className="hidden sm:block" /></div>
                     <div className="min-w-0">
-                      <p className="text-xs text-stone-500">Total profit</p>
+                      <p className="text-xs text-stone-500">Total profit (EGP)</p>
                       <p className="text-sm sm:text-lg font-bold text-emerald-700 truncate">{fmt(filesGrandTotals.profit)}</p>
                     </div>
                   </div>
@@ -12083,7 +12184,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <span className="text-sm text-stone-800 truncate">
                               {routeLabel(t)} · {getCustomers(t).map((c) => c.name).filter(Boolean).join(", ") || "-"}
                             </span>
-                            <span className="text-xs text-stone-400 shrink-0">{fmt(t.soldPrice)}</span>
+                            <span className="text-xs text-stone-400 shrink-0">{fmt(t.soldPrice)} {t.soldCurrency || "EGP"}</span>
                           </button>
                         ))
                       )
@@ -12818,26 +12919,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 md:p-5">
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Net price</p>
-                  <p className="text-sm font-medium text-stone-800">{fmt(viewingTicket.netPrice)}</p>
+                  <p className="text-sm font-medium text-stone-800">{fmt(viewingTicket.netPrice)} {viewingTicket.netCurrency || "EGP"}</p>
                   {hasRefund(viewingTicket) && (
-                    <p className="text-[11px] text-sky-600">After refund: {fmt(netAfterRefund(viewingTicket))}</p>
+                    <p className="text-[11px] text-sky-600">After refund: {fmt(netAfterRefund(viewingTicket))} EGP</p>
                   )}
                 </div>
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Sold price</p>
-                  <p className="text-sm font-medium text-stone-800">{fmt(viewingTicket.soldPrice)}</p>
+                  <p className="text-sm font-medium text-stone-800">{fmt(viewingTicket.soldPrice)} {viewingTicket.soldCurrency || "EGP"}</p>
                   {hasRefund(viewingTicket) && (
-                    <p className="text-[11px] text-sky-600">After refund: {fmt(soldAfterRefund(viewingTicket))}</p>
+                    <p className="text-[11px] text-sky-600">After refund: {fmt(soldAfterRefund(viewingTicket))} EGP</p>
                   )}
                 </div>
                 <div>
-                  <p className="text-xs text-stone-400 mb-1">Profit</p>
+                  <p className="text-xs text-stone-400 mb-1">Profit (EGP)</p>
                   <p className="text-sm font-semibold text-emerald-700">
-                    {fmt(profit(viewingTicket.netPrice, viewingTicket.soldPrice))}
+                    {fmt(ticketProfitEgp(viewingTicket))} EGP
                   </p>
                   {hasRefund(viewingTicket) && (
                     <p className="text-[11px] text-sky-600">
-                      After refund: {fmt(profitAfterRefund(viewingTicket))}
+                      After refund: {fmt(profitAfterRefund(viewingTicket))} EGP
                     </p>
                   )}
                 </div>
