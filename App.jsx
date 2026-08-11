@@ -359,7 +359,54 @@ const checkLicenseCode = async (rawCode) => {
   return { valid: true, code, expiresAt: entry.expiresAt };
 };
 
-const emptyCustomerRow = () => ({ name: "", ticketNumber: "", conjunction: false, ticketNumber2: "", pnrReference: "" });
+// Display labels for a customer row's passenger type, used in the ticket form, the
+// printed ticket, the ticket detail view, and the edit-history trail.
+const PAX_TYPE_LABELS = { adult: "Adult", child: "Child", infant: "Infant" };
+
+// "type" marks whether this passenger is an Adult, Child, or Infant — Child/Infant
+// passengers can be priced differently from the ticket's base (adult) net/sold price,
+// via the childNetPrice/childSoldPrice and infantNetPrice/infantSoldPrice form fields.
+const emptyCustomerRow = () => ({ name: "", ticketNumber: "", conjunction: false, ticketNumber2: "", pnrReference: "", type: "adult" });
+
+// How many Adult/Child/Infant passengers are on a ticket, read from its customers list.
+// Legacy tickets saved before child/infant pricing existed have no "type" on their rows,
+// so every customer defaults to "adult" — this keeps old tickets computing exactly as
+// they always have.
+const ticketPaxCounts = (t) => {
+  const customers = Array.isArray(t.customers) && t.customers.length > 0 ? t.customers : [{}];
+  return customers.reduce(
+    (acc, c) => {
+      const type = c.type || "adult";
+      if (type === "child") acc.child += 1;
+      else if (type === "infant") acc.infant += 1;
+      else acc.adult += 1;
+      return acc;
+    },
+    { adult: 0, child: 0, infant: 0 }
+  );
+};
+
+// Ticket net/sold total, in the ticket's own currency. netPrice/soldPrice cover the
+// adult fare; childNetPrice/childSoldPrice and infantNetPrice/infantSoldPrice are
+// per-passenger rates added on top, multiplied by however many child/infant passengers
+// are on the ticket. Tickets with only adults (the common case, and every legacy ticket)
+// total to exactly netPrice/soldPrice, unchanged.
+const ticketNetTotal = (t) => {
+  const counts = ticketPaxCounts(t);
+  return (
+    (parseFloat(t.netPrice) || 0) +
+    counts.child * (parseFloat(t.childNetPrice) || 0) +
+    counts.infant * (parseFloat(t.infantNetPrice) || 0)
+  );
+};
+const ticketSoldTotal = (t) => {
+  const counts = ticketPaxCounts(t);
+  return (
+    (parseFloat(t.soldPrice) || 0) +
+    counts.child * (parseFloat(t.childSoldPrice) || 0) +
+    counts.infant * (parseFloat(t.infantSoldPrice) || 0)
+  );
+};
 
 // Default Flights supplier / booking source options — seeded into suggestions.flightSuppliers
 // the first time an account loads (before that list has ever been saved), so existing
@@ -629,6 +676,13 @@ const getEmptyForm = () => ({
   // USD -> EGP rate in the header.
   netCurrency: "EGP",
   soldCurrency: "EGP",
+  // Per-passenger rates for Child/Infant customers (see ticketPaxCounts/ticketNetTotal
+  // above) — same currency as netCurrency/soldCurrency, only used/shown once at least
+  // one customer row is marked Child or Infant.
+  childNetPrice: "",
+  childSoldPrice: "",
+  infantNetPrice: "",
+  infantSoldPrice: "",
   notes: "",
   // Reissue tracking: when isReissued is on, oldTicketNumber is looked up against
   // existing tickets to auto-fill oldTicketIssueDate and every other field below
@@ -3836,13 +3890,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const customerRows = customers.flatMap((c, i) => [
       [
         `Customer ${i + 1}`,
-        `${c.name || "-"}${c.pnrReference ? ` (PNR: ${c.pnrReference})` : ""}`,
+        `${c.name || "-"}${(c.type || "adult") !== "adult" ? ` (${PAX_TYPE_LABELS[c.type]})` : ""}${c.pnrReference ? ` (PNR: ${c.pnrReference})` : ""}`,
       ],
       [
         "Ticket number",
         `${c.ticketNumber || "-"}${c.conjunction && c.ticketNumber2 ? c.ticketNumber2 : ""}`,
       ],
     ]);
+    const paxCounts = ticketPaxCounts(t);
 
     const sections = [
       {
@@ -3862,9 +3917,22 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       {
         heading: "Pricing",
         rows: [
-          ["Price per ticket", `${fmt(t.soldPrice)} ${t.soldCurrency || "EGP"}`],
+          ["Price per ticket (Adult)", `${fmt(t.soldPrice)} ${t.soldCurrency || "EGP"}`],
+          ...(paxCounts.child > 0
+            ? [["Price per ticket (Child)", `${fmt(t.childSoldPrice)} ${t.soldCurrency || "EGP"}`]]
+            : []),
+          ...(paxCounts.infant > 0
+            ? [["Price per ticket (Infant)", `${fmt(t.infantSoldPrice)} ${t.soldCurrency || "EGP"}`]]
+            : []),
           ...(customers.length > 1
-            ? [["Total", `${fmt((parseFloat(t.soldPrice) || 0) * customers.length)} ${t.soldCurrency || "EGP"}`]]
+            ? [[
+                "Total",
+                `${fmt(
+                  paxCounts.adult * (parseFloat(t.soldPrice) || 0) +
+                    paxCounts.child * (parseFloat(t.childSoldPrice) || 0) +
+                    paxCounts.infant * (parseFloat(t.infantSoldPrice) || 0)
+                )} ${t.soldCurrency || "EGP"}`,
+              ]]
             : []),
         ],
       },
@@ -4580,6 +4648,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       date: "Date",
       netPrice: "Net price",
       soldPrice: "Sold price",
+      childNetPrice: "Child net price",
+      childSoldPrice: "Child sold price",
+      infantNetPrice: "Infant net price",
+      infantSoldPrice: "Infant sold price",
     };
     Object.keys(fieldLabels).forEach((key) => {
       const beforeVal = before[key] ?? "";
@@ -4603,6 +4675,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
       if ((b.ticketNumber || "") !== (a.ticketNumber || "")) {
         changes.push(`Customer ${i + 1} ticket number: ${b.ticketNumber || "—"} → ${a.ticketNumber || "—"}`);
+      }
+      if ((b.type || "adult") !== (a.type || "adult")) {
+        changes.push(`Customer ${i + 1} type: ${PAX_TYPE_LABELS[b.type || "adult"]} → ${PAX_TYPE_LABELS[a.type || "adult"]}`);
       }
     }
 
@@ -4633,8 +4708,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const routeValid = form.multiDestination
       ? cleanDestinations.length >= 2
       : form.from.trim() && form.to.trim();
-    if (!customersValid || !routeValid || form.netPrice === "" || form.soldPrice === "") {
-      setError("Please enter at least the customer name(s), a ticket number or PNR reference for each, destinations, and prices");
+    const paxCounts = ticketPaxCounts({ customers });
+    const childPriceValid = paxCounts.child === 0 || (form.childNetPrice !== "" && form.childSoldPrice !== "");
+    const infantPriceValid = paxCounts.infant === 0 || (form.infantNetPrice !== "" && form.infantSoldPrice !== "");
+    if (!customersValid || !routeValid || form.netPrice === "" || form.soldPrice === "" || !childPriceValid || !infantPriceValid) {
+      setError("Please enter at least the customer name(s), a ticket number or PNR reference for each, destinations, and prices (including child/infant prices if any passenger is marked Child or Infant)");
       return;
     }
     // Keep the original owner when editing an existing ticket (so an admin editing someone
@@ -4705,15 +4783,29 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // been granted the "edit tickets" permission. Deleting stays main-account only either way.
   const handleEdit = (t, afterConfirm) => {
     if (!currentUser.isAdmin && !canEditTickets) return;
-    // Backward compatibility: older records stored a single customer/ticketNumber pair
+    // Backward compatibility: older records stored a single customer/ticketNumber pair,
+    // and had no passenger "type" at all — every customer without one defaults to Adult.
     const customers =
       Array.isArray(t.customers) && t.customers.length > 0
-        ? t.customers
-        : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
+        ? t.customers.map((c) => ({ type: "adult", ...c }))
+        : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "", type: "adult" }];
     // Backward compatibility: older records have no multiDestination/destinations fields.
     const destinations =
       Array.isArray(t.destinations) && t.destinations.length >= 2 ? t.destinations : [t.from || "", t.to || ""];
-    setForm({ ...t, customers, customersCount: customers.length, multiDestination: !!t.multiDestination, destinations, tripType: t.tripType || "oneWay", returnAirport: t.returnAirport || "" });
+    setForm({
+      ...t,
+      customers,
+      customersCount: customers.length,
+      multiDestination: !!t.multiDestination,
+      destinations,
+      tripType: t.tripType || "oneWay",
+      returnAirport: t.returnAirport || "",
+      // Backward compatibility: older records have no child/infant fare fields.
+      childNetPrice: t.childNetPrice ?? "",
+      childSoldPrice: t.childSoldPrice ?? "",
+      infantNetPrice: t.infantNetPrice ?? "",
+      infantSoldPrice: t.infantSoldPrice ?? "",
+    });
     setSupplierOther(!!t.supplier && !(suggestions.flightSuppliers || []).includes(t.supplier));
     if (afterConfirm) afterConfirm();
     setTimeout(() => {
@@ -4731,8 +4823,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (!currentUser.isAdmin && !canAddTickets) return;
     const customers =
       Array.isArray(t.customers) && t.customers.length > 0
-        ? t.customers
-        : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "" }];
+        ? t.customers.map((c) => ({ type: "adult", ...c }))
+        : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "", type: "adult" }];
     const destinations =
       Array.isArray(t.destinations) && t.destinations.length >= 2 ? t.destinations : [t.from || "", t.to || ""];
     setForm({
@@ -4745,6 +4837,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       tripType: t.tripType || "oneWay",
       returnAirport: t.returnAirport || "",
       notesHistory: [],
+      childNetPrice: t.childNetPrice ?? "",
+      childSoldPrice: t.childSoldPrice ?? "",
+      infantNetPrice: t.infantNetPrice ?? "",
+      infantSoldPrice: t.infantSoldPrice ?? "",
     });
     setSupplierOther(!!t.supplier && !(suggestions.flightSuppliers || []).includes(t.supplier));
     if (afterConfirm) afterConfirm();
@@ -4840,12 +4936,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // converted to EGP with the shared USD -> EGP rate before being combined.
   const netAfterRefund = (t) =>
     hotelInEgp(
-      (parseFloat(t.netPrice) || 0) - getRefunds(t).reduce((sum, r) => sum + (parseFloat(r.airlineAmount) || 0), 0),
+      ticketNetTotal(t) - getRefunds(t).reduce((sum, r) => sum + (parseFloat(r.airlineAmount) || 0), 0),
       t.netCurrency || "EGP"
     );
   const soldAfterRefund = (t) =>
     hotelInEgp(
-      (parseFloat(t.soldPrice) || 0) - getRefunds(t).reduce((sum, r) => sum + (parseFloat(r.customerAmount) || 0), 0),
+      ticketSoldTotal(t) - getRefunds(t).reduce((sum, r) => sum + (parseFloat(r.customerAmount) || 0), 0),
       t.soldCurrency || "EGP"
     );
   const profitAfterRefund = (t) => soldAfterRefund(t) - netAfterRefund(t);
@@ -4938,6 +5034,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
     }
     setForm({ ...form, customers, airline });
+  };
+
+  // Sets one customer row's passenger type (Adult/Child/Infant). Unlike
+  // handleCustomerFieldChange this never uppercases the value — it's a fixed lowercase
+  // code ("adult"/"child"/"infant"), not free text.
+  const handleCustomerTypeChange = (index, type) => {
+    const customers = form.customers.map((c, i) => (i === index ? { ...c, type } : c));
+    setForm({ ...form, customers });
   };
 
   // Toggles whether a customer has a conjunction ticket (a second ticket number issued
@@ -5373,8 +5477,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Flight ticket net/sold, converted to EGP — raw (pre-refund) figures, used for
   // per-ticket display and totals. See netAfterRefund/soldAfterRefund above for the
   // refund-adjusted versions used in accounting/reports.
-  const ticketNetEgp = (t) => hotelInEgp(parseFloat(t.netPrice) || 0, t.netCurrency || "EGP");
-  const ticketSoldEgp = (t) => hotelInEgp(parseFloat(t.soldPrice) || 0, t.soldCurrency || "EGP");
+  const ticketNetEgp = (t) => hotelInEgp(ticketNetTotal(t), t.netCurrency || "EGP");
+  const ticketSoldEgp = (t) => hotelInEgp(ticketSoldTotal(t), t.soldCurrency || "EGP");
   const ticketProfitEgp = (t) => ticketSoldEgp(t) - ticketNetEgp(t);
 
   // A booking is Corporate when a company name was entered; otherwise it's an
@@ -6496,6 +6600,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           "Employee": t.employee || "",
           "Date": t.date ? formatDisplayDate(t.date) : "",
           "Customer": c.name || "",
+          "Passenger type": PAX_TYPE_LABELS[c.type || "adult"],
           "Ticket #": c.ticketNumber || "",
           "Airline": airlineCode,
           "Route": routeLabel(t),
@@ -6503,9 +6608,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           // the first) so each ticket in a multi-ticket booking shows the same
           // Net price / Sold price / Profit, and the totals row below — a
           // plain sum of this column — adds them up exactly as displayed.
-          "Sold price": round2(t.soldPrice),
+          "Sold price": round2(ticketSoldTotal(t)),
           "Sold currency": t.soldCurrency || "EGP",
-          "Net price": round2(t.netPrice),
+          "Net price": round2(ticketNetTotal(t)),
           "Net currency": t.netCurrency || "EGP",
           // EGP-converted figures (via the shared USD -> EGP rate) — these are what the
           // totals row below sums, so mixed-currency tickets still total correctly.
@@ -7091,8 +7196,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
           </td>
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`}>{routeLabel(t)}</td>
-          <td className={`px-1 py-0 ${cellText} text-right whitespace-nowrap`}>{fmt(t.soldPrice)} {t.soldCurrency || "EGP"}</td>
-          <td className={`px-1 py-0 ${cellText} text-right whitespace-nowrap`}>{fmt(t.netPrice)} {t.netCurrency || "EGP"}</td>
+          <td className={`px-1 py-0 ${cellText} text-right whitespace-nowrap`}>{fmt(ticketSoldTotal(t))} {t.soldCurrency || "EGP"}</td>
+          <td className={`px-1 py-0 ${cellText} text-right whitespace-nowrap`}>{fmt(ticketNetTotal(t))} {t.netCurrency || "EGP"}</td>
           <td className="px-1 py-0 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(ticketProfitEgp(t))} EGP</td>
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`}>
             {t.company && t.company.trim() ? (
@@ -8924,6 +9029,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     onChange={(e) => handleCustomerFieldChange(i, "name", e.target.value)}
                     placeholder={`Customer ${i + 1} name`}
                   />
+                  <select
+                    className={`w-full md:w-[9ch] md:shrink-0 border rounded-xl px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-700 bg-white ${
+                      c.type === "child" || c.type === "infant" ? "border-blue-400 text-blue-700 font-medium" : "border-stone-300"
+                    }`}
+                    value={c.type || "adult"}
+                    onChange={(e) => handleCustomerTypeChange(i, e.target.value)}
+                    title="Passenger type — Child/Infant can be priced differently below"
+                  >
+                    <option value="adult">Adult</option>
+                    <option value="child">Child</option>
+                    <option value="infant">Infant</option>
+                  </select>
                   <label
                     className="flex items-center gap-1.5 shrink-0 cursor-pointer select-none text-xs text-stone-500 md:py-2"
                     title="This customer has a second ticket number issued together with the first"
@@ -9253,6 +9370,82 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
           </div>
+
+          {/* Child/Infant fares — only shown once at least one customer row above is
+              marked Child or Infant. Each is a per-passenger rate (same currency as the
+              adult Net/Sold price), multiplied by however many child/infant passengers
+              are on this ticket to get the grand total shown below. */}
+          {(() => {
+            const paxCounts = ticketPaxCounts(form);
+            if (paxCounts.child === 0 && paxCounts.infant === 0) return null;
+            return (
+              <div className="mt-3 border border-blue-100 bg-blue-50/60 rounded-xl p-3">
+                <p className="text-xs font-semibold text-blue-800 mb-2">
+                  Child/Infant fares — {paxCounts.child > 0 ? `${paxCounts.child} child` : ""}
+                  {paxCounts.child > 0 && paxCounts.infant > 0 ? ", " : ""}
+                  {paxCounts.infant > 0 ? `${paxCounts.infant} infant` : ""}
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {paxCounts.child > 0 && (
+                    <>
+                      <div>
+                        <label className="text-xs text-stone-500 block mb-1">Child net price (each)</label>
+                        <input
+                          type="number"
+                          className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input bg-white"
+                          value={form.childNetPrice}
+                          onChange={(e) => setForm({ ...form, childNetPrice: e.target.value })}
+                          onBlur={(e) => setForm({ ...form, childNetPrice: addCentsOnBlur(e.target.value) })}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-stone-500 block mb-1">Child sold price (each)</label>
+                        <input
+                          type="number"
+                          className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input bg-white"
+                          value={form.childSoldPrice}
+                          onChange={(e) => setForm({ ...form, childSoldPrice: e.target.value })}
+                          onBlur={(e) => setForm({ ...form, childSoldPrice: addCentsOnBlur(e.target.value) })}
+                          placeholder="0"
+                        />
+                      </div>
+                    </>
+                  )}
+                  {paxCounts.infant > 0 && (
+                    <>
+                      <div>
+                        <label className="text-xs text-stone-500 block mb-1">Infant net price (each)</label>
+                        <input
+                          type="number"
+                          className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input bg-white"
+                          value={form.infantNetPrice}
+                          onChange={(e) => setForm({ ...form, infantNetPrice: e.target.value })}
+                          onBlur={(e) => setForm({ ...form, infantNetPrice: addCentsOnBlur(e.target.value) })}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-stone-500 block mb-1">Infant sold price (each)</label>
+                        <input
+                          type="number"
+                          className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input bg-white"
+                          value={form.infantSoldPrice}
+                          onChange={(e) => setForm({ ...form, infantSoldPrice: e.target.value })}
+                          onBlur={(e) => setForm({ ...form, infantSoldPrice: addCentsOnBlur(e.target.value) })}
+                          placeholder="0"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="mt-2 flex gap-4 text-xs text-stone-600">
+                  <span>Total net: <span className="font-semibold text-stone-800">{fmt(ticketNetTotal(form))} {form.netCurrency}</span></span>
+                  <span>Total sold: <span className="font-semibold text-stone-800">{fmt(ticketSoldTotal(form))} {form.soldCurrency}</span></span>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="mt-3">
             <label className="text-xs text-stone-500 block mb-1">Notes</label>
@@ -13066,6 +13259,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <tr key={i} className="border-t border-stone-100">
                           <td className="px-3 py-2 text-stone-700 whitespace-nowrap">
                             {c.name || "-"}
+                            {(c.type || "adult") !== "adult" && (
+                              <span className="ml-2 inline-block text-[10px] font-semibold text-blue-700 bg-blue-100 rounded-full px-2 py-0.5 align-middle">
+                                {PAX_TYPE_LABELS[c.type]}
+                              </span>
+                            )}
                             {refundForIndex(viewingTicket, i) && (
                               <span className="ml-2 inline-block text-[10px] font-semibold text-sky-700 bg-sky-100 rounded-full px-2 py-0.5 align-middle">
                                 Refunded
@@ -13088,15 +13286,29 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 md:p-5">
                 <div>
-                  <p className="text-xs text-stone-400 mb-1">Net price</p>
-                  <p className="text-sm font-medium text-stone-800">{fmt(viewingTicket.netPrice)} {viewingTicket.netCurrency || "EGP"}</p>
+                  <p className="text-xs text-stone-400 mb-1">Net price{ticketPaxCounts(viewingTicket).child + ticketPaxCounts(viewingTicket).infant > 0 ? " (total)" : ""}</p>
+                  <p className="text-sm font-medium text-stone-800">{fmt(ticketNetTotal(viewingTicket))} {viewingTicket.netCurrency || "EGP"}</p>
+                  {(ticketPaxCounts(viewingTicket).child > 0 || ticketPaxCounts(viewingTicket).infant > 0) && (
+                    <p className="text-[11px] text-stone-400">
+                      Adult {fmt(viewingTicket.netPrice)}
+                      {ticketPaxCounts(viewingTicket).child > 0 && ` · Child ${fmt(viewingTicket.childNetPrice)} × ${ticketPaxCounts(viewingTicket).child}`}
+                      {ticketPaxCounts(viewingTicket).infant > 0 && ` · Infant ${fmt(viewingTicket.infantNetPrice)} × ${ticketPaxCounts(viewingTicket).infant}`}
+                    </p>
+                  )}
                   {hasRefund(viewingTicket) && (
                     <p className="text-[11px] text-sky-600">After refund: {fmt(netAfterRefund(viewingTicket))} EGP</p>
                   )}
                 </div>
                 <div>
-                  <p className="text-xs text-stone-400 mb-1">Sold price</p>
-                  <p className="text-sm font-medium text-stone-800">{fmt(viewingTicket.soldPrice)} {viewingTicket.soldCurrency || "EGP"}</p>
+                  <p className="text-xs text-stone-400 mb-1">Sold price{ticketPaxCounts(viewingTicket).child + ticketPaxCounts(viewingTicket).infant > 0 ? " (total)" : ""}</p>
+                  <p className="text-sm font-medium text-stone-800">{fmt(ticketSoldTotal(viewingTicket))} {viewingTicket.soldCurrency || "EGP"}</p>
+                  {(ticketPaxCounts(viewingTicket).child > 0 || ticketPaxCounts(viewingTicket).infant > 0) && (
+                    <p className="text-[11px] text-stone-400">
+                      Adult {fmt(viewingTicket.soldPrice)}
+                      {ticketPaxCounts(viewingTicket).child > 0 && ` · Child ${fmt(viewingTicket.childSoldPrice)} × ${ticketPaxCounts(viewingTicket).child}`}
+                      {ticketPaxCounts(viewingTicket).infant > 0 && ` · Infant ${fmt(viewingTicket.infantSoldPrice)} × ${ticketPaxCounts(viewingTicket).infant}`}
+                    </p>
+                  )}
                   {hasRefund(viewingTicket) && (
                     <p className="text-[11px] text-sky-600">After refund: {fmt(soldAfterRefund(viewingTicket))} EGP</p>
                   )}
