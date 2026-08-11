@@ -1102,6 +1102,7 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
     });
     setSaving(false);
     setSaveError(err || "");
+    if (!err) onClose();
   };
 
   return (
@@ -1265,6 +1266,12 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
                       description={`Permanently remove ${s.label.toLowerCase()} records they can see`}
                       checked={perm.canDelete}
                       onChange={(v) => onSetSectionPerm(s.value, "canDelete", v)}
+                    />
+                    <ToggleSwitch
+                      label="Corporates"
+                      description="Add, edit, and delete saved corporate accounts (this is the same Corporate Management access everywhere, not specific to this section)"
+                      checked={!!emp.canManageCompanies}
+                      onChange={(v) => onSetPermission("canManageCompanies", v)}
                     />
                   </div>
                 )}
