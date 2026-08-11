@@ -1273,6 +1273,12 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
                       checked={!!emp.canManageCompanies}
                       onChange={(v) => onSetPermission("canManageCompanies", v)}
                     />
+                    <ToggleSwitch
+                      label="Suppliers"
+                      description="Add, edit, and delete saved suppliers (this is the same Manage Suppliers access everywhere, not specific to this section)"
+                      checked={!!emp.canManageCompanies}
+                      onChange={(v) => onSetPermission("canManageCompanies", v)}
+                    />
                   </div>
                 )}
               </div>
@@ -7115,7 +7121,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
               {/* "Management" flyout — groups the account/admin icon actions behind one
                   labeled button. Opens sideways (toward the left) with a small arrow
-                  pointer connecting the panel back to the button. */}
+                  pointer connecting the panel back to the button. Only Admin, Owner, and
+                  General Manager (all covered by hasAdminAccess) ever see this button at
+                  all — everyone else, even with Corporates/Suppliers access, doesn't. */}
+              {hasAdminAccess && (
               <div className="relative">
                 <button
                   type="button"
@@ -7183,6 +7192,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </>
                 )}
               </div>
+              )}
           </div>
             <div className="flex items-center gap-2 sm:gap-3 order-1">
               <div className="bg-white rounded-2xl px-2 py-1 sm:px-2.5 sm:py-1.5 md:px-3 md:py-2 shadow-sm shrink-0">
