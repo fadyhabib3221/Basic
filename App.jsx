@@ -9464,14 +9464,30 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">
-                  Company name <span className="font-normal text-stone-400">(optional — leave blank for Individual)</span>
+                  Corporates <span className="font-normal text-stone-400">(optional — leave blank for Individual)</span>
                 </label>
-                <input
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                <select
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
                   value={hotelForm.customer}
                   onChange={(e) => setHotelForm({ ...hotelForm, customer: e.target.value })}
-                  placeholder="e.g. Perla Travel Corp — leave blank for Individual"
-                />
+                >
+                  <option value="">— No corporate (Individual) —</option>
+                  {hotelForm.customer && !suggestions.companies.some((c) => companyName(c) === hotelForm.customer) && (
+                    // Booking already has a company value that isn't (or is no longer) a
+                    // registered corporate — e.g. saved before Corporate Management existed,
+                    // or the corporate was later renamed/deleted. Keep it selectable/visible
+                    // instead of silently blanking the field.
+                    <option value={hotelForm.customer}>{hotelForm.customer} (not registered)</option>
+                  )}
+                  {[...suggestions.companies]
+                    .sort((a, b) => companyName(a).localeCompare(companyName(b)))
+                    .map((c) => {
+                      const name = companyName(c);
+                      return (
+                        <option key={name} value={name}>{name}</option>
+                      );
+                    })}
+                </select>
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Hotel name</label>
