@@ -9468,7 +9468,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">
-                  Corporates <span className="font-normal text-stone-400">(optional — leave blank for Individual)</span>
+                  Corporates
                 </label>
                 <select
                   className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
@@ -10229,7 +10229,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">
-                  Corporates <span className="font-normal text-stone-400">(optional — leave blank for Individual)</span>
+                  Corporates
                 </label>
                 <select
                   className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
@@ -10789,7 +10789,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">
-                  Corporates <span className="font-normal text-stone-400">(optional — leave blank for Individual)</span>
+                  Corporates
                 </label>
                 <select
                   className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
