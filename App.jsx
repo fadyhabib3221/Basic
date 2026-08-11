@@ -6992,17 +6992,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="flex items-start justify-between flex-wrap gap-2 sm:gap-3">
             <div className="flex flex-col items-end gap-1.5 sm:gap-2 z-10 order-2">
               <div className="flex items-center gap-1.5 sm:gap-2">
-                {canAccessAccounts && (
-                  <button
-                    type="button"
-                    onClick={() => setAccountsLang((l) => (l === "ar" ? "en" : "ar"))}
-                    title={accountsLang === "ar" ? "Switch to English" : "التحويل للعربية"}
-                    className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center gap-1 transition-colors"
-                  >
-                    <Globe size={15} />
-                    <span className="text-xs font-semibold">{accountsLang === "ar" ? "EN" : "AR"}</span>
-                  </button>
-                )}
                 <button
                   onClick={() => {
                     setShowRequestsPanel(!showRequestsPanel);
