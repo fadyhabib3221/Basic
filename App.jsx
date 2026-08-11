@@ -7016,6 +7016,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
                   <Lock size={15} />
                 </button>
+                <button
+                  onClick={() => {
+                    setShowRequestsPanel(!showRequestsPanel);
+                    setRequestSendError("");
+                  }}
+                  title="Requests"
+                  className="relative border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  <Bell size={15} />
+                  {myPendingRequestsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                      {myPendingRequestsCount}
+                    </span>
+                  )}
+                </button>
                 <button onClick={handleLogout} title="Sign out"
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
                   <LogOut size={15} />
@@ -7099,21 +7113,6 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           <ClipboardList size={15} className="text-teal-800" /> Activity log
                         </button>
                       )}
-                      <button
-                        onClick={() => {
-                          setShowRequestsPanel(!showRequestsPanel);
-                          setRequestSendError("");
-                          setShowManagementMenu(false);
-                        }}
-                        className="w-full relative flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
-                      >
-                        <Bell size={15} className="text-teal-800" /> Requests
-                        {myPendingRequestsCount > 0 && (
-                          <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-                            {myPendingRequestsCount}
-                          </span>
-                        )}
-                      </button>
                     </div>
                   </>
                 )}
