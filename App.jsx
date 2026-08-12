@@ -165,6 +165,52 @@ const unwrapWorkspaceKey = async (keyWrap, plainPassword) => {
   }
 };
 
+// ---------- Session persistence across page refresh ----------
+// Persists the unwrapped workspace key (plus who's signed in) in sessionStorage so a
+// browser refresh restores the session instead of dropping back to the login screen.
+// Deliberately sessionStorage rather than localStorage — it's cleared when the tab/
+// browser closes — and it's wiped on explicit logout. This is a conscious trade-off:
+// it means the workspace key now also lives in the browser's sessionStorage (not just
+// in-memory) while the tab is open, so anyone with access to this open browser tab can
+// read customer/financial data without re-entering a password. Chosen deliberately in
+// favor of a refresh not requiring re-login.
+const LOCAL_SESSION_KEY = "pdm:localSession:v1";
+
+const saveLocalSession = async (user, workspaceKeyObj, startedAt) => {
+  try {
+    let rawKeyB64 = null;
+    if (workspaceKeyObj) {
+      const raw = await crypto.subtle.exportKey("raw", workspaceKeyObj);
+      rawKeyB64 = b64FromBuf(raw);
+    }
+    sessionStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({ user, rawKeyB64, startedAt: startedAt || Date.now() }));
+  } catch (e) {
+    // Best-effort only — worst case, the employee just has to log in again after a refresh.
+  }
+};
+
+const loadLocalSession = async () => {
+  try {
+    const raw = sessionStorage.getItem(LOCAL_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.user || !parsed.user.username) return null;
+    let workspaceKeyObj = null;
+    if (parsed.rawKeyB64) {
+      workspaceKeyObj = await crypto.subtle.importKey(
+        "raw", bufFromB64(parsed.rawKeyB64), { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
+      );
+    }
+    return { user: parsed.user, workspaceKey: workspaceKeyObj, startedAt: parsed.startedAt || Date.now() };
+  } catch (e) {
+    return null;
+  }
+};
+
+const clearLocalSession = () => {
+  try { sessionStorage.removeItem(LOCAL_SESSION_KEY); } catch (e) {}
+};
+
 const encryptForStorage = async (workspaceKey, value) => {
   const ivBytes = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = new TextEncoder().encode(JSON.stringify(value));
@@ -2617,17 +2663,28 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           }
         }
 
-        if (sessionRes && sessionRes.value) {
-          const savedUsername = sessionRes.value;
-          const match = employeesData.find((e) => e.username === savedUsername);
-          if (match) {
-            // Previously this auto-restored the full session (no password needed) on
-            // every page reload. That's no longer possible now that customer/financial
-            // data is encrypted: the workspace key only lives in memory and can only be
-            // unwrapped with the plaintext password, which we don't have on a reload.
-            // So a remembered session now just pre-fills the username — the employee
-            // still re-enters their password once per reload to unlock the data.
-            setLoginUsername(match.username);
+        // Try to restore a full session (including the workspace key) from this browser's
+        // sessionStorage first — see saveLocalSession/loadLocalSession above. This is what
+        // lets a refresh skip the login screen entirely. Re-validate against the current
+        // employee list (not the possibly-stale saved copy) so a removed account or an
+        // admin-changed name/role can't linger.
+        const localSession = await loadLocalSession();
+        const localMatch = localSession && employeesData.find((e) => e.username === localSession.user.username);
+        if (localMatch) {
+          sessionStartedAtRef.current = localSession.startedAt || Date.now();
+          setCurrentUser({ username: localMatch.username, name: localMatch.name, isAdmin: !!localMatch.isAdmin });
+          if (localSession.workspaceKey) setWorkspaceKey(localSession.workspaceKey);
+        } else {
+          if (localSession) clearLocalSession(); // stale — account no longer exists
+          if (sessionRes && sessionRes.value) {
+            const savedUsername = sessionRes.value;
+            const match = employeesData.find((e) => e.username === savedUsername);
+            if (match) {
+              // Fallback for when no local session was found (e.g. a different browser/
+              // tab, or sessionStorage was cleared): just pre-fill the username — the
+              // employee still re-enters their password once to unlock encrypted data.
+              setLoginUsername(match.username);
+            }
           }
         }
       } catch (e) {
@@ -4387,7 +4444,9 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setSetupComplete(true);
     await storageSet("session:user", admin.username, false);
     sessionStartedAtRef.current = Date.now();
-    setCurrentUser({ username: admin.username, name: admin.name, isAdmin: true });
+    const adminUser = { username: admin.username, name: admin.name, isAdmin: true };
+    setCurrentUser(adminUser);
+    saveLocalSession(adminUser, workspaceKeyObj, sessionStartedAtRef.current);
     recordLogin({ username: admin.username, name: admin.name, isAdmin: true });
     setSetupName(""); setSetupUsername(""); setSetupPassword("");
   };
@@ -4431,9 +4490,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // right here and claim it for this employee. Otherwise, if THIS employee simply
     // doesn't have a keyWrap yet, they need an admin to reset their password once
     // (Manage Employees) before they can see encrypted customer/financial data.
+    let resolvedWorkspaceKey = null;
     if (match.keyWrap) {
       const unwrapped = await unwrapWorkspaceKey(match.keyWrap, loginPassword);
       if (unwrapped) {
+        resolvedWorkspaceKey = unwrapped;
         setWorkspaceKey(unwrapped);
       } else {
         setKeyAccessWarning("Could not unlock encrypted data for this account. Please contact an admin.");
@@ -4442,13 +4503,16 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const workspaceKeyObj = await generateWorkspaceKey();
       const wrap = await wrapWorkspaceKey(workspaceKeyObj, loginPassword);
       await persistEmployees((employees || []).map((e) => (e.username === match.username ? { ...e, keyWrap: wrap } : e)));
+      resolvedWorkspaceKey = workspaceKeyObj;
       setWorkspaceKey(workspaceKeyObj);
     } else {
       setKeyAccessWarning("Your account doesn't have access to encrypted data yet — ask an admin to reset your password once (Manage Employees) to enable it.");
     }
     await storageSet("session:user", match.username, false);
     sessionStartedAtRef.current = Date.now();
-    setCurrentUser({ username: match.username, name: match.name, isAdmin: !!match.isAdmin });
+    const loggedInUser = { username: match.username, name: match.name, isAdmin: !!match.isAdmin };
+    setCurrentUser(loggedInUser);
+    saveLocalSession(loggedInUser, resolvedWorkspaceKey, sessionStartedAtRef.current);
     recordLogin({ username: match.username, name: match.name, isAdmin: !!match.isAdmin });
     setLoginUsername(""); setLoginPassword("");
     try {
@@ -4465,6 +4529,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const handleLogout = async () => {
     if (currentUser) recordLogin({ username: currentUser.username, name: currentUser.name, isAdmin: currentUser.isAdmin }, "logout");
     await storageDelete("session:user", false).catch(() => {});
+    clearLocalSession();
     setCurrentUser(null);
     setShowManage(false);
     setEditingUsername(null);
