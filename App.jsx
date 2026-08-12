@@ -3399,7 +3399,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (hotelEditingId) {
       const commitHotel = async () => {
         const next = hotelBookings.map((h) =>
-          h.id === hotelEditingId ? { ...h, ...hotelForm, id: hotelEditingId } : h
+          h.id === hotelEditingId ? { ...h, ...hotelForm, id: hotelEditingId, usdRate: hotelForm.usdRate ?? h.usdRate } : h
         );
         await persistHotelBookings(next);
         recordActivity("Hotels", "edited", `Edited hotel booking: ${hotelForm.hotel || "hotel"} for ${hotelForm.customer || "customer"}`);
@@ -3413,6 +3413,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         id: `H-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         employee: currentUser.name,
         employeeUsername: currentUser.username,
+        // Locked in once, the first time this booking is saved — see the same note
+        // on tickets' usdRate above.
+        usdRate: hotelForm.usdRate ?? usdToEgpRate ?? null,
       };
       await persistHotelBookings([record, ...hotelBookings]);
       recordActivity("Hotels", "created", `Created hotel booking: ${record.hotel || "hotel"} for ${record.customer || "customer"}`);
@@ -3448,6 +3451,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           : [emptyRoomLine()],
       bookingDate: h.bookingDate || todayDateStr(),
       notes: h.notes || "",
+      usdRate: h.usdRate,
     });
     setHotelSupplierOther(!!h.supplier && !suggestions.suppliers.includes(h.supplier));
     setHotelNameOther(!!h.hotel && !suggestions.hotelNames.includes(h.hotel));
@@ -3606,7 +3610,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     if (visaEditingId) {
       const commitVisa = async () => {
-        const next = visaBookings.map((v) => (v.id === visaEditingId ? { ...v, ...visaForm, id: visaEditingId } : v));
+        const next = visaBookings.map((v) => (v.id === visaEditingId ? { ...v, ...visaForm, id: visaEditingId, usdRate: visaForm.usdRate ?? v.usdRate } : v));
         await persistVisaBookings(next);
         recordActivity("Visas", "edited", `Edited visa booking: ${visaForm.visaType || "visa"} for ${(visaForm.customers && visaForm.customers[0] && visaForm.customers[0].name) || "customer"}`);
         resetVisaForm();
@@ -3619,6 +3623,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         id: `V-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         employee: currentUser.name,
         employeeUsername: currentUser.username,
+        // Locked in once, the first time this booking is saved — see the same note
+        // on tickets' usdRate above.
+        usdRate: visaForm.usdRate ?? usdToEgpRate ?? null,
       };
       await persistVisaBookings([record, ...visaBookings]);
       recordActivity("Visas", "created", `Created visa booking: ${record.visaType || "visa"} for ${(record.customers && record.customers[0] && record.customers[0].name) || "customer"}`);
@@ -3641,6 +3648,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       netPrice: v.netPrice,
       soldPrice: v.soldPrice,
       bookingDate: v.bookingDate || todayDateStr(),
+      usdRate: v.usdRate,
     });
     setVisaSupplierOther(!!v.supplier && !(suggestions.visaSuppliers || []).includes(v.supplier));
     setVisaError("");
@@ -3739,7 +3747,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     if (carEditingId) {
       const commitCar = async () => {
-        const next = carBookings.map((c) => (c.id === carEditingId ? { ...c, ...carForm, id: carEditingId } : c));
+        const next = carBookings.map((c) => (c.id === carEditingId ? { ...c, ...carForm, id: carEditingId, usdRate: carForm.usdRate ?? c.usdRate } : c));
         await persistCarBookings(next);
         recordActivity("Transportation", "edited", `Edited car booking: ${carForm.customerName || "customer"} (${carForm.routeFrom || "?"} → ${carForm.routeTo || "?"})`);
         resetCarForm();
@@ -3752,6 +3760,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         id: `C-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         employee: currentUser.name,
         employeeUsername: currentUser.username,
+        // Locked in once, the first time this booking is saved — see the same note
+        // on tickets' usdRate above.
+        usdRate: carForm.usdRate ?? usdToEgpRate ?? null,
       };
       await persistCarBookings([record, ...carBookings]);
       recordActivity("Transportation", "created", `Created car booking: ${record.customerName || "customer"} (${record.routeFrom || "?"} → ${record.routeTo || "?"})`);
@@ -3788,6 +3799,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       returnTime: c.returnTime || "",
       entryDate: c.entryDate || todayDateStr(),
       collection: c.collection || "",
+      usdRate: c.usdRate,
     });
     setCarSupplierOther(!!c.supplier && !(suggestions.carSuppliers || []).includes(c.supplier));
     setCarError("");
@@ -3950,6 +3962,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 )} ${t.soldCurrency || "EGP"}`,
               ]]
             : []),
+          ...((t.netCurrency === "USD" || t.soldCurrency === "USD") && t.usdRate
+            ? [["USD → EGP rate used", `${fmt(t.usdRate)} (locked at booking)`]]
+            : []),
         ],
       },
       ...(hasRefund(t)
@@ -4054,6 +4069,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           ["Net total", `${fmt(hotelNetTotal(h))} EGP`],
           ["Sold total", `${fmt(hotelSoldTotal(h))} EGP`],
           ["Profit", `${fmt(hotelProfitTotal(h))} EGP`],
+          ...((h.netCurrency === "USD" || h.soldCurrency === "USD") && h.usdRate
+            ? [["USD → EGP rate used", `${fmt(h.usdRate)} (locked at booking)`]]
+            : []),
         ],
       },
     ]);
@@ -4084,6 +4102,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             ["Net total", `${fmt(visaNetTotal(v))} ${v.netCurrency || "EGP"}`],
             ["Sold total", `${fmt(visaSoldTotal(v))} ${v.soldCurrency || "EGP"}`],
             ["Profit", `${fmt(visaProfitTotal(v))} EGP`],
+            ...((v.netCurrency === "USD" || v.soldCurrency === "USD") && v.usdRate
+              ? [["USD → EGP rate used", `${fmt(v.usdRate)} (locked at booking)`]]
+              : []),
           ],
         },
       ]
@@ -4754,6 +4775,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       employee: isEditingExisting ? form.employee : currentUser.name,
       employeeUsername: isEditingExisting ? form.employeeUsername : currentUser.username,
       id: form.id || Date.now().toString(),
+      // The USD -> EGP rate is locked in the first time a ticket is saved (whatever
+      // today's rate is then), so its EGP value never drifts later just because the
+      // shared rate changed — an existing lock is always kept, never overwritten.
+      usdRate: form.usdRate ?? usdToEgpRate ?? null,
     };
     // Every edit to an existing ticket — any field, not just notes — gets logged into the
     // same edit-history trail shown under Notes, recording what changed and who changed it.
@@ -4943,12 +4968,14 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const netAfterRefund = (t) =>
     hotelInEgp(
       ticketNetTotal(t) - getRefunds(t).reduce((sum, r) => sum + (parseFloat(r.airlineAmount) || 0), 0),
-      t.netCurrency || "EGP"
+      t.netCurrency || "EGP",
+      t.usdRate
     );
   const soldAfterRefund = (t) =>
     hotelInEgp(
       ticketSoldTotal(t) - getRefunds(t).reduce((sum, r) => sum + (parseFloat(r.customerAmount) || 0), 0),
-      t.soldCurrency || "EGP"
+      t.soldCurrency || "EGP",
+      t.usdRate
     );
   const profitAfterRefund = (t) => soldAfterRefund(t) - netAfterRefund(t);
 
@@ -5447,9 +5474,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     };
   };
 
-  // Converts an amount from a room line's own currency into EGP, using the entered
-  // USD->EGP rate. Returns the amount unchanged for EGP-priced lines.
-  const hotelInEgp = (amount, currency) => (currency === "USD" ? amount * (usdToEgpRate || 0) : amount);
+  // Converts an amount from a room line's own currency into EGP. Takes the specific
+  // USD->EGP rate to use — normally the rate that was locked in on the record itself
+  // (see usdRate on tickets/hotels/visa/cars, captured the day the service was first
+  // entered) so a booking's EGP value doesn't drift every time today's rate changes.
+  // Falls back to today's rate for older records saved before rate-locking existed.
+  const hotelInEgp = (amount, currency, rate) =>
+    currency === "USD" ? amount * (rate ?? usdToEgpRate ?? 0) : amount;
 
   // Per-booking totals: each room line's net/sold price is multiplied by its own room
   // count and its own number of nights, then summed across every line (e.g. 1 single
@@ -5461,9 +5492,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const hotelLineNetTotal = (l, nights) => (parseFloat(l.netPrice) || 0) * (parseInt(l.count, 10) || 0) * nights;
   const hotelLineSoldTotal = (l, nights) => (parseFloat(l.soldPrice) || 0) * (parseInt(l.count, 10) || 0) * nights;
   const hotelNetTotal = (h) =>
-    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineNetTotal(l, roomLineNights(l, h)), h.netCurrency), 0);
+    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineNetTotal(l, roomLineNights(l, h)), h.netCurrency, h.usdRate), 0);
   const hotelSoldTotal = (h) =>
-    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineSoldTotal(l, roomLineNights(l, h)), h.soldCurrency), 0);
+    (h.roomLines || []).reduce((sum, l) => sum + hotelInEgp(hotelLineSoldTotal(l, roomLineNights(l, h)), h.soldCurrency, h.usdRate), 0);
   const hotelProfitTotal = (h) => hotelSoldTotal(h) - hotelNetTotal(h);
 
   // Visa prices are entered per applicant, so a booking's real net/sold amounts are the
@@ -5474,20 +5505,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const visaSoldTotal = (v) => (parseFloat(v.soldPrice) || 0) * visaCustomersCount(v);
   // Net and sold can each be in a different currency, so profit converts both to EGP first.
   const visaProfitTotal = (v) =>
-    hotelInEgp(visaSoldTotal(v), v.soldCurrency) - hotelInEgp(visaNetTotal(v), v.netCurrency);
+    hotelInEgp(visaSoldTotal(v), v.soldCurrency, v.usdRate) - hotelInEgp(visaNetTotal(v), v.netCurrency, v.usdRate);
 
   // Car/transfer net, sold, and profit — net and sold can each be in a different
   // currency, so profit converts both to EGP first (same convention as hotels/visas).
   const carNetTotal = (c) => parseFloat(c.netPrice) || 0;
   const carSoldTotal = (c) => parseFloat(c.soldPrice) || 0;
   const carProfitTotal = (c) =>
-    hotelInEgp(carSoldTotal(c), c.soldCurrency) - hotelInEgp(carNetTotal(c), c.netCurrency);
+    hotelInEgp(carSoldTotal(c), c.soldCurrency, c.usdRate) - hotelInEgp(carNetTotal(c), c.netCurrency, c.usdRate);
 
   // Flight ticket net/sold, converted to EGP — raw (pre-refund) figures, used for
   // per-ticket display and totals. See netAfterRefund/soldAfterRefund above for the
   // refund-adjusted versions used in accounting/reports.
-  const ticketNetEgp = (t) => hotelInEgp(ticketNetTotal(t), t.netCurrency || "EGP");
-  const ticketSoldEgp = (t) => hotelInEgp(ticketSoldTotal(t), t.soldCurrency || "EGP");
+  const ticketNetEgp = (t) => hotelInEgp(ticketNetTotal(t), t.netCurrency || "EGP", t.usdRate);
+  const ticketSoldEgp = (t) => hotelInEgp(ticketSoldTotal(t), t.soldCurrency || "EGP", t.usdRate);
   const ticketProfitEgp = (t) => ticketSoldEgp(t) - ticketNetEgp(t);
 
   // A booking is Corporate when a company name was entered; otherwise it's an
@@ -5665,8 +5696,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // booking, and the number of bookings for transfers.
   const visaTotals = filteredVisaBookings.reduce(
     (acc, v) => {
-      const net = hotelInEgp(visaNetTotal(v), v.netCurrency);
-      const sold = hotelInEgp(visaSoldTotal(v), v.soldCurrency);
+      const net = hotelInEgp(visaNetTotal(v), v.netCurrency, v.usdRate);
+      const sold = hotelInEgp(visaSoldTotal(v), v.soldCurrency, v.usdRate);
       acc.count += visaCustomersCount(v);
       acc.net += net;
       acc.sold += sold;
@@ -5677,8 +5708,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   );
   const carTotals = filteredCarBookings.reduce(
     (acc, c) => {
-      const net = hotelInEgp(carNetTotal(c), c.netCurrency);
-      const sold = hotelInEgp(carSoldTotal(c), c.soldCurrency);
+      const net = hotelInEgp(carNetTotal(c), c.netCurrency, c.usdRate);
+      const sold = hotelInEgp(carSoldTotal(c), c.soldCurrency, c.usdRate);
       acc.count += 1;
       acc.net += net;
       acc.sold += sold;
@@ -5733,8 +5764,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       supplier: (v.supplier || "").trim(),
       customers: (v.customers || []).map((c) => (c.name || "").trim()).filter(Boolean),
       date: v.bookingDate || "",
-      net: hotelInEgp(visaNetTotal(v), v.netCurrency),
-      sold: hotelInEgp(visaSoldTotal(v), v.soldCurrency),
+      net: hotelInEgp(visaNetTotal(v), v.netCurrency, v.usdRate),
+      sold: hotelInEgp(visaSoldTotal(v), v.soldCurrency, v.usdRate),
     })),
     ...carBookings.map((c) => ({
       key: `cars-${c.id}`,
@@ -5742,8 +5773,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       supplier: (c.supplier || "").trim(),
       customers: [(c.customerName || "").trim()].filter(Boolean),
       date: c.bookingDate || "",
-      net: hotelInEgp(carNetTotal(c), c.netCurrency),
-      sold: hotelInEgp(carSoldTotal(c), c.soldCurrency),
+      net: hotelInEgp(carNetTotal(c), c.netCurrency, c.usdRate),
+      sold: hotelInEgp(carSoldTotal(c), c.soldCurrency, c.usdRate),
     })),
   ];
 
@@ -6190,7 +6221,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // shown or totaled. If the original record was since deleted, returns a "missing" stub
   // instead of throwing, so the file just shows the item as gone rather than crashing.
   const resolveFileItem = (it) => {
-    const missing = { label: "(record deleted)", date: "", netCurrency: "EGP", soldCurrency: "EGP", netPrice: 0, soldPrice: 0, missing: true };
+    const missing = { label: "(record deleted)", date: "", netCurrency: "EGP", soldCurrency: "EGP", netPrice: 0, soldPrice: 0, missing: true, usdRate: undefined };
     if (it.sourceType === "flights") {
       const record = tickets.find((x) => x.id === it.sourceId);
       if (!record) return missing;
@@ -6202,6 +6233,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         soldCurrency: record.soldCurrency || "EGP",
         netPrice: parseFloat(record.netPrice) || 0,
         soldPrice: parseFloat(record.soldPrice) || 0,
+        usdRate: record.usdRate,
       };
     }
     if (it.sourceType === "hotels") {
@@ -6215,6 +6247,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         soldCurrency: "EGP",
         netPrice: hotelNetTotal(record),
         soldPrice: hotelSoldTotal(record),
+        usdRate: record.usdRate,
       };
     }
     if (it.sourceType === "visa") {
@@ -6228,6 +6261,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         soldCurrency: record.soldCurrency || record.currency || "EGP",
         netPrice: visaNetTotal(record),
         soldPrice: visaSoldTotal(record),
+        usdRate: record.usdRate,
       };
     }
     if (it.sourceType === "cars") {
@@ -6240,6 +6274,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         soldCurrency: record.soldCurrency || record.currency || "EGP",
         netPrice: parseFloat(record.netPrice) || 0,
         soldPrice: parseFloat(record.soldPrice) || 0,
+        usdRate: record.usdRate,
       };
     }
     return missing;
@@ -6253,8 +6288,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     (f.items || []).reduce(
       (acc, it) => {
         const r = resolveFileItem(it);
-        acc.net += hotelInEgp(r.netPrice, r.netCurrency);
-        acc.sold += hotelInEgp(r.soldPrice, r.soldCurrency);
+        acc.net += hotelInEgp(r.netPrice, r.netCurrency, r.usdRate);
+        acc.sold += hotelInEgp(r.soldPrice, r.soldCurrency, r.usdRate);
         acc.profit = acc.sold - acc.net;
         return acc;
       },
@@ -6528,14 +6563,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         const soldCur = t.soldCurrency || "EGP";
         const refundCustomerAmt = hotelInEgp(
           getRefunds(t).reduce((s, r) => s + (parseFloat(r.customerAmount) || 0), 0),
-          soldCur
+          soldCur,
+          t.usdRate
         );
         const refundAirlineAmt = hotelInEgp(
           getRefunds(t).reduce((s, r) => s + (parseFloat(r.airlineAmount) || 0), 0),
-          netCur
+          netCur,
+          t.usdRate
         );
-        const netEgp = hotelInEgp(parseFloat(t.netPrice) || 0, netCur);
-        const soldEgp = hotelInEgp(parseFloat(t.soldPrice) || 0, soldCur);
+        const netEgp = hotelInEgp(parseFloat(t.netPrice) || 0, netCur, t.usdRate);
+        const soldEgp = hotelInEgp(parseFloat(t.soldPrice) || 0, soldCur, t.usdRate);
         acc.count += n;
         acc.net += netEgp * n - refundAirlineAmt;
         acc.total += soldEgp * n - refundCustomerAmt;
@@ -6653,10 +6690,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             "Sold currency": t.soldCurrency || "EGP",
             "Net price": round2(-airlineAmt),
             "Net currency": t.netCurrency || "EGP",
-            "Sold (EGP)": round2(-hotelInEgp(customerAmt, t.soldCurrency || "EGP")),
-            "Net (EGP)": round2(-hotelInEgp(airlineAmt, t.netCurrency || "EGP")),
+            "Sold (EGP)": round2(-hotelInEgp(customerAmt, t.soldCurrency || "EGP", t.usdRate)),
+            "Net (EGP)": round2(-hotelInEgp(airlineAmt, t.netCurrency || "EGP", t.usdRate)),
             "Profit (EGP)": round2(
-              hotelInEgp(airlineAmt, t.netCurrency || "EGP") - hotelInEgp(customerAmt, t.soldCurrency || "EGP")
+              hotelInEgp(airlineAmt, t.netCurrency || "EGP", t.usdRate) - hotelInEgp(customerAmt, t.soldCurrency || "EGP", t.usdRate)
             ),
             "Company": t.company || "",
             "Supplier": t.supplier || "",
@@ -10244,7 +10281,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       />
                       <div className="flex items-center justify-between gap-2 mt-3">
                         <div className="text-xs text-emerald-700 font-semibold">
-                          {roomLineNights(line, hotelForm)} night{roomLineNights(line, hotelForm) === 1 ? "" : "s"} · {fmt(hotelInEgp(hotelLineSoldTotal(line, roomLineNights(line, hotelForm)), hotelForm.soldCurrency) - hotelInEgp(hotelLineNetTotal(line, roomLineNights(line, hotelForm)), hotelForm.netCurrency))} EGP
+                          {roomLineNights(line, hotelForm)} night{roomLineNights(line, hotelForm) === 1 ? "" : "s"} · {fmt(hotelInEgp(hotelLineSoldTotal(line, roomLineNights(line, hotelForm)), hotelForm.soldCurrency, hotelForm.usdRate) - hotelInEgp(hotelLineNetTotal(line, roomLineNights(line, hotelForm)), hotelForm.netCurrency, hotelForm.usdRate))} EGP
                         </div>
                         <button
                           onClick={() => removeHotelRoomLine(line.id)}
@@ -12668,11 +12705,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             })),
             ...visaBookings.map((v) => ({
               section: "visa", date: v.bookingDate, supplier: (v.supplier || "").trim(), employee: "",
-              revenue: hotelInEgp(visaSoldTotal(v), v.soldCurrency), cost: hotelInEgp(visaNetTotal(v), v.netCurrency), profit: visaProfitTotal(v),
+              revenue: hotelInEgp(visaSoldTotal(v), v.soldCurrency, v.usdRate), cost: hotelInEgp(visaNetTotal(v), v.netCurrency, v.usdRate), profit: visaProfitTotal(v),
             })),
             ...carBookings.map((c) => ({
               section: "cars", date: c.bookingDate, supplier: (c.supplier || "").trim(), employee: "",
-              revenue: hotelInEgp(carSoldTotal(c), c.soldCurrency), cost: hotelInEgp(carNetTotal(c), c.netCurrency), profit: carProfitTotal(c),
+              revenue: hotelInEgp(carSoldTotal(c), c.soldCurrency, c.usdRate), cost: hotelInEgp(carNetTotal(c), c.netCurrency, c.usdRate), profit: carProfitTotal(c),
             })),
           ];
 
