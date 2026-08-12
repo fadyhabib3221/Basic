@@ -14,6 +14,7 @@ import {
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
   History, Bell, Send, Landmark, Receipt, PieChart, ArrowUpCircle, ArrowDownCircle,
   Banknote, HandCoins, ClipboardList, Globe, Key, Truck, Filter, Settings, Clock, Copy,
+  BarChart3,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -5286,7 +5287,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Accounts is skipped here since it's gated by canAccessAccounts, not mySections.
   useEffect(() => {
     if (!currentUser) return;
-    if (activeSection === "accounts") return;
+    if (activeSection === "accounts" || activeSection === "analysis") return;
     if (mySections[activeSection]) return;
     const firstAllowed = SECTION_OPTIONS.find((s) => mySections[s.value]);
     if (firstAllowed) setActiveSection(firstAllowed.value);
@@ -5294,7 +5295,10 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   }, [currentUser, activeSection, mySections.flights, mySections.hotels, mySections.visa, mySections.cars, mySections.files]);
   useEffect(() => {
     if (!currentUser) return;
-    if (activeSection === "accounts" && !canAccessAccounts) {
+    // Analysis shares the same financially-sensitive gate as Accounts — it surfaces
+    // profit/revenue figures across every section, so it isn't part of the
+    // per-employee mySections grant, just like Accounts above.
+    if ((activeSection === "accounts" || activeSection === "analysis") && !canAccessAccounts) {
       const firstAllowed = SECTION_OPTIONS.find((s) => mySections[s.value]);
       if (firstAllowed) setActiveSection(firstAllowed.value);
     }
@@ -8514,6 +8518,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           >
             <Wallet size={22} />
             Accounts
+          </button>
+          )}
+          {canAccessAccounts && (
+          <button
+            onClick={() => setActiveSection("analysis")}
+            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+              activeSection === "analysis"
+                ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
+                : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
+            }`}
+          >
+            <BarChart3 size={22} />
+            Analysis
           </button>
           )}
         </div>
@@ -12584,6 +12601,249 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             )}
           </>
+        )}
+
+        {activeSection === "analysis" && canAccessAccounts && (
+        <>
+        {(() => {
+          // Everything below is derived, not stored — a single normalized array built
+          // from the four booking lists using the same net/sold/profit helpers the rest
+          // of the app already uses (refund-adjusted for flights, EGP-converted for
+          // everything), so these numbers always agree with Accounts/Reports.
+          const allDeals = [
+            ...tickets.map((t) => ({
+              section: "flights", date: t.date, supplier: (t.supplier || "").trim(), employee: (t.employee || "").trim(),
+              revenue: soldAfterRefund(t), cost: netAfterRefund(t), profit: profitAfterRefund(t),
+            })),
+            ...hotelBookings.map((h) => ({
+              section: "hotels", date: h.bookingDate, supplier: (h.supplier || "").trim(), employee: (h.employee || "").trim(),
+              revenue: hotelSoldTotal(h), cost: hotelNetTotal(h), profit: hotelProfitTotal(h),
+            })),
+            ...visaBookings.map((v) => ({
+              section: "visa", date: v.bookingDate, supplier: (v.supplier || "").trim(), employee: "",
+              revenue: hotelInEgp(visaSoldTotal(v), v.soldCurrency), cost: hotelInEgp(visaNetTotal(v), v.netCurrency), profit: visaProfitTotal(v),
+            })),
+            ...carBookings.map((c) => ({
+              section: "cars", date: c.bookingDate, supplier: (c.supplier || "").trim(), employee: "",
+              revenue: hotelInEgp(carSoldTotal(c), c.soldCurrency), cost: hotelInEgp(carNetTotal(c), c.netCurrency), profit: carProfitTotal(c),
+            })),
+          ];
+
+          const totalRevenue = allDeals.reduce((s, d) => s + d.revenue, 0);
+          const totalCost = allDeals.reduce((s, d) => s + d.cost, 0);
+          const totalProfit = allDeals.reduce((s, d) => s + d.profit, 0);
+          const totalBookings = allDeals.length;
+          const avgProfit = totalBookings ? totalProfit / totalBookings : 0;
+          const marginPct = totalRevenue ? (totalProfit / totalRevenue) * 100 : 0;
+
+          const SECTION_META = {
+            flights: { label: "Flights", color: "bg-teal-700" },
+            hotels: { label: "Hotels", color: "bg-amber-600" },
+            visa: { label: "Visa", color: "bg-indigo-600" },
+            cars: { label: "Transportation", color: "bg-rose-600" },
+          };
+          const bySection = Object.keys(SECTION_META).map((key) => {
+            const deals = allDeals.filter((d) => d.section === key);
+            return {
+              key, ...SECTION_META[key],
+              count: deals.length,
+              revenue: deals.reduce((s, d) => s + d.revenue, 0),
+              cost: deals.reduce((s, d) => s + d.cost, 0),
+              profit: deals.reduce((s, d) => s + d.profit, 0),
+            };
+          });
+          const maxSectionRevenue = Math.max(1, ...bySection.map((s) => s.revenue));
+
+          // Last 6 months (including the current one), profit + revenue per month.
+          const now = new Date();
+          const months = Array.from({ length: 6 }, (_, i) => {
+            const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          });
+          const monthlyTrend = months.map((m) => ({
+            month: m,
+            label: new Date(`${m}-01T00:00:00`).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+            revenue: allDeals.filter((d) => (d.date || "").slice(0, 7) === m).reduce((s, d) => s + d.revenue, 0),
+            profit: allDeals.filter((d) => (d.date || "").slice(0, 7) === m).reduce((s, d) => s + d.profit, 0),
+          }));
+          const maxMonthlyRevenue = Math.max(1, ...monthlyTrend.map((m) => m.revenue));
+
+          // Top 5 suppliers and top 5 employees by profit generated.
+          const rollUp = (rows, keyFn) => {
+            const map = {};
+            rows.forEach((d) => {
+              const key = keyFn(d);
+              if (!key) return;
+              if (!map[key]) map[key] = { name: key, count: 0, revenue: 0, profit: 0 };
+              map[key].count += 1;
+              map[key].revenue += d.revenue;
+              map[key].profit += d.profit;
+            });
+            return Object.values(map).sort((a, b) => b.profit - a.profit).slice(0, 5);
+          };
+          const topSuppliers = rollUp(allDeals, (d) => d.supplier);
+          const maxSupplierProfit = Math.max(1, ...topSuppliers.map((s) => Math.abs(s.profit)));
+          // Employees are only tracked on Flights and Hotels bookings, so this ranking
+          // is based on those two sections only.
+          const topEmployees = rollUp(allDeals.filter((d) => d.employee), (d) => d.employee);
+          const maxEmployeeProfit = Math.max(1, ...topEmployees.map((e) => Math.abs(e.profit)));
+
+          return (
+            <div>
+              <div className="mb-5">
+                <h2 className="text-base font-bold text-stone-800 flex items-center gap-2">
+                  <BarChart3 size={18} className="text-teal-800" />
+                  Business Analytics
+                </h2>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  All-time performance across Flights, Hotels, Visa &amp; Transportation — figures in EGP.
+                </p>
+              </div>
+
+              {/* KPI cards */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+                <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                  <p className="text-xs text-stone-500 mb-1">Total Revenue</p>
+                  <p className="text-lg font-bold text-stone-800">{fmt(totalRevenue)} EGP</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                  <p className="text-xs text-stone-500 mb-1">Total Cost</p>
+                  <p className="text-lg font-bold text-stone-800">{fmt(totalCost)} EGP</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                  <p className="text-xs text-stone-500 mb-1">Total Profit</p>
+                  <p className={`text-lg font-bold ${totalProfit >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                    {fmt(totalProfit)} EGP
+                  </p>
+                </div>
+                <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                  <p className="text-xs text-stone-500 mb-1">Profit Margin</p>
+                  <p className={`text-lg font-bold ${marginPct >= 0 ? "text-teal-800" : "text-red-600"}`}>
+                    {fmt(marginPct)}%
+                  </p>
+                </div>
+                <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                  <p className="text-xs text-stone-500 mb-1">Total Bookings</p>
+                  <p className="text-lg font-bold text-stone-800">{fmt(totalBookings)}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                  <p className="text-xs text-stone-500 mb-1">Avg. Profit / Booking</p>
+                  <p className="text-lg font-bold text-stone-800">{fmt(avgProfit)} EGP</p>
+                </div>
+              </div>
+
+              {/* Performance by section */}
+              <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-6">
+                <h3 className="text-sm font-bold text-stone-700 mb-4">Performance by Section</h3>
+                {totalBookings === 0 ? (
+                  <p className="text-xs text-stone-400">No bookings yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {bySection.map((s) => (
+                      <div key={s.key}>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="font-semibold text-stone-700">{s.label}</span>
+                          <span className="text-stone-500">
+                            {s.count} bookings · Revenue {fmt(s.revenue)} EGP ·{" "}
+                            <span className={s.profit >= 0 ? "text-emerald-700" : "text-red-600"}>
+                              Profit {fmt(s.profit)} EGP
+                            </span>
+                          </span>
+                        </div>
+                        <div className="h-2.5 w-full bg-stone-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${s.color}`}
+                            style={{ width: `${Math.max(2, (s.revenue / maxSectionRevenue) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 6-month trend */}
+              <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-6">
+                <h3 className="text-sm font-bold text-stone-700 mb-4">Revenue &amp; Profit — Last 6 Months</h3>
+                <div className="flex items-end justify-between gap-2 h-36">
+                  {monthlyTrend.map((m) => (
+                    <div key={m.month} className="flex-1 flex flex-col items-center justify-end h-full gap-1">
+                      <div className="w-full flex items-end justify-center gap-1 h-full">
+                        <div
+                          className="w-1/2 max-w-[18px] rounded-t-md bg-teal-200"
+                          style={{ height: `${Math.max(2, (m.revenue / maxMonthlyRevenue) * 100)}%` }}
+                          title={`Revenue: ${fmt(m.revenue)} EGP`}
+                        />
+                        <div
+                          className={`w-1/2 max-w-[18px] rounded-t-md ${m.profit >= 0 ? "bg-teal-700" : "bg-red-400"}`}
+                          style={{ height: `${Math.max(2, (Math.abs(m.profit) / maxMonthlyRevenue) * 100)}%` }}
+                          title={`Profit: ${fmt(m.profit)} EGP`}
+                        />
+                      </div>
+                      <span className="text-[10px] text-stone-500 font-semibold">{m.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-4 mt-3 text-[11px] text-stone-500">
+                  <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-teal-200" /> Revenue</span>
+                  <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-teal-700" /> Profit</span>
+                </div>
+              </div>
+
+              {/* Top suppliers / employees */}
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                  <h3 className="text-sm font-bold text-stone-700 mb-4">Top 5 Suppliers by Profit</h3>
+                  {topSuppliers.length === 0 ? (
+                    <p className="text-xs text-stone-400">No supplier data yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {topSuppliers.map((s) => (
+                        <div key={s.name}>
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="font-semibold text-stone-700 truncate">{s.name}</span>
+                            <span className="text-stone-500 shrink-0 ml-2">{fmt(s.profit)} EGP</span>
+                          </div>
+                          <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-amber-600"
+                              style={{ width: `${Math.max(2, (Math.abs(s.profit) / maxSupplierProfit) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                  <h3 className="text-sm font-bold text-stone-700 mb-4">Top 5 Employees by Profit</h3>
+                  <p className="text-[11px] text-stone-400 mb-3 -mt-2">Based on Flights &amp; Hotels bookings</p>
+                  {topEmployees.length === 0 ? (
+                    <p className="text-xs text-stone-400">No employee data yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {topEmployees.map((e) => (
+                        <div key={e.name}>
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="font-semibold text-stone-700 truncate">{e.name}</span>
+                            <span className="text-stone-500 shrink-0 ml-2">{fmt(e.profit)} EGP</span>
+                          </div>
+                          <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-teal-700"
+                              style={{ width: `${Math.max(2, (Math.abs(e.profit) / maxEmployeeProfit) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+        </>
         )}
 
         {activeSection === "accounts" && canAccessAccounts && (
