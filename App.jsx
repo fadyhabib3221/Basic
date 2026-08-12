@@ -14,7 +14,7 @@ import {
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
   History, Bell, Send, Landmark, Receipt, PieChart, ArrowUpCircle, ArrowDownCircle,
   Banknote, HandCoins, ClipboardList, Globe, Key, Truck, Filter, Settings, Clock, Copy,
-  BarChart3,
+  BarChart3, GripVertical,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -2080,16 +2080,18 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const [showManage, setShowManage] = useState(false);
   const [newEmployee, setNewEmployee] = useState(emptyNewEmployee);
-  const [newEmployeeGradeOpen, setNewEmployeeGradeOpen] = useState(null); // which of the four Grade dropdowns is open on the Add employee page: "manager" | "supervisor" | "employee" | "accountant" | null
-  const gradePickerRef = useRef(null);
-  // Closes the open Grade dropdown as soon as a click lands anywhere outside the
-  // whole grade-picker block (clicking one of the other three dropdown buttons already
-  // switches which one is open via the button's own onClick, so this only needs to
-  // handle clicks that land completely outside).
+  const [newEmployeeGradeOpen, setNewEmployeeGradeOpen] = useState(null); // which Grade dropdown is open on the Add employee page: a department key (flights/hotels/visa/cars), "accountant", or null
+  // One ref per Grade dropdown (keyed by group.key), pointing at just that dropdown's
+  // own trigger+panel container — not the whole Grade block. Clicking a WIDER area
+  // (like the Owner/GM buttons sitting next to the dropdowns) needs to close an
+  // open dropdown too, so checking containment against the single open dropdown's
+  // own container (rather than one ref wrapping everything) is what makes that work.
+  const gradeGroupRefs = useRef({});
   useEffect(() => {
     if (!newEmployeeGradeOpen) return;
     const handleClickOutside = (e) => {
-      if (gradePickerRef.current && !gradePickerRef.current.contains(e.target)) {
+      const openGroupEl = gradeGroupRefs.current[newEmployeeGradeOpen];
+      if (openGroupEl && !openGroupEl.contains(e.target)) {
         setNewEmployeeGradeOpen(null);
       }
     };
@@ -2097,6 +2099,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [newEmployeeGradeOpen]);
   const [openPermissionsFor, setOpenPermissionsFor] = useState(null); // username, or null if closed
+  const [draggedEmployeeUsername, setDraggedEmployeeUsername] = useState(null); // username currently being drag-reordered in the employee table, or null
+  const [dragOverEmployeeUsername, setDragOverEmployeeUsername] = useState(null); // username the dragged row is currently hovering over, for the drop-target highlight
   const [manageError, setManageError] = useState("");
   const [editingUsername, setEditingUsername] = useState(null);
   const [editDraft, setEditDraft] = useState({ name: "", username: "", password: "" });
@@ -4484,6 +4488,23 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     await persistEmployees((employees || []).filter((e) => e.username !== username));
     recordActivity("Employees", "deleted", `Deleted employee: @${username}`);
+  };
+
+  // Reorders the employee table by dragging one row onto another: moves the
+  // dragged employee to sit immediately before the drop target in the underlying
+  // `employees` array (the array order IS the table's display order), then
+  // persists it. A no-op if either username is missing or they're the same row.
+  const handleReorderEmployee = async (draggedUsername, targetUsername) => {
+    if (!currentUser.isAdmin && !isOwnerUser) return;
+    if (!draggedUsername || !targetUsername || draggedUsername === targetUsername) return;
+    const list = employees || [];
+    const fromIndex = list.findIndex((e) => e.username === draggedUsername);
+    const toIndex = list.findIndex((e) => e.username === targetUsername);
+    if (fromIndex === -1 || toIndex === -1) return;
+    const next = [...list];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(fromIndex < toIndex ? toIndex - 1 : toIndex, 0, moved);
+    await persistEmployees(next);
   };
 
   const startEditEmployee = (emp) => {
@@ -7953,6 +7974,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <table className="w-full min-w-max text-sm">
                 <thead>
                   <tr className="bg-stone-50 text-stone-500 text-xs">
+                    <th className="w-8 px-2 py-2"></th>
                     <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Status</th>
                     <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Name</th>
                     <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Username</th>
@@ -7969,6 +7991,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     if (isEditing) {
                       return (
                         <tr key={e.username} className="border-t border-stone-100 bg-stone-50">
+                          <td className="px-2 py-2"></td>
                           <td className="px-3 py-2">
                             <span className={`inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 ${isOnline(e.username) ? "text-emerald-700 bg-emerald-50 border border-emerald-200" : "text-stone-400 bg-stone-100 border border-stone-200"}`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${isOnline(e.username) ? "bg-emerald-500" : "bg-stone-300"}`} />
@@ -8029,8 +8052,40 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         </tr>
                       );
                     }
+                    const isDragOver = dragOverEmployeeUsername === e.username && draggedEmployeeUsername && draggedEmployeeUsername !== e.username;
                     return (
-                      <tr key={e.username} className="border-t border-stone-100">
+                      <tr
+                        key={e.username}
+                        className={`border-t border-stone-100 ${isDragOver ? "bg-teal-50" : ""}`}
+                        onDragOver={(ev) => {
+                          if (!draggedEmployeeUsername) return;
+                          ev.preventDefault();
+                          if (dragOverEmployeeUsername !== e.username) setDragOverEmployeeUsername(e.username);
+                        }}
+                        onDrop={(ev) => {
+                          ev.preventDefault();
+                          if (draggedEmployeeUsername) handleReorderEmployee(draggedEmployeeUsername, e.username);
+                          setDraggedEmployeeUsername(null);
+                          setDragOverEmployeeUsername(null);
+                        }}
+                      >
+                        <td className="px-2 py-2">
+                          <span
+                            draggable
+                            onDragStart={(ev) => {
+                              ev.dataTransfer.effectAllowed = "move";
+                              setDraggedEmployeeUsername(e.username);
+                            }}
+                            onDragEnd={() => {
+                              setDraggedEmployeeUsername(null);
+                              setDragOverEmployeeUsername(null);
+                            }}
+                            title="Drag to reorder"
+                            className="cursor-grab active:cursor-grabbing text-stone-300 hover:text-stone-500 inline-flex"
+                          >
+                            <GripVertical size={14} />
+                          </span>
+                        </td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 ${isOnline(e.username) ? "text-emerald-700 bg-emerald-50 border border-emerald-200" : "text-stone-400 bg-stone-100 border border-stone-200"}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${isOnline(e.username) ? "bg-emerald-500" : "bg-stone-300"}`} />
@@ -8134,22 +8189,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   grade. Everything can still be fine-tuned afterward from the
                   Permissions screen reached by clicking the employee's name once
                   they've been added. */}
-              <div className="mt-3" ref={gradePickerRef}>
+              <div className="mt-3">
                 <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
                 <div className="flex flex-wrap items-start gap-1.5 pb-1">
                   {GRADE_TIER_GROUPS.map((group) => {
                     const selectedInGroup = group.roles.find((r) => r.value === newEmployee.role);
                     const isOpen = newEmployeeGradeOpen === group.key;
                     return (
-                      <div key={group.key} className="relative w-32 shrink-0">
+                      <div
+                        key={group.key}
+                        className="relative shrink-0"
+                        ref={(el) => { gradeGroupRefs.current[group.key] = el; }}
+                      >
                         <button
                           type="button"
                           onClick={() => setNewEmployeeGradeOpen(isOpen ? null : group.key)}
-                          className={`w-full flex items-center justify-between border rounded-xl px-2 py-2 text-xs bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-teal-700 ${
+                          className={`flex items-center justify-between gap-1.5 border rounded-xl px-2.5 py-2 text-xs bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-teal-700 whitespace-nowrap ${
                             selectedInGroup ? "border-teal-700" : "border-stone-300"
                           }`}
                         >
-                          <span className={`font-medium truncate ${selectedInGroup ? "text-teal-800" : "text-stone-700"}`}>
+                          <span className={`font-medium ${selectedInGroup ? "text-teal-800" : "text-stone-700"}`}>
                             {selectedInGroup ? selectedInGroup.label : group.title}
                           </span>
                           <ChevronDown size={13} className={`text-stone-400 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
@@ -8188,15 +8247,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
                   {/* Owner and GM have no per-department variants and no sibling grade
                       within their tier, so they sit as standalone picks next to the four
-                      tier dropdowns rather than inside one. */}
+                      tier dropdowns rather than inside one. Clicking either one also
+                      closes any Grade dropdown left open, since these buttons sit outside
+                      that dropdown's own container. */}
                   {["owner", "gm"].map((value) => {
                     const selected = newEmployee.role === value;
                     return (
                       <button
                         key={value}
                         type="button"
-                        onClick={() => setNewEmployee({ ...newEmployee, role: value, ...ROLE_PRESETS[value] })}
-                        className={`w-24 shrink-0 flex items-center gap-1 border rounded-xl px-2 py-2 text-xs transition-colors ${
+                        onClick={() => {
+                          setNewEmployee({ ...newEmployee, role: value, ...ROLE_PRESETS[value] });
+                          setNewEmployeeGradeOpen(null);
+                        }}
+                        className={`shrink-0 flex items-center gap-1 border rounded-xl px-2.5 py-2 text-xs whitespace-nowrap transition-colors ${
                           selected
                             ? "bg-teal-800 text-white border-teal-800"
                             : "bg-white text-stone-600 border-stone-300 hover:bg-stone-50"
