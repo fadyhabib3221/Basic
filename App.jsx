@@ -2345,6 +2345,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // "hotels" and "cars" are placeholders for future sections.
   const [activeSection, setActiveSection] = useState("flights");
 
+  // Date range for the "Employee Sales" pie chart on the Analysis dashboard:
+  // "all" | "month" | "30d" | "custom". empFrom/empTo are only used in "custom" mode.
+  const [empSalesRange, setEmpSalesRange] = useState("month");
+  const [empSalesFrom, setEmpSalesFrom] = useState("");
+  const [empSalesTo, setEmpSalesTo] = useState("");
+
   // Remembers which section (flights/hotels/cars/files) this account was on, so a page
   // refresh returns to the same place instead of resetting to Flights. Skipped on the
   // very first render for a session, since that value was just restored from storage
@@ -12683,10 +12689,59 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           };
           const topSuppliers = rollUp(allDeals, (d) => d.supplier);
           const maxSupplierProfit = Math.max(1, ...topSuppliers.map((s) => Math.abs(s.profit)));
-          // Employees are only tracked on Flights and Hotels bookings, so this ranking
-          // is based on those two sections only.
-          const topEmployees = rollUp(allDeals.filter((d) => d.employee), (d) => d.employee);
-          const maxEmployeeProfit = Math.max(1, ...topEmployees.map((e) => Math.abs(e.profit)));
+
+          // ---- Employee Sales pie chart (date-range filterable) ----
+          // Employees are only tracked on Flights and Hotels bookings, so this is
+          // based on those two sections only. "Sales" here means revenue (sold price),
+          // which is what the pie chart shows a share of.
+          const todayStr = todayDateStr();
+          const thirtyDaysAgoStr = (() => {
+            const d = new Date();
+            d.setDate(d.getDate() - 29);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          })();
+          const inEmpSalesRange = (dateStr) => {
+            if (!dateStr) return false;
+            if (empSalesRange === "month") return dateStr.slice(0, 7) === todayStr.slice(0, 7);
+            if (empSalesRange === "30d") return dateStr >= thirtyDaysAgoStr && dateStr <= todayStr;
+            if (empSalesRange === "custom") {
+              if (empSalesFrom && dateStr < empSalesFrom) return false;
+              if (empSalesTo && dateStr > empSalesTo) return false;
+              return true;
+            }
+            return true; // "all"
+          };
+          const empMap = {};
+          allDeals
+            .filter((d) => d.employee && inEmpSalesRange(d.date))
+            .forEach((d) => {
+              if (!empMap[d.employee]) empMap[d.employee] = { name: d.employee, revenue: 0, count: 0 };
+              empMap[d.employee].revenue += d.revenue;
+              empMap[d.employee].count += 1;
+            });
+          let employeeSales = Object.values(empMap).sort((a, b) => b.revenue - a.revenue);
+          // Cap the pie at 7 named slices + an "Other" slice so it stays readable when
+          // there are many employees.
+          if (employeeSales.length > 8) {
+            const top = employeeSales.slice(0, 7);
+            const rest = employeeSales.slice(7);
+            employeeSales = [
+              ...top,
+              { name: "Other", revenue: rest.reduce((s, e) => s + e.revenue, 0), count: rest.reduce((s, e) => s + e.count, 0) },
+            ];
+          }
+          const totalEmpRevenue = employeeSales.reduce((s, e) => s + e.revenue, 0);
+          const PIE_COLORS = ["#0f766e", "#d97706", "#4f46e5", "#e11d48", "#059669", "#7c3aed", "#0891b2", "#78716c"];
+          let cum = 0;
+          const pieSlices = employeeSales.map((e, i) => {
+            const pct = totalEmpRevenue ? (e.revenue / totalEmpRevenue) * 100 : 0;
+            const start = cum;
+            cum += pct;
+            return { ...e, pct, start, end: cum, color: PIE_COLORS[i % PIE_COLORS.length] };
+          });
+          const pieGradient = totalEmpRevenue
+            ? `conic-gradient(${pieSlices.map((s) => `${s.color} ${s.start}% ${s.end}%`).join(", ")})`
+            : null;
 
           return (
             <div>
@@ -12790,55 +12845,104 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
               </div>
 
-              {/* Top suppliers / employees */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                  <h3 className="text-sm font-bold text-stone-700 mb-4">Top 5 Suppliers by Profit</h3>
-                  {topSuppliers.length === 0 ? (
-                    <p className="text-xs text-stone-400">No supplier data yet.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {topSuppliers.map((s) => (
-                        <div key={s.name}>
-                          <div className="flex items-center justify-between text-xs mb-1">
+              {/* Top suppliers */}
+              <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-6">
+                <h3 className="text-sm font-bold text-stone-700 mb-4">Top 5 Suppliers by Profit</h3>
+                {topSuppliers.length === 0 ? (
+                  <p className="text-xs text-stone-400">No supplier data yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {topSuppliers.map((s) => (
+                      <div key={s.name}>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="font-semibold text-stone-700 truncate">{s.name}</span>
+                          <span className="text-stone-500 shrink-0 ml-2">{fmt(s.profit)} EGP</span>
+                        </div>
+                        <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-amber-600"
+                            style={{ width: `${Math.max(2, (Math.abs(s.profit) / maxSupplierProfit) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Employee sales — pie chart, filterable by period */}
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-stone-700">Employee Sales</h3>
+                    <p className="text-[11px] text-stone-400 mt-0.5">Share of total sales per employee — based on Flights &amp; Hotels bookings</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { key: "all", label: "All Time" },
+                      { key: "month", label: "This Month" },
+                      { key: "30d", label: "Last 30 Days" },
+                      { key: "custom", label: "Custom" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setEmpSalesRange(opt.key)}
+                        className={`text-[11px] font-semibold rounded-lg px-2.5 py-1.5 border transition-colors ${
+                          empSalesRange === opt.key
+                            ? "bg-teal-800 text-white border-teal-800"
+                            : "bg-white text-stone-500 border-stone-200 hover:border-teal-300 hover:text-teal-800"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {empSalesRange === "custom" && (
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    <input
+                      type="date"
+                      value={empSalesFrom}
+                      onChange={(e) => setEmpSalesFrom(e.target.value)}
+                      className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    />
+                    <span className="text-xs text-stone-400">to</span>
+                    <input
+                      type="date"
+                      value={empSalesTo}
+                      onChange={(e) => setEmpSalesTo(e.target.value)}
+                      className="border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    />
+                  </div>
+                )}
+
+                {!totalEmpRevenue ? (
+                  <p className="text-xs text-stone-400">No employee sales in this period.</p>
+                ) : (
+                  <div className="flex flex-col sm:flex-row items-center gap-6">
+                    <div
+                      className="w-40 h-40 rounded-full shrink-0 ring-1 ring-stone-200 shadow-inner"
+                      style={{ background: pieGradient }}
+                      title="Share of total sales per employee"
+                    />
+                    <div className="flex-1 w-full space-y-2">
+                      {pieSlices.map((s) => (
+                        <div key={s.name} className="flex items-center justify-between text-xs gap-2">
+                          <span className="flex items-center gap-2 min-w-0">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                             <span className="font-semibold text-stone-700 truncate">{s.name}</span>
-                            <span className="text-stone-500 shrink-0 ml-2">{fmt(s.profit)} EGP</span>
-                          </div>
-                          <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-amber-600"
-                              style={{ width: `${Math.max(2, (Math.abs(s.profit) / maxSupplierProfit) * 100)}%` }}
-                            />
-                          </div>
+                          </span>
+                          <span className="text-stone-500 shrink-0">{fmt(s.revenue)} EGP · {fmt(s.pct)}%</span>
                         </div>
                       ))}
+                      <div className="flex items-center justify-between text-xs pt-2 mt-1 border-t border-stone-100">
+                        <span className="font-bold text-stone-700">Total</span>
+                        <span className="font-bold text-stone-700">{fmt(totalEmpRevenue)} EGP</span>
+                      </div>
                     </div>
-                  )}
-                </div>
-                <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                  <h3 className="text-sm font-bold text-stone-700 mb-4">Top 5 Employees by Profit</h3>
-                  <p className="text-[11px] text-stone-400 mb-3 -mt-2">Based on Flights &amp; Hotels bookings</p>
-                  {topEmployees.length === 0 ? (
-                    <p className="text-xs text-stone-400">No employee data yet.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {topEmployees.map((e) => (
-                        <div key={e.name}>
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="font-semibold text-stone-700 truncate">{e.name}</span>
-                            <span className="text-stone-500 shrink-0 ml-2">{fmt(e.profit)} EGP</span>
-                          </div>
-                          <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-teal-700"
-                              style={{ width: `${Math.max(2, (Math.abs(e.profit) / maxEmployeeProfit) * 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           );
