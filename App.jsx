@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useReducer } from "react";
+import React, { useState, useEffect, useRef, useReducer } from "react";
 // xlsx-js-style is a drop-in replacement for "xlsx" (same API) that additionally
 // writes cell styles (fills/fonts) into the .xlsx file — needed for the export's
 // alternating row shading and the highlighted totals row. Plain "xlsx" silently
@@ -189,6 +189,32 @@ const decryptFromStorage = async (workspaceKey, envelope) => {
 // don't have the workspace key yet (locked). If the key still holds pre-encryption
 // plaintext (saved before this feature existed) and we DO have the workspace key,
 // it's re-saved encrypted right away — a one-time, silent migration.
+// Serialized shared-storage writes. Multiple UI actions can finish out of order when
+// encryption/hashing is involved; per-key serialization preserves intentional write order
+// in this browser and reduces local last-write-wins races.
+const storageWriteQueues = new Map();
+const storageSet = (key, value, shared = true) => {
+  const previous = storageWriteQueues.get(key) || Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(() => window.storage.set(key, value, shared));
+  storageWriteQueues.set(key, next.finally(() => {
+    if (storageWriteQueues.get(key) === next) storageWriteQueues.delete(key);
+  }));
+  return next;
+};
+
+const storageDelete = (key, shared = true) => {
+  const previous = storageWriteQueues.get(key) || Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(() => window.storage.delete(key, shared));
+  storageWriteQueues.set(key, next.finally(() => {
+    if (storageWriteQueues.get(key) === next) storageWriteQueues.delete(key);
+  }));
+  return next;
+};
+
 const secureLoad = async (storageKey, workspaceKey, fallback) => {
   const res = await window.storage.get(storageKey, true).catch(() => null);
   if (!res || res.value === undefined || res.value === null || res.value === "") return fallback;
@@ -201,7 +227,7 @@ const secureLoad = async (storageKey, workspaceKey, fallback) => {
   }
   if (workspaceKey) {
     encryptForStorage(workspaceKey, parsed).then((envelope) => {
-      window.storage.set(storageKey, JSON.stringify(envelope), true).catch(() => {});
+      storageSet(storageKey, JSON.stringify(envelope), true).catch(() => {});
     });
   }
   return parsed;
@@ -209,13 +235,68 @@ const secureLoad = async (storageKey, workspaceKey, fallback) => {
 
 // Encrypts (if we have the workspace key) and writes a value to shared storage. Falls
 // back to plaintext only if no key exists yet, which should only happen pre-login.
-const secureSave = async (storageKey, workspaceKey, value) => {
+const secureSave = async (storageKey, workspaceKey, value, options = {}) => {
+  const requireKey = options.requireKey === true;
+  if (requireKey && !workspaceKey) {
+    throw new Error(`Encrypted storage is locked: ${storageKey}`);
+  }
   if (workspaceKey) {
     const envelope = await encryptForStorage(workspaceKey, value);
-    return window.storage.set(storageKey, JSON.stringify(envelope), true);
+    return storageSet(storageKey, JSON.stringify(envelope), true);
   }
-  return window.storage.set(storageKey, JSON.stringify(value), true);
+  return storageSet(storageKey, JSON.stringify(value), true);
 };
+
+// Defensive JSON parsing for shared storage. A malformed value should never take
+// down the entire SPA; callers get the supplied fallback and the next polling cycle
+// can try again.
+const safeJsonParse = (value, fallback) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  try { return JSON.parse(value); } catch (e) { return fallback; }
+};
+
+// Production-grade React error boundary. This is intentionally outside the main
+// component so a rendering exception in one screen does not blank the whole app
+// without a recovery path.
+// Production diagnostics: capture uncaught async failures that React error boundaries
+// cannot catch. No application data is persisted or transmitted by these handlers.
+if (typeof window !== "undefined" && !window.__travelAgencyDiagnosticsInstalled) {
+  window.__travelAgencyDiagnosticsInstalled = true;
+  window.addEventListener("unhandledrejection", (event) => {
+    console.error("Unhandled application promise rejection", event.reason);
+  });
+  window.addEventListener("error", (event) => {
+    console.error("Unhandled application error", event.error || event.message);
+  });
+}
+
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error("Travel Agency Manager render error", error, info);
+  }
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-6">
+        <div className="max-w-lg w-full bg-white border border-stone-200 rounded-2xl p-6 shadow-sm">
+          <h1 className="text-xl font-bold text-stone-900">Something went wrong</h1>
+          <p className="text-sm text-stone-600 mt-2">The application hit an unexpected rendering error. Your saved data has not been intentionally cleared.</p>
+          <div className="flex gap-2 mt-5">
+            <button type="button" onClick={() => window.location.reload()} className="px-4 py-2 rounded-lg bg-teal-800 text-white text-sm font-semibold">Reload app</button>
+            <button type="button" onClick={() => this.setState({ hasError: false, error: null })} className="px-4 py-2 rounded-lg border border-stone-300 text-stone-700 text-sm font-semibold">Try again</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
 
 const monthKey = (dateStr) => (dateStr ? dateStr.slice(0, 7) : "No date");
 
@@ -1866,7 +1947,7 @@ const multiFilterGroup = (label, keyPrefix, selected, setSelected, textFor = (v)
   })),
 });
 
-export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
+function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Prevent the mouse/trackpad scroll wheel from changing the value of a focused
   // number input. Browsers normally let scrolling over a focused number field
   // bump its value up/down, which is easy to trigger by accident while scrolling
@@ -1968,7 +2049,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     dispatchLicense({ error: "", saving: true });
     try {
-      await window.storage.set(
+      await storageSet(
         "tickets:license",
         JSON.stringify({ code: result.code, expiresAt: result.expiresAt || null, activatedAt: Date.now() }),
         true
@@ -2393,80 +2474,58 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Top-level section switcher: "flights" holds all existing ticket functionality;
   // "hotels" and "cars" are placeholders for future sections.
-  const [activeSection, setActiveSection] = useState("flights");
-
-  // ---------- Browser history navigation ----------
-  // The app is a single-page React application, so switching sections normally changes
-  // React state without creating a browser-history entry. That makes the browser Back
-  // and Forward buttons feel like they do nothing. Keep section changes in the History API
-  // so Back/Forward can move through the app just like normal web pages.
-  const browserHistoryReadyRef = useRef(false);
-  const browserNavigationRef = useRef(false);
-
-  const allowedHistorySections = new Set([
-    "flights", "hotels", "visa", "cars", "files", "accounts", "analysis",
-  ]);
-
-  const setSectionFromBrowser = (section) => {
-    if (!allowedHistorySections.has(section)) return;
-    browserNavigationRef.current = true;
-    setActiveSection(section);
-  };
-
-  const navigateSection = (section) => {
-    if (!allowedHistorySections.has(section)) return;
-    if (section === activeSection) return;
-
-    // Only user-driven navigation creates a new history entry. Browser Back/Forward
-    // is handled by popstate and therefore must not push another entry.
-    if (browserHistoryReadyRef.current && !browserNavigationRef.current) {
-      const state = { ...(window.history.state || {}), travelAgencyApp: true, section };
-      window.history.pushState(state, "", window.location.href);
-    }
-    browserNavigationRef.current = false;
-    setActiveSection(section);
-  };
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-
-    const currentState = window.history.state;
-    // Replace the current browser entry rather than adding an extra entry on startup.
-    // This preserves the existing URL and any unrelated history state.
-    if (!currentState || currentState.travelAgencyApp !== true) {
-      window.history.replaceState(
-        { ...(currentState || {}), travelAgencyApp: true, section: activeSection },
-        "",
-        window.location.href
-      );
-    } else if (allowedHistorySections.has(currentState.section)) {
-      browserNavigationRef.current = true;
-      setActiveSection(currentState.section);
-    }
-
-    const handlePopState = (event) => {
-      const state = event.state;
-      if (state && state.travelAgencyApp === true && allowedHistorySections.has(state.section)) {
-        setSectionFromBrowser(state.section);
-      } else {
-        // If the user navigates back to a history entry created before this feature,
-        // keep the app in the current section rather than accidentally resetting it.
-        browserNavigationRef.current = false;
-      }
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    browserHistoryReadyRef.current = true;
-    return () => window.removeEventListener("popstate", handlePopState);
-    // The history listener must be installed once for this mounted app instance.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const [activeSection, setActiveSectionState] = useState(() => {
+    if (typeof window === "undefined") return "flights";
+    const hash = window.location.hash.replace(/^#/, "");
+    const candidate = hash.startsWith("section=") ? hash.slice(8) : hash;
+    const valid = ["flights", "hotels", "visa", "cars", "files", "accounts", "analysis"];
+    return valid.includes(candidate) ? candidate : "flights";
+  });
 
   // Date range for the "Employee Sales" pie chart on the Analysis dashboard:
   // "all" | "month" | "30d" | "custom". empFrom/empTo are only used in "custom" mode.
   const [empSalesRange, setEmpSalesRange] = useState("month");
   const [empSalesFrom, setEmpSalesFrom] = useState("");
   const [empSalesTo, setEmpSalesTo] = useState("");
+
+  // Centralized navigation layer. The hash keeps this SPA compatible with static
+  // hosting/WebViews because it never requires server-side route configuration.
+  // Browser Back/Forward now represents actual application navigation.
+  const navigationReadyRef = useRef(false);
+  const navigateToSection = (section, { replace = false } = {}) => {
+    const valid = ["flights", "hotels", "visa", "cars", "files", "accounts", "analysis"];
+    if (!valid.includes(section)) return;
+    setActiveSectionState(section);
+    if (typeof window === "undefined") return;
+    const url = `${window.location.pathname}${window.location.search}#section=${encodeURIComponent(section)}`;
+    const method = replace ? "replaceState" : "pushState";
+    window.history[method]({ section }, "", url);
+    navigationReadyRef.current = true;
+  };
+
+  useEffect(() => {
+    const handlePopState = (event) => {
+      const stateSection = event.state && event.state.section;
+      const hash = window.location.hash.replace(/^#/, "");
+      const hashSection = hash.startsWith("section=") ? decodeURIComponent(hash.slice(8)) : hash;
+      const section = stateSection || hashSection;
+      const valid = ["flights", "hotels", "visa", "cars", "files", "accounts", "analysis"];
+      if (valid.includes(section)) setActiveSectionState(section);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash) {
+      const url = `${window.location.pathname}${window.location.search}#section=${activeSection}`;
+      window.history.replaceState({ section: activeSection }, "", url);
+    } else {
+      navigationReadyRef.current = true;
+    }
+  }, []);
 
   // Remembers which section (flights/hotels/cars/files) this account was on, so a page
   // refresh returns to the same place instead of resetting to Flights. Skipped on the
@@ -2479,22 +2538,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       sectionHydratedRef.current = true;
       return;
     }
-    window.storage.set(`tickets:lastSection:${currentUser.username}`, activeSection, false).catch(() => {});
+    storageSet(`tickets:lastSection:${currentUser.username}`, activeSection, false).catch(() => {});
   }, [activeSection, currentUser]);
-
-  // When login restores a saved section, synchronize the current browser entry with it
-  // without creating an extra Back/Forward step. User clicks still use pushState above.
-  useEffect(() => {
-    if (!currentUser || !browserHistoryReadyRef.current || typeof window === "undefined") return;
-    const state = window.history.state || {};
-    if (state.travelAgencyApp !== true || state.section !== activeSection) {
-      window.history.replaceState(
-        { ...state, travelAgencyApp: true, section: activeSection },
-        "",
-        window.location.href
-      );
-    }
-  }, [currentUser, activeSection]);
 
   useEffect(() => {
     (async () => {
@@ -2524,8 +2569,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           window.storage.get("tickets:loginHistory", true).catch(() => null),
           window.storage.get("tickets:activityLog", true).catch(() => null),
         ]);
-        const employeesData = employeesRes && employeesRes.value ? JSON.parse(employeesRes.value) : [];
-        const requestsData = requestsRes && requestsRes.value ? JSON.parse(requestsRes.value) : [];
+        const employeesData = safeJsonParse(employeesRes && employeesRes.value, []);
+        const requestsData = safeJsonParse(requestsRes && requestsRes.value, []);
         setTickets(ticketsData);
         setHotelBookings(hotelsData);
         setVisaBookings(visasData);
@@ -2594,16 +2639,30 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     })();
   }, []);
 
+  // Adaptive live refresh: fast while the app is visible, paused to a slow cadence in
+  // background tabs, and immediately resumed after visibility/network recovery. This
+  // preserves cross-user sync while avoiding unnecessary storage traffic.
   const LIVE_REFRESH_INTERVAL_MS = 5 * 1000;
+  const BACKGROUND_REFRESH_INTERVAL_MS = 60 * 1000;
 
-  // Keeps tickets, employee accounts, and saved suggestions (companies/customers/
-  // airlines/cities) in sync across everyone who's signed in, by periodically re-reading
-  // the shared storage keys. window.storage has no push/subscribe API, so short polling
-  // is the only way to reflect other users' changes without a manual page refresh.
   useEffect(() => {
     if (!currentUser) return;
     let cancelled = false;
+    let timer = null;
+    let inFlight = false;
+
+    const schedule = (delay) => {
+      if (cancelled) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(loadCoreData, delay);
+    };
+
     const loadCoreData = async () => {
+      if (cancelled || inFlight || !navigator.onLine) {
+        schedule(document.visibilityState === "hidden" ? BACKGROUND_REFRESH_INTERVAL_MS : LIVE_REFRESH_INTERVAL_MS);
+        return;
+      }
+      inFlight = true;
       try {
         const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, employeesRes, suggestionsRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes] = await Promise.all([
           secureLoad("tickets:list", workspaceKey, null),
@@ -2696,14 +2755,29 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           }
         }
       } catch (e) {
-        // Live refresh is best-effort; a failed poll just tries again next interval
+        // Live refresh is best-effort; the next scheduled poll retries automatically.
+      } finally {
+        inFlight = false;
+        if (!cancelled) {
+          schedule(document.visibilityState === "hidden"
+            ? BACKGROUND_REFRESH_INTERVAL_MS
+            : LIVE_REFRESH_INTERVAL_MS);
+        }
       }
     };
-    loadCoreData(); // also run immediately (e.g. right after login/unlock) instead of waiting for the first interval tick
-    const interval = setInterval(loadCoreData, LIVE_REFRESH_INTERVAL_MS);
+
+    const wake = () => {
+      if (document.visibilityState === "visible" || navigator.onLine) loadCoreData();
+    };
+
+    loadCoreData();
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("online", wake);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("online", wake);
     };
   }, [currentUser, workspaceKey]);
 
@@ -2776,7 +2850,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     let cancelled = false;
     const beat = async () => {
       try {
-        await window.storage.set(
+        await storageSet(
           `tickets:presence:${currentUser.username}`,
           JSON.stringify({ name: currentUser.name, ts: Date.now(), activity: myActivityRef.current }),
           true
@@ -2832,11 +2906,26 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         // ignore presence load failures
       }
     };
+    let timer = null;
+    const schedulePresence = () => {
+      if (cancelled) return;
+      timer = setTimeout(async () => {
+        await loadPresence();
+        schedulePresence();
+      }, document.visibilityState === "hidden" ? BACKGROUND_REFRESH_INTERVAL_MS : LIVE_REFRESH_INTERVAL_MS);
+    };
+    const wakePresence = () => {
+      if (document.visibilityState === "visible" || navigator.onLine) loadPresence();
+    };
     loadPresence();
-    const interval = setInterval(loadPresence, LIVE_REFRESH_INTERVAL_MS);
+    schedulePresence();
+    document.addEventListener("visibilitychange", wakePresence);
+    window.addEventListener("online", wakePresence);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", wakePresence);
+      window.removeEventListener("online", wakePresence);
     };
   }, [currentUser, employees]);
 
@@ -2885,7 +2974,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (!currentUser) return;
     const username = currentUser.username;
     const handleUnload = () => {
-      try { window.storage.delete(`tickets:presence:${username}`, true); } catch (e) {}
+      try { storageDelete(`tickets:presence:${username}`, true); } catch (e) {}
     };
     window.addEventListener("pagehide", handleUnload);
     window.addEventListener("beforeunload", handleUnload);
@@ -2920,7 +3009,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistTickets = async (next) => {
     setTickets(next);
     try {
-      await secureSave("tickets:list", workspaceKey, next);
+      await secureSave("tickets:list", workspaceKey, next, { requireKey: true });
     } catch (e) {
       setError("Could not save data, please try again");
     }
@@ -2949,7 +3038,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setUsdToEgpRate(rate);
     setUsdToEgpRateDate(date);
     try {
-      await window.storage.set("tickets:usdRate", JSON.stringify({ rate, date }), true);
+      await storageSet("tickets:usdRate", JSON.stringify({ rate, date }), true);
     } catch (e) {
       // Saving the rate is best-effort; the typed value still applies locally either way
     }
@@ -3017,7 +3106,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistIataHistory = async (next) => {
     setIataHistory(next);
     try {
-      await window.storage.set("tickets:iataHistory", JSON.stringify(next), true);
+      await storageSet("tickets:iataHistory", JSON.stringify(next), true);
     } catch (e) {
       // Saving is best-effort; the list still applies locally either way
     }
@@ -3040,7 +3129,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistIataBalance = async (balance) => {
     setIataBalance(balance);
     try {
-      await window.storage.set("tickets:iataBalance", String(balance), true);
+      await storageSet("tickets:iataBalance", String(balance), true);
     } catch (e) {
       // Saving is best-effort; the value still applies locally either way
     }
@@ -3066,7 +3155,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistHotelBookings = async (next) => {
     setHotelBookings(next);
     try {
-      await secureSave("tickets:hotels", workspaceKey, next);
+      await secureSave("tickets:hotels", workspaceKey, next, { requireKey: true });
     } catch (e) {
       setHotelError("Could not save data, please try again");
     }
@@ -3075,7 +3164,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistVisaBookings = async (next) => {
     setVisaBookings(next);
     try {
-      await secureSave("tickets:visas", workspaceKey, next);
+      await secureSave("tickets:visas", workspaceKey, next, { requireKey: true });
     } catch (e) {
       setVisaError("Could not save data, please try again");
     }
@@ -3084,7 +3173,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistCarBookings = async (next) => {
     setCarBookings(next);
     try {
-      await secureSave("tickets:cars", workspaceKey, next);
+      await secureSave("tickets:cars", workspaceKey, next, { requireKey: true });
     } catch (e) {
       setCarError("Could not save data, please try again");
     }
@@ -3093,7 +3182,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistFiles = async (next) => {
     setFiles(next);
     try {
-      await secureSave("tickets:files", workspaceKey, next);
+      await secureSave("tickets:files", workspaceKey, next, { requireKey: true });
     } catch (e) {
       setFileError("Could not save data, please try again");
     }
@@ -3140,7 +3229,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistEmployees = async (next) => {
     setEmployees(next);
     try {
-      await window.storage.set("tickets:employees", JSON.stringify(next), true);
+      await storageSet("tickets:employees", JSON.stringify(next), true);
     } catch (e) {
       setManageError("Could not save the employee list, please try again");
     }
@@ -3163,7 +3252,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const existingRes = await window.storage.get("tickets:loginHistory", true).catch(() => null);
       const existing = existingRes && existingRes.value ? JSON.parse(existingRes.value) : [];
       const next = [...existing, entry].slice(-LOGIN_HISTORY_LIMIT);
-      await window.storage.set("tickets:loginHistory", JSON.stringify(next), true);
+      await storageSet("tickets:loginHistory", JSON.stringify(next), true);
       setLoginHistory(next);
     } catch (e) {
       // Login history is a convenience/audit feature — failures here must never
@@ -3188,7 +3277,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const existingRes = await window.storage.get("tickets:activityLog", true).catch(() => null);
       const existing = existingRes && existingRes.value ? JSON.parse(existingRes.value) : [];
       const next = [...existing, entry].slice(-ACTIVITY_LOG_LIMIT);
-      await window.storage.set("tickets:activityLog", JSON.stringify(next), true);
+      await storageSet("tickets:activityLog", JSON.stringify(next), true);
       setActivityLog(next);
     } catch (e) {
       // Activity log is an audit convenience feature — failures here must never
@@ -3199,7 +3288,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistSuggestions = async (next) => {
     setSuggestions(next);
     try {
-      await window.storage.set("tickets:suggestions", JSON.stringify(next), true);
+      await storageSet("tickets:suggestions", JSON.stringify(next), true);
     } catch (e) {
       // Suggestions are a convenience feature, so failures here are silent
     }
@@ -3209,7 +3298,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setRequests(next);
     next.forEach((r) => seenRequestIdsRef.current.add(r.id));
     try {
-      await window.storage.set("tickets:requests", JSON.stringify(next), true);
+      await storageSet("tickets:requests", JSON.stringify(next), true);
     } catch (e) {
       setRequestSendError("Could not save the request, please try again");
     }
@@ -3218,7 +3307,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistExpenses = async (next) => {
     setExpenses(next);
     try {
-      await secureSave("tickets:expenses", workspaceKey, next);
+      await secureSave("tickets:expenses", workspaceKey, next, { requireKey: true });
     } catch (e) {
       setAccountsError("Could not save data, please try again");
     }
@@ -3226,7 +3315,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistSupplierPayments = async (next) => {
     setSupplierPayments(next);
     try {
-      await secureSave("tickets:supplierPayments", workspaceKey, next);
+      await secureSave("tickets:supplierPayments", workspaceKey, next, { requireKey: true });
     } catch (e) {
       setAccountsError("Could not save data, please try again");
     }
@@ -3234,7 +3323,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistCustomerPayments = async (next) => {
     setCustomerPayments(next);
     try {
-      await secureSave("tickets:customerPayments", workspaceKey, next);
+      await secureSave("tickets:customerPayments", workspaceKey, next, { requireKey: true });
     } catch (e) {
       setAccountsError("Could not save data, please try again");
     }
@@ -3242,7 +3331,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistTreasuryAccounts = async (next) => {
     setTreasuryAccounts(next);
     try {
-      await secureSave("tickets:treasuryAccounts", workspaceKey, next);
+      await secureSave("tickets:treasuryAccounts", workspaceKey, next, { requireKey: true });
     } catch (e) {
       setAccountsError("Could not save data, please try again");
     }
@@ -3250,7 +3339,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const persistTreasuryEntries = async (next) => {
     setTreasuryEntries(next);
     try {
-      await secureSave("tickets:treasuryEntries", workspaceKey, next);
+      await secureSave("tickets:treasuryEntries", workspaceKey, next, { requireKey: true });
     } catch (e) {
       setAccountsError("Could not save data, please try again");
     }
@@ -4294,9 +4383,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     };
     setWorkspaceKey(workspaceKeyObj);
     await persistEmployees([admin]);
-    await window.storage.set("tickets:setupComplete", "true", true).catch(() => {});
+    await storageSet("tickets:setupComplete", "true", true).catch(() => {});
     setSetupComplete(true);
-    await window.storage.set("session:user", admin.username, false);
+    await storageSet("session:user", admin.username, false);
     sessionStartedAtRef.current = Date.now();
     setCurrentUser({ username: admin.username, name: admin.name, isAdmin: true });
     recordLogin({ username: admin.username, name: admin.name, isAdmin: true });
@@ -4357,7 +4446,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     } else {
       setKeyAccessWarning("Your account doesn't have access to encrypted data yet — ask an admin to reset your password once (Manage Employees) to enable it.");
     }
-    await window.storage.set("session:user", match.username, false);
+    await storageSet("session:user", match.username, false);
     sessionStartedAtRef.current = Date.now();
     setCurrentUser({ username: match.username, name: match.name, isAdmin: !!match.isAdmin });
     recordLogin({ username: match.username, name: match.name, isAdmin: !!match.isAdmin });
@@ -4366,7 +4455,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const lastSectionRes = await window.storage.get(`tickets:lastSection:${match.username}`, false).catch(() => null);
       const lastSection = lastSectionRes && lastSectionRes.value;
       if (["flights", "hotels", "visa", "cars", "files"].includes(lastSection)) {
-        setActiveSection(lastSection);
+        navigateToSection(lastSection, { replace: true });
       }
     } catch (e) {
       // Best-effort; falls back to the default "flights" section
@@ -4375,7 +4464,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleLogout = async () => {
     if (currentUser) recordLogin({ username: currentUser.username, name: currentUser.name, isAdmin: currentUser.isAdmin }, "logout");
-    await window.storage.delete("session:user", false).catch(() => {});
+    await storageDelete("session:user", false).catch(() => {});
     setCurrentUser(null);
     setShowManage(false);
     setEditingUsername(null);
@@ -4388,8 +4477,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // itself out. Their presence is cleared immediately here so they show as offline right away.
   const handleForceSignOut = async (username) => {
     try {
-      await window.storage.set(`tickets:forceLogout:${username}`, String(Date.now()), true);
-      await window.storage.delete(`tickets:presence:${username}`, true).catch(() => {});
+      await storageSet(`tickets:forceLogout:${username}`, String(Date.now()), true);
+      await storageDelete(`tickets:presence:${username}`, true).catch(() => {});
       setPresenceMap((prev) => {
         const next = { ...prev };
         delete next[username];
@@ -4641,7 +4730,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
     // If the main account edited its own account, keep the current session in sync
     if (editingUsername === currentUser.username) {
-      await window.storage.set("session:user", trimmedUsername, false);
+      await storageSet("session:user", trimmedUsername, false);
       setCurrentUser({ ...currentUser, name: trimmedName, username: trimmedUsername });
     }
     cancelEditEmployee();
@@ -4681,7 +4770,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
     // If the main account edited its own account, keep the current session in sync
     if (username === currentUser.username) {
-      await window.storage.set("session:user", trimmedUsername, false);
+      await storageSet("session:user", trimmedUsername, false);
       setCurrentUser({ ...currentUser, name: trimmedName, username: trimmedUsername });
     }
     return null;
@@ -5481,7 +5570,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (activeSection === "accounts" || activeSection === "analysis") return;
     if (mySections[activeSection]) return;
     const firstAllowed = SECTION_OPTIONS.find((s) => mySections[s.value]);
-    if (firstAllowed) setActiveSection(firstAllowed.value);
+    if (firstAllowed) navigateToSection(firstAllowed.value, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, activeSection, mySections.flights, mySections.hotels, mySections.visa, mySections.cars, mySections.files]);
   useEffect(() => {
@@ -5491,7 +5580,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // per-employee mySections grant, just like Accounts above.
     if ((activeSection === "accounts" || activeSection === "analysis") && !canAccessAccounts) {
       const firstAllowed = SECTION_OPTIONS.find((s) => mySections[s.value]);
-      if (firstAllowed) setActiveSection(firstAllowed.value);
+      if (firstAllowed) navigateToSection(firstAllowed.value, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, activeSection, canAccessAccounts]);
@@ -8684,7 +8773,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         {/* Top-level section switcher */}
         <div className="flex items-center gap-2 md:gap-3 mb-6 overflow-x-auto md:justify-center md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0">
           <button
-            onClick={() => mySections.flights && navigateSection("flights")}
+            onClick={() => mySections.flights && navigateToSection("flights")}
             disabled={!mySections.flights}
             title={!mySections.flights ? "You don't have access to Flights" : undefined}
             className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -8700,7 +8789,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             Flights
           </button>
           <button
-            onClick={() => mySections.hotels && navigateSection("hotels")}
+            onClick={() => mySections.hotels && navigateToSection("hotels")}
             disabled={!mySections.hotels}
             title={!mySections.hotels ? "You don't have access to Hotels" : undefined}
             className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -8716,7 +8805,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             Hotels
           </button>
           <button
-            onClick={() => mySections.visa && navigateSection("visa")}
+            onClick={() => mySections.visa && navigateToSection("visa")}
             disabled={!mySections.visa}
             title={!mySections.visa ? "You don't have access to Visa" : undefined}
             className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -8732,7 +8821,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             Visa
           </button>
           <button
-            onClick={() => mySections.cars && navigateSection("cars")}
+            onClick={() => mySections.cars && navigateToSection("cars")}
             disabled={!mySections.cars}
             title={!mySections.cars ? "You don't have access to Transportation" : undefined}
             className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -8748,7 +8837,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             Transportation
           </button>
           <button
-            onClick={() => mySections.files && navigateSection("files")}
+            onClick={() => mySections.files && navigateToSection("files")}
             disabled={!mySections.files}
             title={!mySections.files ? "You don't have access to Files" : undefined}
             className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -8765,7 +8854,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </button>
           {canAccessAccounts && (
           <button
-            onClick={() => navigateSection("accounts")}
+            onClick={() => navigateToSection("accounts")}
             className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "accounts"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
@@ -8778,7 +8867,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           )}
           {canAccessAccounts && (
           <button
-            onClick={() => navigateSection("analysis")}
+            onClick={() => navigateToSection("analysis")}
             className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "analysis"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
@@ -10848,7 +10937,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </button>
                   {hotelsPerm.canAdd && (
                     <button
-                      onClick={() => { setActiveSection("hotels"); handleDuplicateHotelClick(viewingHotelBooking); setViewingHotelBooking(null); }}
+                      onClick={() => { navigateToSection("hotels"); handleDuplicateHotelClick(viewingHotelBooking); setViewingHotelBooking(null); }}
                       className="text-stone-400 hover:text-teal-800 p-1.5"
                       title="Duplicate as new booking"
                     >
@@ -10857,7 +10946,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   )}
                   {hotelsPerm.canEdit && (
                     <button
-                      onClick={() => { setActiveSection("hotels"); handleEditHotelClick(viewingHotelBooking); setViewingHotelBooking(null); }}
+                      onClick={() => { navigateToSection("hotels"); handleEditHotelClick(viewingHotelBooking); setViewingHotelBooking(null); }}
                       className="text-stone-400 hover:text-teal-800 p-1.5"
                       title="Edit"
                     >
@@ -11480,7 +11569,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </button>
                   {visaPerm.canAdd && (
                     <button
-                      onClick={() => { setActiveSection("visa"); handleDuplicateVisaClick(viewingVisaBooking); setViewingVisaBooking(null); }}
+                      onClick={() => { navigateToSection("visa"); handleDuplicateVisaClick(viewingVisaBooking); setViewingVisaBooking(null); }}
                       className="text-stone-400 hover:text-teal-800 p-1.5"
                       title="Duplicate as new booking"
                     >
@@ -11489,7 +11578,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   )}
                   {visaPerm.canEdit && (
                     <button
-                      onClick={() => { setActiveSection("visa"); handleEditVisaClick(viewingVisaBooking); setViewingVisaBooking(null); }}
+                      onClick={() => { navigateToSection("visa"); handleEditVisaClick(viewingVisaBooking); setViewingVisaBooking(null); }}
                       className="text-stone-400 hover:text-teal-800 p-1.5"
                       title="Edit"
                     >
@@ -12265,7 +12354,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </button>
                   {carsPerm.canAdd && (
                     <button
-                      onClick={() => { setActiveSection("cars"); handleDuplicateCarClick(viewingCarBooking); setViewingCarBooking(null); }}
+                      onClick={() => { navigateToSection("cars"); handleDuplicateCarClick(viewingCarBooking); setViewingCarBooking(null); }}
                       className="text-stone-400 hover:text-teal-800 p-1.5"
                       title="Duplicate as new booking"
                     >
@@ -12274,7 +12363,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   )}
                   {carsPerm.canEdit && (
                     <button
-                      onClick={() => { setActiveSection("cars"); handleEditCarClick(viewingCarBooking); setViewingCarBooking(null); }}
+                      onClick={() => { navigateToSection("cars"); handleEditCarClick(viewingCarBooking); setViewingCarBooking(null); }}
                       className="text-stone-400 hover:text-teal-800 p-1.5"
                       title="Edit"
                     >
@@ -13890,7 +13979,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </button>
               {(currentUser.isAdmin || canAddTickets) && (
                 <button
-                  onClick={() => { setActiveSection("flights"); handleDuplicateTicket(viewingTicket, closeTicketDetail); }}
+                  onClick={() => { navigateToSection("flights"); handleDuplicateTicket(viewingTicket, closeTicketDetail); }}
                   className="border border-stone-300 text-stone-600 hover:text-teal-800 hover:border-teal-700 text-sm font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
                 >
                   <Copy size={15} /> Duplicate
@@ -13898,7 +13987,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
               {(currentUser.isAdmin || canEditTickets) && (
                 <button
-                  onClick={() => { setActiveSection("flights"); handleEdit(viewingTicket, closeTicketDetail); }}
+                  onClick={() => { navigateToSection("flights"); handleEdit(viewingTicket, closeTicketDetail); }}
                   className="border border-stone-300 text-stone-600 hover:text-teal-800 hover:border-teal-700 text-sm font-semibold rounded-xl px-3 py-2 flex items-center gap-1.5"
                 >
                   <Pencil size={15} /> Edit
@@ -14863,4 +14952,8 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       )}
     </div>
   );
+}
+
+export default function TicketsAppWithErrorBoundary(props) {
+  return <AppErrorBoundary><TicketsApp {...props} /></AppErrorBoundary>;
 }
