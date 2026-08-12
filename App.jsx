@@ -2395,6 +2395,73 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // "hotels" and "cars" are placeholders for future sections.
   const [activeSection, setActiveSection] = useState("flights");
 
+  // ---------- Browser history navigation ----------
+  // The app is a single-page React application, so switching sections normally changes
+  // React state without creating a browser-history entry. That makes the browser Back
+  // and Forward buttons feel like they do nothing. Keep section changes in the History API
+  // so Back/Forward can move through the app just like normal web pages.
+  const browserHistoryReadyRef = useRef(false);
+  const browserNavigationRef = useRef(false);
+
+  const allowedHistorySections = new Set([
+    "flights", "hotels", "visa", "cars", "files", "accounts", "analysis",
+  ]);
+
+  const setSectionFromBrowser = (section) => {
+    if (!allowedHistorySections.has(section)) return;
+    browserNavigationRef.current = true;
+    setActiveSection(section);
+  };
+
+  const navigateSection = (section) => {
+    if (!allowedHistorySections.has(section)) return;
+    if (section === activeSection) return;
+
+    // Only user-driven navigation creates a new history entry. Browser Back/Forward
+    // is handled by popstate and therefore must not push another entry.
+    if (browserHistoryReadyRef.current && !browserNavigationRef.current) {
+      const state = { ...(window.history.state || {}), travelAgencyApp: true, section };
+      window.history.pushState(state, "", window.location.href);
+    }
+    browserNavigationRef.current = false;
+    setActiveSection(section);
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const currentState = window.history.state;
+    // Replace the current browser entry rather than adding an extra entry on startup.
+    // This preserves the existing URL and any unrelated history state.
+    if (!currentState || currentState.travelAgencyApp !== true) {
+      window.history.replaceState(
+        { ...(currentState || {}), travelAgencyApp: true, section: activeSection },
+        "",
+        window.location.href
+      );
+    } else if (allowedHistorySections.has(currentState.section)) {
+      browserNavigationRef.current = true;
+      setActiveSection(currentState.section);
+    }
+
+    const handlePopState = (event) => {
+      const state = event.state;
+      if (state && state.travelAgencyApp === true && allowedHistorySections.has(state.section)) {
+        setSectionFromBrowser(state.section);
+      } else {
+        // If the user navigates back to a history entry created before this feature,
+        // keep the app in the current section rather than accidentally resetting it.
+        browserNavigationRef.current = false;
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    browserHistoryReadyRef.current = true;
+    return () => window.removeEventListener("popstate", handlePopState);
+    // The history listener must be installed once for this mounted app instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Date range for the "Employee Sales" pie chart on the Analysis dashboard:
   // "all" | "month" | "30d" | "custom". empFrom/empTo are only used in "custom" mode.
   const [empSalesRange, setEmpSalesRange] = useState("month");
@@ -2414,6 +2481,20 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     window.storage.set(`tickets:lastSection:${currentUser.username}`, activeSection, false).catch(() => {});
   }, [activeSection, currentUser]);
+
+  // When login restores a saved section, synchronize the current browser entry with it
+  // without creating an extra Back/Forward step. User clicks still use pushState above.
+  useEffect(() => {
+    if (!currentUser || !browserHistoryReadyRef.current || typeof window === "undefined") return;
+    const state = window.history.state || {};
+    if (state.travelAgencyApp !== true || state.section !== activeSection) {
+      window.history.replaceState(
+        { ...state, travelAgencyApp: true, section: activeSection },
+        "",
+        window.location.href
+      );
+    }
+  }, [currentUser, activeSection]);
 
   useEffect(() => {
     (async () => {
@@ -8603,7 +8684,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         {/* Top-level section switcher */}
         <div className="flex items-center gap-2 md:gap-3 mb-6 overflow-x-auto md:justify-center md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0">
           <button
-            onClick={() => mySections.flights && setActiveSection("flights")}
+            onClick={() => mySections.flights && navigateSection("flights")}
             disabled={!mySections.flights}
             title={!mySections.flights ? "You don't have access to Flights" : undefined}
             className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -8619,7 +8700,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             Flights
           </button>
           <button
-            onClick={() => mySections.hotels && setActiveSection("hotels")}
+            onClick={() => mySections.hotels && navigateSection("hotels")}
             disabled={!mySections.hotels}
             title={!mySections.hotels ? "You don't have access to Hotels" : undefined}
             className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -8635,7 +8716,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             Hotels
           </button>
           <button
-            onClick={() => mySections.visa && setActiveSection("visa")}
+            onClick={() => mySections.visa && navigateSection("visa")}
             disabled={!mySections.visa}
             title={!mySections.visa ? "You don't have access to Visa" : undefined}
             className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -8651,7 +8732,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             Visa
           </button>
           <button
-            onClick={() => mySections.cars && setActiveSection("cars")}
+            onClick={() => mySections.cars && navigateSection("cars")}
             disabled={!mySections.cars}
             title={!mySections.cars ? "You don't have access to Transportation" : undefined}
             className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -8667,7 +8748,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             Transportation
           </button>
           <button
-            onClick={() => mySections.files && setActiveSection("files")}
+            onClick={() => mySections.files && navigateSection("files")}
             disabled={!mySections.files}
             title={!mySections.files ? "You don't have access to Files" : undefined}
             className={`shrink-0 relative flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
@@ -8684,7 +8765,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </button>
           {canAccessAccounts && (
           <button
-            onClick={() => setActiveSection("accounts")}
+            onClick={() => navigateSection("accounts")}
             className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "accounts"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
@@ -8697,7 +8778,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           )}
           {canAccessAccounts && (
           <button
-            onClick={() => setActiveSection("analysis")}
+            onClick={() => navigateSection("analysis")}
             className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
               activeSection === "analysis"
                 ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
