@@ -4313,24 +4313,34 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       setManageError("That username already exists");
       return;
     }
-    const next = [
-      ...(employees || []),
-      {
-        ...newEmployee,
-        username: newEmployee.username.trim(),
-        password: await hashPassword(newEmployee.password),
-        isAdmin: false,
-        // We have the new employee's plaintext password right here, plus the
-        // workspace key in memory (the admin creating them is logged in) — so wrap it
-        // for them immediately. No manual "grant access" step needed for new hires.
-        ...(workspaceKey ? { keyWrap: await wrapWorkspaceKey(workspaceKey, newEmployee.password) } : {}),
-        ...reconcilePermissions(newEmployee),
-      },
-    ];
-    await persistEmployees(next);
-    recordActivity("Employees", "created", `Added employee: ${newEmployee.name} (@${newEmployee.username.trim()})`);
-    setNewEmployee(emptyNewEmployee);
-    setShowNewEmployeePerms(false);
+    try {
+      const next = [
+        ...(employees || []),
+        {
+          ...newEmployee,
+          username: newEmployee.username.trim(),
+          password: await hashPassword(newEmployee.password),
+          isAdmin: false,
+          // We have the new employee's plaintext password right here, plus the
+          // workspace key in memory (the admin creating them is logged in) — so wrap it
+          // for them immediately. No manual "grant access" step needed for new hires.
+          ...(workspaceKey ? { keyWrap: await wrapWorkspaceKey(workspaceKey, newEmployee.password) } : {}),
+          ...reconcilePermissions(newEmployee),
+        },
+      ];
+      await persistEmployees(next);
+      recordActivity("Employees", "created", `Added employee: ${newEmployee.name} (@${newEmployee.username.trim()})`);
+      setNewEmployee(emptyNewEmployee);
+      // Closes the whole "Manage employees" screen automatically once the new
+      // employee has been added, instead of leaving the admin sitting on the panel.
+      setShowManage(false);
+    } catch (e) {
+      // Previously this step could throw silently (a leftover call to a setter that
+      // no longer existed) — the employee would sometimes still get added underneath,
+      // but the form never reset and nothing visibly confirmed success, making it look
+      // like "Add employee" wasn't working at all. Now any failure here is surfaced.
+      setManageError("Could not add the employee, please try again");
+    }
   };
 
   // Applies a grade's preset permissions to an employee. The grade itself is stored
