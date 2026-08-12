@@ -44,44 +44,6 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-// ---------- Daily motivational message ----------
-// A rotating pool of short motivational lines shown in the header. The message is
-// picked deterministically from the day of the year, so it's the same for everyone
-// on a given calendar day and automatically moves to a new one at midnight — no
-// randomness, no server round-trip, no manual update needed.
-const MOTIVATIONAL_MESSAGES = [
-  "كل تذكرة بتحجزها بتفتح رحلة لحد تاني — يلا نبدأ يومنا",
-  "النجاح مش صدفة، هو مجهود يومي بيتراكم",
-  "عميل راضي النهاردة يرجعلك بعشرة بكرة",
-  "التفاصيل الصغيرة هي اللي بتفرق بين رحلة عادية ورحلة تُنسى",
-  "ابدأ يومك بابتسامة، العميل بيحس بيها من أول مكالمة",
-  "كل مشكلة ليها حل، وكل حجز ليه فرصة تتظبط أحسن",
-  "شغلك مش مجرد حجوزات، إنت بتصنع ذكريات لناس كتير",
-  "أفضل وقت تبدأ فيه هو دلوقتي",
-  "التنظيم النهاردة يوفرلك وقت وجهد بكرة",
-  "متابعة بسيطة مع العميل ممكن تحول استفسار لحجز",
-  "ثقتك في نفسك بتنعكس على ثقة العميل فيك",
-  "كل يوم فرصة جديدة تتفوق فيها على نفسك بالأمس",
-  "الاحترافية مش في الكلام، هي في الالتزام بالتفاصيل",
-  "خطوة صغيرة كل يوم تفرق كتير على المدى البعيد",
-  "أنت جزء أساسي من نجاح الشركة — شغلك بيتحسب",
-  "التركيز على العميل هو أقصر طريق لنجاح مستمر",
-  "الصبر مع العملاء استثمار بيرجعلك أضعافه",
-  "خليك دايمًا خطوة قبل توقعات العميل",
-  "الفريق القوي بيبني نجاح مش بيتصادف",
-  "كل يوم بتتعلم فيه حاجة جديدة، إنت بتكبر في شغلك",
-];
-
-const getDailyMotivationalMessage = (dateKey) => {
-  // dateKey like "2026-08-12" — sum its digits to get a stable index for the day.
-  let seed = 0;
-  for (let i = 0; i < dateKey.length; i++) {
-    const code = dateKey.charCodeAt(i);
-    if (code >= 48 && code <= 57) seed += code - 48;
-  }
-  return MOTIVATIONAL_MESSAGES[seed % MOTIVATIONAL_MESSAGES.length];
-};
-
 // ---------- Password hashing ----------
 // Employee passwords are stored as a SALTED PBKDF2-SHA256 hash (100,000 iterations),
 // not a bare unsalted hash — a random per-password salt means two employees who pick
@@ -2002,19 +1964,6 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     document.addEventListener("wheel", handleWheelOnNumberInput, { passive: true });
     return () => document.removeEventListener("wheel", handleWheelOnNumberInput);
   }, []);
-
-  // Today's date key (YYYY-MM-DD), used to pick the daily motivational message
-  // in the header. Re-checked every minute so the message flips over on its own
-  // right after midnight, with no need to refresh the page.
-  const [todayKey, setTodayKey] = useState(() => new Date().toISOString().slice(0, 10));
-  useEffect(() => {
-    const id = setInterval(() => {
-      const nowKey = new Date().toISOString().slice(0, 10);
-      setTodayKey((prev) => (prev === nowKey ? prev : nowKey));
-    }, 60000);
-    return () => clearInterval(id);
-  }, []);
-  const dailyMotivationalMessage = getDailyMotivationalMessage(todayKey);
 
   // Keep the browser tab title and icon in sync with the app's name/branding.
   useEffect(() => {
@@ -7726,7 +7675,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
           <header className="relative flex flex-col gap-2 sm:gap-3 px-3 py-2.5 sm:px-4 sm:py-3 md:px-6 md:py-4">
             <div className="flex items-start justify-between flex-wrap gap-2 sm:gap-3">
-            <div className="flex flex-col items-end gap-1.5 sm:gap-2 z-10 order-3">
+            <div className="flex flex-col items-end gap-1.5 sm:gap-2 z-10 order-2">
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   onClick={() => {
@@ -7884,15 +7833,6 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   )}
                 </p>
               </div>
-            </div>
-            {/* Daily motivational message — picked from the day of the year, so it
-                automatically rotates to a new line every day without any action needed. */}
-            <div
-              className="hidden sm:flex order-2 flex-1 min-w-[160px] items-center justify-center gap-1.5 text-center text-teal-50/90 text-[11px] md:text-xs font-medium px-3 py-1.5 rounded-2xl bg-white/10 border border-white/15"
-              dir="rtl"
-            >
-              <Sparkles size={13} className="text-amber-300 shrink-0" />
-              <span className="line-clamp-2">{dailyMotivationalMessage}</span>
             </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
