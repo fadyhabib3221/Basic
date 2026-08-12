@@ -1429,6 +1429,20 @@ const AIRLINE_CODES = [
   { code: "876", iata: "3U", name: "Sichuan Airlines" }, { code: "880", iata: "HU", name: "Hainan Airlines" },
   { code: "900", iata: "F3", name: "flyadeal" }, { code: "932", iata: "VS", name: "Virgin Atlantic" },
   { code: "978", iata: "VJ", name: "VietJet Air" }, { code: "999", iata: "CA", name: "Air China" },
+  // Additional airlines — mainly Egyptian carriers and other regional/international
+  // airlines not in the original list, added on request. Codes verified against
+  // IATA's published accounting-code records.
+  { code: "381", iata: "SM", name: "Air Cairo" }, { code: "325", iata: "NP", name: "Nile Air" },
+  { code: "477", iata: "NE", name: "Nesma Airlines" }, { code: "171", iata: "FT", name: "FlyEgypt" },
+  { code: "110", iata: "UJ", name: "AlMasria Universal Airlines" }, { code: "141", iata: "FZ", name: "flydubai" },
+  { code: "593", iata: "XY", name: "flynas" }, { code: "229", iata: "KU", name: "Kuwait Airways" },
+  { code: "910", iata: "WY", name: "Oman Air" }, { code: "624", iata: "PC", name: "Pegasus Airlines" },
+  { code: "199", iata: "TU", name: "Tunisair" }, { code: "148", iata: "LN", name: "Libyan Airlines" },
+  { code: "083", iata: "SA", name: "South African Airways" }, { code: "459", iata: "WB", name: "Rwandair Express" },
+  { code: "031", iata: "PW", name: "Precision Air" }, { code: "603", iata: "UL", name: "SriLankan Airlines" },
+  { code: "988", iata: "OZ", name: "Asiana Airlines" }, { code: "214", iata: "PK", name: "Pakistan International Airlines" },
+  { code: "250", iata: "HY", name: "Uzbekistan Airways" }, { code: "526", iata: "WN", name: "Southwest Airlines" },
+  { code: "173", iata: "HA", name: "Hawaiian Airlines" },
 ];
 const getAirlineCode = (name) => {
   const n = (name || "").trim().toUpperCase();
