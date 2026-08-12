@@ -10748,6 +10748,13 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         Net: {fmt(hotelLineNetTotal(l, nights))} {viewingHotelBooking.netCurrency || "EGP"} · Sold:{" "}
                         {fmt(hotelLineSoldTotal(l, nights))} {viewingHotelBooking.soldCurrency || "EGP"}
                       </div>
+                      {(viewingHotelBooking.netCurrency === "USD" || viewingHotelBooking.soldCurrency === "USD") && (viewingHotelBooking.usdRate ?? usdToEgpRate) && (
+                        <div className="text-[11px] text-emerald-600 mb-2">
+                          ≈ Net {fmt(hotelInEgp(hotelLineNetTotal(l, nights), viewingHotelBooking.netCurrency, viewingHotelBooking.usdRate))} EGP · Sold{" "}
+                          {fmt(hotelInEgp(hotelLineSoldTotal(l, nights), viewingHotelBooking.soldCurrency, viewingHotelBooking.usdRate))} EGP · rate{" "}
+                          {fmt(viewingHotelBooking.usdRate ?? usdToEgpRate)}
+                        </div>
+                      )}
                       {Array.isArray(l.guests) && l.guests.some((g) => g.name) && (
                         <div className="text-xs text-stone-700 mb-1">
                           <span className="text-stone-500">Guests: </span>
@@ -10780,6 +10787,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <p className="text-[11px] text-stone-500">Profit (EGP)</p>
                   <p className="text-sm font-bold text-emerald-700">{fmt(hotelProfitTotal(viewingHotelBooking))}</p>
                 </div>
+                {(viewingHotelBooking.netCurrency === "USD" || viewingHotelBooking.soldCurrency === "USD") && (viewingHotelBooking.usdRate ?? usdToEgpRate) && (
+                  <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center col-span-2 sm:col-span-3">
+                    <p className="text-[11px] text-stone-500">USD → EGP rate used</p>
+                    <p className="text-sm font-bold text-stone-800">{fmt(viewingHotelBooking.usdRate ?? usdToEgpRate)} (locked at booking)</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -11364,12 +11377,22 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <p className="text-sm font-bold text-stone-800">
                     {fmt(visaNetTotal(viewingVisaBooking))} {viewingVisaBooking.netCurrency}
                   </p>
+                  {viewingVisaBooking.netCurrency === "USD" && (viewingVisaBooking.usdRate ?? usdToEgpRate) && (
+                    <p className="text-[10px] text-emerald-600 mt-0.5">
+                      ≈ {fmt(visaNetTotal(viewingVisaBooking) * (viewingVisaBooking.usdRate ?? usdToEgpRate))} EGP
+                    </p>
+                  )}
                 </div>
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Sold total</p>
                   <p className="text-sm font-bold text-stone-800">
                     {fmt(visaSoldTotal(viewingVisaBooking))} {viewingVisaBooking.soldCurrency}
                   </p>
+                  {viewingVisaBooking.soldCurrency === "USD" && (viewingVisaBooking.usdRate ?? usdToEgpRate) && (
+                    <p className="text-[10px] text-emerald-600 mt-0.5">
+                      ≈ {fmt(visaSoldTotal(viewingVisaBooking) * (viewingVisaBooking.usdRate ?? usdToEgpRate))} EGP
+                    </p>
+                  )}
                 </div>
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Profit</p>
@@ -11377,6 +11400,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     {fmt(visaProfitTotal(viewingVisaBooking))} EGP
                   </p>
                 </div>
+                {(viewingVisaBooking.netCurrency === "USD" || viewingVisaBooking.soldCurrency === "USD") && (viewingVisaBooking.usdRate ?? usdToEgpRate) && (
+                  <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center col-span-2 sm:col-span-3">
+                    <p className="text-[11px] text-stone-500">USD → EGP rate used</p>
+                    <p className="text-sm font-bold text-stone-800">{fmt(viewingVisaBooking.usdRate ?? usdToEgpRate)} (locked at booking)</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -12149,6 +12178,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       ? `${fmt(parseFloat(viewingCarBooking.collection) || 0)} ${viewingCarBooking.currency}`
                       : "-"}
                   </p>
+                  {viewingCarBooking.currency === "USD" && viewingCarBooking.collection && (viewingCarBooking.usdRate ?? usdToEgpRate) && (
+                    <p className="text-[10px] text-emerald-600 mt-0.5">
+                      ≈ {fmt((parseFloat(viewingCarBooking.collection) || 0) * (viewingCarBooking.usdRate ?? usdToEgpRate))} EGP
+                    </p>
+                  )}
                 </div>
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Driver tip</p>
@@ -12157,6 +12191,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       ? `${fmt(parseFloat(viewingCarBooking.driverTip) || 0)} ${viewingCarBooking.currency}`
                       : "-"}
                   </p>
+                  {viewingCarBooking.currency === "USD" && viewingCarBooking.driverTip && (viewingCarBooking.usdRate ?? usdToEgpRate) && (
+                    <p className="text-[10px] text-emerald-600 mt-0.5">
+                      ≈ {fmt((parseFloat(viewingCarBooking.driverTip) || 0) * (viewingCarBooking.usdRate ?? usdToEgpRate))} EGP
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -12166,12 +12205,22 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <p className="text-sm font-bold text-stone-800">
                     {fmt(carNetTotal(viewingCarBooking))} {viewingCarBooking.netCurrency}
                   </p>
+                  {viewingCarBooking.netCurrency === "USD" && (viewingCarBooking.usdRate ?? usdToEgpRate) && (
+                    <p className="text-[10px] text-emerald-600 mt-0.5">
+                      ≈ {fmt(carNetTotal(viewingCarBooking) * (viewingCarBooking.usdRate ?? usdToEgpRate))} EGP
+                    </p>
+                  )}
                 </div>
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Sold</p>
                   <p className="text-sm font-bold text-stone-800">
                     {fmt(carSoldTotal(viewingCarBooking))} {viewingCarBooking.soldCurrency}
                   </p>
+                  {viewingCarBooking.soldCurrency === "USD" && (viewingCarBooking.usdRate ?? usdToEgpRate) && (
+                    <p className="text-[10px] text-emerald-600 mt-0.5">
+                      ≈ {fmt(carSoldTotal(viewingCarBooking) * (viewingCarBooking.usdRate ?? usdToEgpRate))} EGP
+                    </p>
+                  )}
                 </div>
                 <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center">
                   <p className="text-[11px] text-stone-500">Profit</p>
@@ -12179,6 +12228,12 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     {fmt(carProfitTotal(viewingCarBooking))} EGP
                   </p>
                 </div>
+                {(viewingCarBooking.currency === "USD" || viewingCarBooking.netCurrency === "USD" || viewingCarBooking.soldCurrency === "USD") && (viewingCarBooking.usdRate ?? usdToEgpRate) && (
+                  <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-center col-span-2 sm:col-span-3">
+                    <p className="text-[11px] text-stone-500">USD → EGP rate used</p>
+                    <p className="text-sm font-bold text-stone-800">{fmt(viewingCarBooking.usdRate ?? usdToEgpRate)} (locked at booking)</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -13793,6 +13848,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Net price{ticketPaxCounts(viewingTicket).child + ticketPaxCounts(viewingTicket).infant > 0 ? " (total)" : ""}</p>
                   <p className="text-sm font-medium text-stone-800">{fmt(ticketNetTotal(viewingTicket))} {viewingTicket.netCurrency || "EGP"}</p>
+                  {viewingTicket.netCurrency === "USD" && (viewingTicket.usdRate ?? usdToEgpRate) && (
+                    <p className="text-[11px] text-emerald-600">
+                      ≈ {fmt(ticketNetTotal(viewingTicket) * (viewingTicket.usdRate ?? usdToEgpRate))} EGP · rate {fmt(viewingTicket.usdRate ?? usdToEgpRate)}
+                    </p>
+                  )}
                   {(ticketPaxCounts(viewingTicket).child > 0 || ticketPaxCounts(viewingTicket).infant > 0) && (
                     <p className="text-[11px] text-stone-400">
                       Adult {fmt(viewingTicket.netPrice)}
@@ -13807,6 +13867,11 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Sold price{ticketPaxCounts(viewingTicket).child + ticketPaxCounts(viewingTicket).infant > 0 ? " (total)" : ""}</p>
                   <p className="text-sm font-medium text-stone-800">{fmt(ticketSoldTotal(viewingTicket))} {viewingTicket.soldCurrency || "EGP"}</p>
+                  {viewingTicket.soldCurrency === "USD" && (viewingTicket.usdRate ?? usdToEgpRate) && (
+                    <p className="text-[11px] text-emerald-600">
+                      ≈ {fmt(ticketSoldTotal(viewingTicket) * (viewingTicket.usdRate ?? usdToEgpRate))} EGP · rate {fmt(viewingTicket.usdRate ?? usdToEgpRate)}
+                    </p>
+                  )}
                   {(ticketPaxCounts(viewingTicket).child > 0 || ticketPaxCounts(viewingTicket).infant > 0) && (
                     <p className="text-[11px] text-stone-400">
                       Adult {fmt(viewingTicket.soldPrice)}
