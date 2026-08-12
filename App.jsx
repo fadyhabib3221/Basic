@@ -6963,6 +6963,16 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const fmt = (n) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n);
 
+  // Small "≈ X EGP" hint shown next to a price field whenever its currency is USD,
+  // so the user can see the EGP equivalent live while typing (using the locked
+  // per-booking usdRate if one exists, otherwise the current header rate).
+  const usdHint = (amount, currency, rate) => {
+    const r = rate ?? usdToEgpRate;
+    const n = parseFloat(amount);
+    if (currency !== "USD" || !r || !n) return null;
+    return `≈ ${fmt(n * r)} EGP`;
+  };
+
   // ---------- Render: loading ----------
   if (loading || setupComplete === null) {
     return (
@@ -9336,6 +9346,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 onBlur={(e) => setForm({ ...form, netPrice: addCentsOnBlur(e.target.value) })}
                 placeholder="0"
               />
+              {usdHint(form.netPrice, form.netCurrency, form.usdRate) && (
+                <p className="text-[10px] text-emerald-600 mt-1">{usdHint(form.netPrice, form.netCurrency, form.usdRate)}</p>
+              )}
             </div>
           </div>
           <div className="sm:hidden grid grid-cols-2 gap-2 mt-2">
@@ -9361,6 +9374,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 onBlur={(e) => setForm({ ...form, soldPrice: addCentsOnBlur(e.target.value) })}
                 placeholder="0"
               />
+              {usdHint(form.soldPrice, form.soldCurrency, form.usdRate) && (
+                <p className="text-[10px] text-emerald-600 mt-1">{usdHint(form.soldPrice, form.soldCurrency, form.usdRate)}</p>
+              )}
             </div>
           </div>
           <div className="sm:hidden mt-2">
@@ -9409,6 +9425,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 onBlur={(e) => setForm({ ...form, netPrice: addCentsOnBlur(e.target.value) })}
                 placeholder="0"
               />
+              {usdHint(form.netPrice, form.netCurrency, form.usdRate) && (
+                <p className="text-[10px] text-emerald-600 mt-1">{usdHint(form.netPrice, form.netCurrency, form.usdRate)}</p>
+              )}
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Sold currency</label>
@@ -9432,6 +9451,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 onBlur={(e) => setForm({ ...form, soldPrice: addCentsOnBlur(e.target.value) })}
                 placeholder="0"
               />
+              {usdHint(form.soldPrice, form.soldCurrency, form.usdRate) && (
+                <p className="text-[10px] text-emerald-600 mt-1">{usdHint(form.soldPrice, form.soldCurrency, form.usdRate)}</p>
+              )}
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Profit (auto, EGP)</label>
@@ -10268,6 +10290,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         onBlur={(e) => updateHotelRoomLine(line.id, { netPrice: addCentsOnBlur(e.target.value) })}
                         placeholder="0"
                       />
+                      {usdHint(line.netPrice, hotelForm.netCurrency, hotelForm.usdRate) && (
+                        <p className="text-[10px] text-emerald-600 mt-1">{usdHint(line.netPrice, hotelForm.netCurrency, hotelForm.usdRate)}</p>
+                      )}
                     </div>
                     <div>
                       <label className="text-[11px] text-stone-500 block mb-1">Sold (per room/night)</label>
@@ -10279,6 +10304,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         onBlur={(e) => updateHotelRoomLine(line.id, { soldPrice: addCentsOnBlur(e.target.value) })}
                         placeholder="0"
                       />
+                      {usdHint(line.soldPrice, hotelForm.soldCurrency, hotelForm.usdRate) && (
+                        <p className="text-[10px] text-emerald-600 mt-1">{usdHint(line.soldPrice, hotelForm.soldCurrency, hotelForm.usdRate)}</p>
+                      )}
                       <div className="flex items-center justify-between gap-2 mt-3">
                         <div className="text-xs text-emerald-700 font-semibold">
                           {roomLineNights(line, hotelForm)} night{roomLineNights(line, hotelForm) === 1 ? "" : "s"} · {fmt(hotelInEgp(hotelLineSoldTotal(line, roomLineNights(line, hotelForm)), hotelForm.soldCurrency, hotelForm.usdRate) - hotelInEgp(hotelLineNetTotal(line, roomLineNights(line, hotelForm)), hotelForm.netCurrency, hotelForm.usdRate))} EGP
@@ -10965,6 +10993,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   onBlur={(e) => setVisaForm({ ...visaForm, netPrice: addCentsOnBlur(e.target.value) })}
                   placeholder="0"
                 />
+                {usdHint(visaForm.netPrice, visaForm.netCurrency, visaForm.usdRate) && (
+                  <p className="text-[10px] text-emerald-600 mt-1">{usdHint(visaForm.netPrice, visaForm.netCurrency, visaForm.usdRate)}</p>
+                )}
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Sold currency</label>
@@ -10988,6 +11019,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   onBlur={(e) => setVisaForm({ ...visaForm, soldPrice: addCentsOnBlur(e.target.value) })}
                   placeholder="0"
                 />
+                {usdHint(visaForm.soldPrice, visaForm.soldCurrency, visaForm.usdRate) && (
+                  <p className="text-[10px] text-emerald-600 mt-1">{usdHint(visaForm.soldPrice, visaForm.soldCurrency, visaForm.usdRate)}</p>
+                )}
               </div>
             </div>
 
@@ -11670,6 +11704,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   onBlur={(e) => setCarForm({ ...carForm, collection: addCentsOnBlur(e.target.value) })}
                   placeholder="0"
                 />
+                {usdHint(carForm.collection, carForm.currency, carForm.usdRate) && (
+                  <p className="text-[10px] text-emerald-600 mt-1">{usdHint(carForm.collection, carForm.currency, carForm.usdRate)}</p>
+                )}
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Driver tip</label>
@@ -11681,6 +11718,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   onBlur={(e) => setCarForm({ ...carForm, driverTip: addCentsOnBlur(e.target.value) })}
                   placeholder="0"
                 />
+                {usdHint(carForm.driverTip, carForm.currency, carForm.usdRate) && (
+                  <p className="text-[10px] text-emerald-600 mt-1">{usdHint(carForm.driverTip, carForm.currency, carForm.usdRate)}</p>
+                )}
               </div>
               <div />
               <div>
@@ -11705,6 +11745,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   onBlur={(e) => setCarForm({ ...carForm, netPrice: addCentsOnBlur(e.target.value) })}
                   placeholder="0"
                 />
+                {usdHint(carForm.netPrice, carForm.netCurrency, carForm.usdRate) && (
+                  <p className="text-[10px] text-emerald-600 mt-1">{usdHint(carForm.netPrice, carForm.netCurrency, carForm.usdRate)}</p>
+                )}
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Sold currency</label>
@@ -11728,6 +11771,9 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   onBlur={(e) => setCarForm({ ...carForm, soldPrice: addCentsOnBlur(e.target.value) })}
                   placeholder="0"
                 />
+                {usdHint(carForm.soldPrice, carForm.soldCurrency, carForm.usdRate) && (
+                  <p className="text-[10px] text-emerald-600 mt-1">{usdHint(carForm.soldPrice, carForm.soldCurrency, carForm.usdRate)}</p>
+                )}
               </div>
             </div>
 
