@@ -14,7 +14,7 @@ import {
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
   History, Bell, Send, Landmark, Receipt, PieChart, ArrowUpCircle, ArrowDownCircle,
   Banknote, HandCoins, ClipboardList, Globe, Key, Truck, Filter, Settings, Clock, Copy,
-  BarChart3, GripVertical,
+  BarChart3, GripVertical, Unlock,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -175,6 +175,11 @@ const unwrapWorkspaceKey = async (keyWrap, plainPassword) => {
 // read customer/financial data without re-entering a password. Chosen deliberately in
 // favor of a refresh not requiring re-login.
 const LOCAL_SESSION_KEY = "pdm:localSession:v1";
+// Marks the current tab as "screen locked" (see the Lock button in the header). Kept
+// separately from LOCAL_SESSION_KEY, in sessionStorage too, so it survives a page
+// refresh — if it's set, the app comes back up locked instead of silently showing
+// data again just because the tab was reloaded.
+const LOCK_FLAG_KEY = "pdm:locked:v1";
 
 const saveLocalSession = async (user, workspaceKeyObj, startedAt) => {
   try {
@@ -2201,6 +2206,17 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [loginFailCount, setLoginFailCount] = useState(0);
   const [loginLockUntil, setLoginLockUntil] = useState(0);
 
+  // Screen lock: unlike Sign out, this keeps the current session (and the already-
+  // decrypted data in memory) intact and just covers the screen with a password
+  // prompt. Re-entering the SAME employee's password is required to dismiss it —
+  // see handleLock/handleUnlock below.
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockPasswordInput, setLockPasswordInput] = useState("");
+  const [showLockPassword, setShowLockPassword] = useState(false);
+  const [lockError, setLockError] = useState("");
+  const [lockFailCount, setLockFailCount] = useState(0);
+  const [lockLockUntil, setLockLockUntil] = useState(0);
+
   const [setupName, setSetupName] = useState("");
   const [setupUsername, setSetupUsername] = useState("");
   const [setupPassword, setSetupPassword] = useState("");
@@ -2674,6 +2690,9 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           sessionStartedAtRef.current = localSession.startedAt || Date.now();
           setCurrentUser({ username: localMatch.username, name: localMatch.name, isAdmin: !!localMatch.isAdmin });
           if (localSession.workspaceKey) setWorkspaceKey(localSession.workspaceKey);
+          try {
+            if (sessionStorage.getItem(LOCK_FLAG_KEY) === "1") setIsLocked(true);
+          } catch (e) {}
         } else {
           if (localSession) clearLocalSession(); // stale — account no longer exists
           if (sessionRes && sessionRes.value) {
@@ -4533,6 +4552,53 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setCurrentUser(null);
     setShowManage(false);
     setEditingUsername(null);
+    setIsLocked(false);
+    try { sessionStorage.removeItem(LOCK_FLAG_KEY); } catch (e) {}
+  };
+
+  // Covers the screen with a password prompt without ending the session — the
+  // workspace key and all already-loaded data stay in memory exactly as they were,
+  // so unlocking is instant and doesn't need a network round-trip. Meant for "I'm
+  // stepping away from the device for a minute", not for switching accounts.
+  const handleLock = () => {
+    setLockPasswordInput("");
+    setLockError("");
+    setShowLockPassword(false);
+    setIsLocked(true);
+    try { sessionStorage.setItem(LOCK_FLAG_KEY, "1"); } catch (e) {}
+  };
+
+  // Only the password of the account that's currently signed in can dismiss the
+  // lock screen — checked the same way as a normal login, against that employee's
+  // stored password hash. A few failed guesses throttle further attempts, same
+  // pattern as the login form's own brute-force limiter.
+  const handleUnlock = async () => {
+    setLockError("");
+    if (lockLockUntil && Date.now() < lockLockUntil) {
+      const secondsLeft = Math.ceil((lockLockUntil - Date.now()) / 1000);
+      setLockError(`Too many failed attempts. Try again in ${secondsLeft}s.`);
+      return;
+    }
+    const me = currentUser && (employees || []).find((e) => e.username === currentUser.username);
+    const ok = me && (await verifyPassword(me.password, lockPasswordInput));
+    if (!ok) {
+      const nextCount = lockFailCount + 1;
+      setLockFailCount(nextCount);
+      setLockPasswordInput("");
+      if (nextCount >= 5) {
+        setLockLockUntil(Date.now() + 30000);
+        setLockFailCount(0);
+        setLockError("Too many failed attempts. Try again in 30s.");
+      } else {
+        setLockError("Incorrect password");
+      }
+      return;
+    }
+    setLockFailCount(0);
+    setLockLockUntil(0);
+    setLockPasswordInput("");
+    setIsLocked(false);
+    try { sessionStorage.removeItem(LOCK_FLAG_KEY); } catch (e) {}
   };
 
   // Lets the main account remotely sign out any currently-online employee (or itself)
@@ -7729,6 +7795,47 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           }
         }
       `}</style>
+      {isLocked && currentUser && (
+        <div className="fixed inset-0 z-[100] bg-gradient-to-br from-teal-900 via-teal-800 to-[#0d3b3e] flex items-center justify-center p-4">
+          <div className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl shadow-black/30 overflow-hidden" style={{ animation: "pdmPopIn .3s cubic-bezier(0.16,1,0.3,1) both" }}>
+            <div className="relative bg-gradient-to-r from-teal-800 to-teal-900 px-6 pt-8 pb-7 text-center">
+              <div className="mx-auto mb-3 w-14 h-14 rounded-full bg-white/10 border border-white/20 flex items-center justify-center">
+                <Lock size={22} className="text-white" />
+              </div>
+              <h1 className="text-white font-semibold text-lg tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>Session locked</h1>
+              <p className="text-teal-50/90 text-xs mt-1">Signed in as {currentUser.name} — enter your password to continue</p>
+            </div>
+            <div className="relative bg-white px-6 pt-6 pb-6">
+              {lockError && <div className="bg-red-50 text-red-700 text-sm rounded-2xl px-3 py-2 mb-3">{lockError}</div>}
+              <label className="text-xs text-stone-500 block mb-1">Password</label>
+              <div className="relative">
+                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input
+                  type={showLockPassword ? "text" : "password"}
+                  className="w-full border border-stone-300 rounded-2xl pl-9 pr-9 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-800 focus:border-teal-800"
+                  value={lockPasswordInput}
+                  onChange={(e) => setLockPasswordInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
+                  placeholder="Password"
+                  autoFocus
+                />
+                <button type="button" onClick={() => setShowLockPassword(!showLockPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+                  {showLockPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <button onClick={handleUnlock}
+                className="w-full mt-5 bg-gradient-to-r from-teal-800 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-2xl px-4 py-2.5 flex items-center justify-center gap-2 shadow-lg shadow-teal-800/30 transition-all">
+                <Unlock size={15} /> Unlock
+              </button>
+              <button onClick={handleLogout}
+                className="w-full mt-2 text-stone-400 hover:text-stone-600 text-xs font-medium rounded-2xl px-4 py-2 flex items-center justify-center gap-1.5 transition-colors">
+                <LogOut size={13} /> Not you? Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="xl:flex xl:justify-center xl:gap-4">
       <div className="relative max-w-5xl mx-auto xl:mx-0 xl:w-[64rem] xl:shrink-0 p-4 md:p-6">
         {/* Boarding-pass style banner */}
@@ -7766,6 +7873,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     setConfirmPasswordInput("");
                   }}
                   title="Change password"
+                  className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                  <Lock size={15} />
+                </button>
+                <button onClick={handleLock} title="Lock screen"
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
                   <Lock size={15} />
                 </button>
