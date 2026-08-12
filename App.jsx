@@ -9338,17 +9338,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Net price</label>
-              <input
-                type="number"
-                className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                value={form.netPrice}
-                onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
-                onBlur={(e) => setForm({ ...form, netPrice: addCentsOnBlur(e.target.value) })}
-                placeholder="0"
-              />
-              {usdHint(form.netPrice, form.netCurrency, form.usdRate) && (
-                <p className="text-[10px] text-emerald-600 mt-1">{usdHint(form.netPrice, form.netCurrency, form.usdRate)}</p>
-              )}
+              <div className="relative">
+                <input
+                  type="number"
+                  className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  value={form.netPrice}
+                  onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
+                  onBlur={(e) => setForm({ ...form, netPrice: addCentsOnBlur(e.target.value) })}
+                  placeholder="0"
+                />
+                {usdHint(form.netPrice, form.netCurrency, form.usdRate) && (
+                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] leading-none text-emerald-600 bg-white/90 pl-1 pointer-events-none">
+                    {usdHint(form.netPrice, form.netCurrency, form.usdRate)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="sm:hidden grid grid-cols-2 gap-2 mt-2">
@@ -9366,17 +9370,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Sold price</label>
-              <input
-                type="number"
-                className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                value={form.soldPrice}
-                onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
-                onBlur={(e) => setForm({ ...form, soldPrice: addCentsOnBlur(e.target.value) })}
-                placeholder="0"
-              />
-              {usdHint(form.soldPrice, form.soldCurrency, form.usdRate) && (
-                <p className="text-[10px] text-emerald-600 mt-1">{usdHint(form.soldPrice, form.soldCurrency, form.usdRate)}</p>
-              )}
+              <div className="relative">
+                <input
+                  type="number"
+                  className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  value={form.soldPrice}
+                  onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
+                  onBlur={(e) => setForm({ ...form, soldPrice: addCentsOnBlur(e.target.value) })}
+                  placeholder="0"
+                />
+                {usdHint(form.soldPrice, form.soldCurrency, form.usdRate) && (
+                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] leading-none text-emerald-600 bg-white/90 pl-1 pointer-events-none">
+                    {usdHint(form.soldPrice, form.soldCurrency, form.usdRate)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="sm:hidden mt-2">
@@ -9417,17 +9425,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Net price</label>
-              <input
-                type="number"
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                value={form.netPrice}
-                onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
-                onBlur={(e) => setForm({ ...form, netPrice: addCentsOnBlur(e.target.value) })}
-                placeholder="0"
-              />
-              {usdHint(form.netPrice, form.netCurrency, form.usdRate) && (
-                <p className="text-[10px] text-emerald-600 mt-1">{usdHint(form.netPrice, form.netCurrency, form.usdRate)}</p>
-              )}
+              <div className="relative">
+                <input
+                  type="number"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  value={form.netPrice}
+                  onChange={(e) => setForm({ ...form, netPrice: e.target.value })}
+                  onBlur={(e) => setForm({ ...form, netPrice: addCentsOnBlur(e.target.value) })}
+                  placeholder="0"
+                />
+                {usdHint(form.netPrice, form.netCurrency, form.usdRate) && (
+                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] leading-none text-emerald-600 bg-white/90 pl-1 pointer-events-none">
+                    {usdHint(form.netPrice, form.netCurrency, form.usdRate)}
+                  </span>
+                )}
+              </div>
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Sold currency</label>
@@ -9443,17 +9455,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Sold price</label>
-              <input
-                type="number"
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                value={form.soldPrice}
-                onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
-                onBlur={(e) => setForm({ ...form, soldPrice: addCentsOnBlur(e.target.value) })}
-                placeholder="0"
-              />
-              {usdHint(form.soldPrice, form.soldCurrency, form.usdRate) && (
-                <p className="text-[10px] text-emerald-600 mt-1">{usdHint(form.soldPrice, form.soldCurrency, form.usdRate)}</p>
-              )}
+              <div className="relative">
+                <input
+                  type="number"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                  value={form.soldPrice}
+                  onChange={(e) => setForm({ ...form, soldPrice: e.target.value })}
+                  onBlur={(e) => setForm({ ...form, soldPrice: addCentsOnBlur(e.target.value) })}
+                  placeholder="0"
+                />
+                {usdHint(form.soldPrice, form.soldCurrency, form.usdRate) && (
+                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] leading-none text-emerald-600 bg-white/90 pl-1 pointer-events-none">
+                    {usdHint(form.soldPrice, form.soldCurrency, form.usdRate)}
+                  </span>
+                )}
+              </div>
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Profit (auto, EGP)</label>
@@ -10282,31 +10298,39 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     </div>
                     <div>
                       <label className="text-[11px] text-stone-500 block mb-1">Net (per room/night)</label>
-                      <input
-                        type="number"
-                        className="w-28 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                        value={line.netPrice}
-                        onChange={(e) => updateHotelRoomLine(line.id, { netPrice: e.target.value })}
-                        onBlur={(e) => updateHotelRoomLine(line.id, { netPrice: addCentsOnBlur(e.target.value) })}
-                        placeholder="0"
-                      />
-                      {usdHint(line.netPrice, hotelForm.netCurrency, hotelForm.usdRate) && (
-                        <p className="text-[10px] text-emerald-600 mt-1">{usdHint(line.netPrice, hotelForm.netCurrency, hotelForm.usdRate)}</p>
-                      )}
+                      <div className="relative">
+                        <input
+                          type="number"
+                          className="w-28 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                          value={line.netPrice}
+                          onChange={(e) => updateHotelRoomLine(line.id, { netPrice: e.target.value })}
+                          onBlur={(e) => updateHotelRoomLine(line.id, { netPrice: addCentsOnBlur(e.target.value) })}
+                          placeholder="0"
+                        />
+                        {usdHint(line.netPrice, hotelForm.netCurrency, hotelForm.usdRate) && (
+                          <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] leading-none text-emerald-600 bg-white/90 pl-1 pointer-events-none truncate max-w-[70px]">
+                            {usdHint(line.netPrice, hotelForm.netCurrency, hotelForm.usdRate)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <label className="text-[11px] text-stone-500 block mb-1">Sold (per room/night)</label>
-                      <input
-                        type="number"
-                        className="w-28 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                        value={line.soldPrice}
-                        onChange={(e) => updateHotelRoomLine(line.id, { soldPrice: e.target.value })}
-                        onBlur={(e) => updateHotelRoomLine(line.id, { soldPrice: addCentsOnBlur(e.target.value) })}
-                        placeholder="0"
-                      />
-                      {usdHint(line.soldPrice, hotelForm.soldCurrency, hotelForm.usdRate) && (
-                        <p className="text-[10px] text-emerald-600 mt-1">{usdHint(line.soldPrice, hotelForm.soldCurrency, hotelForm.usdRate)}</p>
-                      )}
+                      <div className="relative">
+                        <input
+                          type="number"
+                          className="w-28 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                          value={line.soldPrice}
+                          onChange={(e) => updateHotelRoomLine(line.id, { soldPrice: e.target.value })}
+                          onBlur={(e) => updateHotelRoomLine(line.id, { soldPrice: addCentsOnBlur(e.target.value) })}
+                          placeholder="0"
+                        />
+                        {usdHint(line.soldPrice, hotelForm.soldCurrency, hotelForm.usdRate) && (
+                          <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] leading-none text-emerald-600 bg-white/90 pl-1 pointer-events-none truncate max-w-[70px]">
+                            {usdHint(line.soldPrice, hotelForm.soldCurrency, hotelForm.usdRate)}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center justify-between gap-2 mt-3">
                         <div className="text-xs text-emerald-700 font-semibold">
                           {roomLineNights(line, hotelForm)} night{roomLineNights(line, hotelForm) === 1 ? "" : "s"} · {fmt(hotelInEgp(hotelLineSoldTotal(line, roomLineNights(line, hotelForm)), hotelForm.soldCurrency, hotelForm.usdRate) - hotelInEgp(hotelLineNetTotal(line, roomLineNights(line, hotelForm)), hotelForm.netCurrency, hotelForm.usdRate))} EGP
@@ -10985,17 +11009,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Price net (per person)</label>
-                <input
-                  type="number"
-                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                  value={visaForm.netPrice}
-                  onChange={(e) => setVisaForm({ ...visaForm, netPrice: e.target.value })}
-                  onBlur={(e) => setVisaForm({ ...visaForm, netPrice: addCentsOnBlur(e.target.value) })}
-                  placeholder="0"
-                />
-                {usdHint(visaForm.netPrice, visaForm.netCurrency, visaForm.usdRate) && (
-                  <p className="text-[10px] text-emerald-600 mt-1">{usdHint(visaForm.netPrice, visaForm.netCurrency, visaForm.usdRate)}</p>
-                )}
+                <div className="relative">
+                  <input
+                    type="number"
+                    className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                    value={visaForm.netPrice}
+                    onChange={(e) => setVisaForm({ ...visaForm, netPrice: e.target.value })}
+                    onBlur={(e) => setVisaForm({ ...visaForm, netPrice: addCentsOnBlur(e.target.value) })}
+                    placeholder="0"
+                  />
+                  {usdHint(visaForm.netPrice, visaForm.netCurrency, visaForm.usdRate) && (
+                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] leading-none text-emerald-600 bg-white/90 pl-1 pointer-events-none truncate max-w-[70px]">
+                      {usdHint(visaForm.netPrice, visaForm.netCurrency, visaForm.usdRate)}
+                    </span>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Sold currency</label>
@@ -11011,17 +11039,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Sold (per person)</label>
-                <input
-                  type="number"
-                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                  value={visaForm.soldPrice}
-                  onChange={(e) => setVisaForm({ ...visaForm, soldPrice: e.target.value })}
-                  onBlur={(e) => setVisaForm({ ...visaForm, soldPrice: addCentsOnBlur(e.target.value) })}
-                  placeholder="0"
-                />
-                {usdHint(visaForm.soldPrice, visaForm.soldCurrency, visaForm.usdRate) && (
-                  <p className="text-[10px] text-emerald-600 mt-1">{usdHint(visaForm.soldPrice, visaForm.soldCurrency, visaForm.usdRate)}</p>
-                )}
+                <div className="relative">
+                  <input
+                    type="number"
+                    className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                    value={visaForm.soldPrice}
+                    onChange={(e) => setVisaForm({ ...visaForm, soldPrice: e.target.value })}
+                    onBlur={(e) => setVisaForm({ ...visaForm, soldPrice: addCentsOnBlur(e.target.value) })}
+                    placeholder="0"
+                  />
+                  {usdHint(visaForm.soldPrice, visaForm.soldCurrency, visaForm.usdRate) && (
+                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] leading-none text-emerald-600 bg-white/90 pl-1 pointer-events-none truncate max-w-[70px]">
+                      {usdHint(visaForm.soldPrice, visaForm.soldCurrency, visaForm.usdRate)}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -11696,31 +11728,39 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Collection</label>
-                <input
-                  type="number"
-                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                  value={carForm.collection}
-                  onChange={(e) => setCarForm({ ...carForm, collection: e.target.value })}
-                  onBlur={(e) => setCarForm({ ...carForm, collection: addCentsOnBlur(e.target.value) })}
-                  placeholder="0"
-                />
-                {usdHint(carForm.collection, carForm.currency, carForm.usdRate) && (
-                  <p className="text-[10px] text-emerald-600 mt-1">{usdHint(carForm.collection, carForm.currency, carForm.usdRate)}</p>
-                )}
+                <div className="relative">
+                  <input
+                    type="number"
+                    className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                    value={carForm.collection}
+                    onChange={(e) => setCarForm({ ...carForm, collection: e.target.value })}
+                    onBlur={(e) => setCarForm({ ...carForm, collection: addCentsOnBlur(e.target.value) })}
+                    placeholder="0"
+                  />
+                  {usdHint(carForm.collection, carForm.currency, carForm.usdRate) && (
+                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] leading-none text-emerald-600 bg-white/90 pl-1 pointer-events-none truncate max-w-[70px]">
+                      {usdHint(carForm.collection, carForm.currency, carForm.usdRate)}
+                    </span>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Driver tip</label>
-                <input
-                  type="number"
-                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                  value={carForm.driverTip}
-                  onChange={(e) => setCarForm({ ...carForm, driverTip: e.target.value })}
-                  onBlur={(e) => setCarForm({ ...carForm, driverTip: addCentsOnBlur(e.target.value) })}
-                  placeholder="0"
-                />
-                {usdHint(carForm.driverTip, carForm.currency, carForm.usdRate) && (
-                  <p className="text-[10px] text-emerald-600 mt-1">{usdHint(carForm.driverTip, carForm.currency, carForm.usdRate)}</p>
-                )}
+                <div className="relative">
+                  <input
+                    type="number"
+                    className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                    value={carForm.driverTip}
+                    onChange={(e) => setCarForm({ ...carForm, driverTip: e.target.value })}
+                    onBlur={(e) => setCarForm({ ...carForm, driverTip: addCentsOnBlur(e.target.value) })}
+                    placeholder="0"
+                  />
+                  {usdHint(carForm.driverTip, carForm.currency, carForm.usdRate) && (
+                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] leading-none text-emerald-600 bg-white/90 pl-1 pointer-events-none truncate max-w-[70px]">
+                      {usdHint(carForm.driverTip, carForm.currency, carForm.usdRate)}
+                    </span>
+                  )}
+                </div>
               </div>
               <div />
               <div>
@@ -11737,17 +11777,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Price net</label>
-                <input
-                  type="number"
-                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                  value={carForm.netPrice}
-                  onChange={(e) => setCarForm({ ...carForm, netPrice: e.target.value })}
-                  onBlur={(e) => setCarForm({ ...carForm, netPrice: addCentsOnBlur(e.target.value) })}
-                  placeholder="0"
-                />
-                {usdHint(carForm.netPrice, carForm.netCurrency, carForm.usdRate) && (
-                  <p className="text-[10px] text-emerald-600 mt-1">{usdHint(carForm.netPrice, carForm.netCurrency, carForm.usdRate)}</p>
-                )}
+                <div className="relative">
+                  <input
+                    type="number"
+                    className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                    value={carForm.netPrice}
+                    onChange={(e) => setCarForm({ ...carForm, netPrice: e.target.value })}
+                    onBlur={(e) => setCarForm({ ...carForm, netPrice: addCentsOnBlur(e.target.value) })}
+                    placeholder="0"
+                  />
+                  {usdHint(carForm.netPrice, carForm.netCurrency, carForm.usdRate) && (
+                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] leading-none text-emerald-600 bg-white/90 pl-1 pointer-events-none truncate max-w-[70px]">
+                      {usdHint(carForm.netPrice, carForm.netCurrency, carForm.usdRate)}
+                    </span>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Sold currency</label>
@@ -11763,17 +11807,21 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
               <div>
                 <label className="text-xs text-stone-500 block mb-1">Sold</label>
-                <input
-                  type="number"
-                  className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
-                  value={carForm.soldPrice}
-                  onChange={(e) => setCarForm({ ...carForm, soldPrice: e.target.value })}
-                  onBlur={(e) => setCarForm({ ...carForm, soldPrice: addCentsOnBlur(e.target.value) })}
-                  placeholder="0"
-                />
-                {usdHint(carForm.soldPrice, carForm.soldCurrency, carForm.usdRate) && (
-                  <p className="text-[10px] text-emerald-600 mt-1">{usdHint(carForm.soldPrice, carForm.soldCurrency, carForm.usdRate)}</p>
-                )}
+                <div className="relative">
+                  <input
+                    type="number"
+                    className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                    value={carForm.soldPrice}
+                    onChange={(e) => setCarForm({ ...carForm, soldPrice: e.target.value })}
+                    onBlur={(e) => setCarForm({ ...carForm, soldPrice: addCentsOnBlur(e.target.value) })}
+                    placeholder="0"
+                  />
+                  {usdHint(carForm.soldPrice, carForm.soldCurrency, carForm.usdRate) && (
+                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] leading-none text-emerald-600 bg-white/90 pl-1 pointer-events-none truncate max-w-[70px]">
+                      {usdHint(carForm.soldPrice, carForm.soldCurrency, carForm.usdRate)}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
