@@ -1443,6 +1443,22 @@ const AIRLINE_CODES = [
   { code: "988", iata: "OZ", name: "Asiana Airlines" }, { code: "214", iata: "PK", name: "Pakistan International Airlines" },
   { code: "250", iata: "HY", name: "Uzbekistan Airways" }, { code: "526", iata: "WN", name: "Southwest Airlines" },
   { code: "173", iata: "HA", name: "Hawaiian Airlines" },
+  // Airlines that do NOT issue tickets through BSP (mostly low-cost/ultra-low-cost
+  // carriers that sell direct, with no IATA 3-digit accounting/ticketing prefix).
+  // `code` is left null for these — they still work for selection/search, but
+  // can't be auto-detected from a ticket number prefix like BSP airlines can.
+  { code: null, iata: "FR", name: "Ryanair" }, { code: null, iata: "U2", name: "easyJet" },
+  { code: null, iata: "W6", name: "Wizz Air" }, { code: null, iata: "5W", name: "Wizz Air Abu Dhabi" },
+  { code: null, iata: "LS", name: "Jet2.com" }, { code: null, iata: "J9", name: "Jazeera Airways" },
+  { code: null, iata: "OV", name: "SalamAir" }, { code: null, iata: "NK", name: "Spirit Airlines" },
+  { code: null, iata: "F9", name: "Frontier Airlines" }, { code: null, iata: "G4", name: "Allegiant Air" },
+  { code: null, iata: "JQ", name: "Jetstar Airways" }, { code: null, iata: "AK", name: "AirAsia" },
+  { code: null, iata: "D7", name: "AirAsia X" }, { code: null, iata: "5J", name: "Cebu Pacific" },
+  { code: null, iata: "SG", name: "SpiceJet" }, { code: null, iata: "G8", name: "Go First" },
+  { code: null, iata: "V7", name: "Volotea" }, { code: null, iata: "HV", name: "Transavia" },
+  { code: null, iata: "0B", name: "Blue Air" }, { code: null, iata: "SY", name: "Sun Country Airlines" },
+  { code: null, iata: "OG", name: "Play" }, { code: null, iata: "N0", name: "Norse Atlantic Airways" },
+  { code: null, iata: "BJ", name: "Nouvelair" }, { code: null, iata: "J2", name: "Buta Airways" },
 ];
 const getAirlineCode = (name) => {
   const n = (name || "").trim().toUpperCase();
@@ -8585,6 +8601,17 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           >
             {fetchingUsdRate ? "Fetching..." : "Fetch online"}
           </button>
+          {/* NBE doesn't publish a free public API for its buy/sell rate (only the
+              generic market rate above is available that way), so this just opens
+              the bank's own exchange-rate page for a quick manual check. */}
+          <a
+            href="https://www.nbe.com.eg/NBE/E/#/AR/ExchangeRatesAndCurrencyConverter"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-lg px-3 py-1.5 hover:bg-teal-50"
+          >
+            Check NBE rate ↗
+          </a>
           {usdToEgpRateDate && (() => {
             const isStale = usdToEgpRateDate.slice(0, 10) !== todayDateStr();
             return (
@@ -9659,7 +9686,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <option key={`u-${code}`} value={code} />
           ))}
           {AIRLINE_CODES.map((a) => (
-            <option key={`a-${a.code}`} value={a.iata} label={`${a.iata} — ${a.name}`} />
+            <option key={`a-${a.iata}`} value={a.iata} label={`${a.iata} — ${a.name}`} />
           ))}
         </datalist>
         <datalist id="city-suggestions">
