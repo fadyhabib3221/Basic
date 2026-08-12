@@ -152,7 +152,13 @@ const unwrapWorkspaceKey = async (keyWrap, plainPassword) => {
     const wrappingKey = await deriveAesKeyFromPassword(plainPassword, bufFromB64(keyWrap.salt));
     return await crypto.subtle.unwrapKey(
       "raw", bufFromB64(keyWrap.data), wrappingKey, { name: "AES-GCM", iv: bufFromB64(keyWrap.iv) },
-      { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+      // extractable MUST be true here: this unwrapped workspace key gets re-wrapped
+      // later by wrapWorkspaceKey() every time a new employee is added or an existing
+      // employee's password is changed. A non-extractable key can't be wrapped again,
+      // so leaving this false caused crypto.subtle.wrapKey() to throw right after any
+      // normal login (it only "worked" immediately after first-time setup, which builds
+      // its key via generateWorkspaceKey() instead of this function).
+      { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
     );
   } catch (e) {
     return null;
@@ -1044,21 +1050,23 @@ const ROLE_PRESETS = {
 
 const roleLabel = (value) => (EMPLOYEE_ROLES.find((r) => r.value === value) || {}).label || "Employee";
 
-// Grade picker on the Add employee page groups the 18 grades into four per-tier
-// dropdowns (Manager / Supervisor / Employee / Accountant). Supervisor and Employee
-// no longer offer a general, all-section grade — same as Manager — so every pick in
-// those three dropdowns is tied to a specific department. Accountant holds its two
-// grades (Accountant, Accounts Manager), neither of which has department variants.
-// Owner and GM have no variants of any kind, so they stand alone next to the four
-// dropdowns.
-const MANAGER_GRADES = EMPLOYEE_ROLES.filter((r) => r.value.startsWith("manager_"));
-const SUPERVISOR_GRADES = EMPLOYEE_ROLES.filter((r) => r.value.startsWith("supervisor_"));
-const EMPLOYEE_GRADES = EMPLOYEE_ROLES.filter((r) => r.value.startsWith("employee_"));
+// Grade picker on the Add employee page groups the 18 grades into one dropdown per
+// department (Flights / Hotels / Visa / Transportation), each holding that
+// department's three tiers (Manager, Supervisor, Employee) — e.g. the Flights
+// dropdown offers "Ticketing Manager", "Ticketing Supervisor", "Ticketing Employee".
+// Accountant holds its two grades (Accountant, Accounts Manager), neither of which
+// has department variants, so it gets its own dropdown alongside the four
+// department ones. Owner and GM have no variants of any kind, so they stand alone
+// next to all five dropdowns.
+const gradeForSection = (section, tier) => EMPLOYEE_ROLES.find((r) => r.value === `${tier}_${section}`);
+const DEPARTMENT_GRADE_GROUPS = SECTIONS_WITH_EMPLOYEE_GRADE.map((section) => ({
+  key: section,
+  title: SECTION_ROLE_LABELS[section] || section,
+  roles: ["manager", "supervisor", "employee"].map((tier) => gradeForSection(section, tier)).filter(Boolean),
+}));
 const ACCOUNTANT_GRADES = EMPLOYEE_ROLES.filter((r) => r.value === "accountant" || r.value === "accounting_manager");
 const GRADE_TIER_GROUPS = [
-  { key: "manager", title: "Manager", roles: MANAGER_GRADES },
-  { key: "supervisor", title: "Supervisor", roles: SUPERVISOR_GRADES },
-  { key: "employee", title: "Employee", roles: EMPLOYEE_GRADES },
+  ...DEPARTMENT_GRADE_GROUPS,
   { key: "accountant", title: "Accountant", roles: ACCOUNTANT_GRADES },
 ];
 
@@ -1245,8 +1253,16 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
                 onSetRole(val);
               }}
             >
-              {EMPLOYEE_ROLES.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
+              <optgroup label="General">
+                <option value="owner">Owner</option>
+                <option value="gm">General Manager</option>
+              </optgroup>
+              {GRADE_TIER_GROUPS.map((group) => (
+                <optgroup key={group.key} label={group.title}>
+                  {group.roles.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
@@ -8105,17 +8121,19 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
               </div>
 
-              {/* Grade picker: one dropdown per tier (Manager / Supervisor / Employee /
-                  Accountant), each holding that tier's per-department or per-level variants.
-                  Owner and GM stand alone next to the four dropdowns since neither has any
-                  variants. Picking any option sets that grade's
-                  starting permissions on newEmployee and immediately closes its dropdown,
-                  so the chosen grade shows outside/above the list. Name/username/password
-                  above are never touched by any of this — they only get cleared once the
-                  employee is actually added (see handleAddEmployee), so they stay exactly
-                  as typed while you pick a grade. Everything can still be fine-tuned
-                  afterward from the Permissions screen reached by clicking the employee's
-                  name once they've been added. */}
+              {/* Grade picker: one dropdown per department (Flights / Hotels / Visa /
+                  Transportation), each holding that department's Manager / Supervisor /
+                  Employee variants, plus a separate Accountant dropdown (Accountant /
+                  Accounts Manager have no department variants). Owner and GM stand alone
+                  next to the dropdowns since neither has any variants. Picking any option
+                  sets that grade's starting permissions on newEmployee and immediately
+                  closes its dropdown, so the chosen grade shows outside/above the list.
+                  Name/username/password above are never touched by any of this — they
+                  only get cleared once the employee is actually added (see
+                  handleAddEmployee), so they stay exactly as typed while you pick a
+                  grade. Everything can still be fine-tuned afterward from the
+                  Permissions screen reached by clicking the employee's name once
+                  they've been added. */}
               <div className="mt-3" ref={gradePickerRef}>
                 <label className="text-xs text-stone-500 block mb-1.5">Grade</label>
                 <div className="flex flex-wrap items-start gap-1.5 pb-1">
@@ -8123,7 +8141,7 @@ export default function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     const selectedInGroup = group.roles.find((r) => r.value === newEmployee.role);
                     const isOpen = newEmployeeGradeOpen === group.key;
                     return (
-                      <div key={group.key} className="relative w-28 shrink-0">
+                      <div key={group.key} className="relative w-32 shrink-0">
                         <button
                           type="button"
                           onClick={() => setNewEmployeeGradeOpen(isOpen ? null : group.key)}
