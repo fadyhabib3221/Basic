@@ -14,7 +14,7 @@ import {
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
   History, Bell, Send, Landmark, Receipt, PieChart, ArrowUpCircle, ArrowDownCircle,
   Banknote, HandCoins, ClipboardList, Globe, Key, Truck, Filter, Settings, Clock, Copy,
-  BarChart3, GripVertical, Unlock,
+  BarChart3, GripVertical, Unlock, Monitor,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -7878,7 +7878,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </button>
                 <button onClick={handleLock} title="Lock screen"
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
-                  <Lock size={15} />
+                  <Monitor size={15} />
                 </button>
                 <button onClick={handleLogout} title="Sign out"
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
