@@ -9129,43 +9129,6 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
 
 
-        {showChangePassword && (
-          <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 mb-6 max-w-sm">
-            <h2 className="font-semibold text-stone-900 mb-1 flex items-center gap-2">
-              <Lock size={16} className="text-teal-800" /> Change your password
-            </h2>
-            <p className="text-xs text-stone-400 mb-4">
-              Signed in as {currentUser.name} ({currentUser.username})
-            </p>
-            {passwordError && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{passwordError}</div>}
-            {passwordSuccess && <div className="bg-emerald-50 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">{passwordSuccess}</div>}
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-stone-500 block mb-1">Current password</label>
-                <input type="password"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                  value={currentPasswordInput} onChange={(e) => setCurrentPasswordInput(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs text-stone-500 block mb-1">New password</label>
-                <input type="password"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                  value={newPasswordInput} onChange={(e) => setNewPasswordInput(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs text-stone-500 block mb-1">Confirm new password</label>
-                <input type="password"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                  value={confirmPasswordInput} onChange={(e) => setConfirmPasswordInput(e.target.value)} />
-              </div>
-            </div>
-            <button onClick={handleChangePassword}
-              className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors">
-              Update password
-            </button>
-          </div>
-        )}
-
         {/* Summary cards */}
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm text-stone-500">
@@ -14668,6 +14631,56 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             });
           }}
         />
+      )}
+
+      {showChangePassword && (
+        <div
+          className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50"
+          onClick={() => setShowChangePassword(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 w-full max-w-sm"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-semibold text-stone-900 flex items-center gap-2">
+                <Lock size={16} className="text-teal-800" /> Change your password
+              </h2>
+              <button onClick={() => setShowChangePassword(false)} className="text-stone-400 hover:text-stone-700 p-1">
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-xs text-stone-400 mb-4">
+              Signed in as {currentUser.name} ({currentUser.username})
+            </p>
+            {passwordError && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2 mb-3">{passwordError}</div>}
+            {passwordSuccess && <div className="bg-emerald-50 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">{passwordSuccess}</div>}
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Current password</label>
+                <input type="password"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={currentPasswordInput} onChange={(e) => setCurrentPasswordInput(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">New password</label>
+                <input type="password"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={newPasswordInput} onChange={(e) => setNewPasswordInput(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Confirm new password</label>
+                <input type="password"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  value={confirmPasswordInput} onChange={(e) => setConfirmPasswordInput(e.target.value)} />
+              </div>
+            </div>
+            <button onClick={handleChangePassword}
+              className="w-full mt-4 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors">
+              Update password
+            </button>
+          </div>
+        </div>
       )}
 
       {showIataHistory && (
