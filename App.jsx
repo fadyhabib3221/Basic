@@ -8314,13 +8314,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         )}
 
         {showClosedYearsPanel && canViewClosedYears && (() => {
-          const CLOSED_YEARS_SECTIONS = [
-            { key: "flights", label: "Flights" },
-            { key: "hotels", label: "Hotels" },
-            { key: "visa", label: "Visa" },
-            { key: "cars", label: "Transportation" },
-            { key: "files", label: "Files" },
-          ];
+          const CLOSED_YEARS_SECTIONS = SECTION_OPTIONS.filter((o) => o.value !== undefined).map((o) => ({
+            key: o.value,
+            label: o.label,
+            Icon: o.icon,
+            iconClassName: o.iconClassName || "",
+          }));
           // Every year that has at least one dated record in ANY section — the year
           // itself is the fixed axis here, with each section toggled open/closed
           // underneath it, independently of the other sections for that same year.
@@ -8369,9 +8368,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     {allYears.map((y) => (
                       <div key={y} className="border border-stone-200 rounded-xl p-5">
                         <p className="text-lg font-semibold text-stone-900 mb-3">{y}</p>
-                        <div className="flex flex-wrap gap-2.5">
+                        <div className="flex flex-wrap gap-3">
                           {CLOSED_YEARS_SECTIONS.map((sec) => {
                             const isClosed = (closedYears[sec.key] || []).includes(y);
+                            const Icon = sec.Icon;
                             return (
                               <button
                                 key={sec.key}
@@ -8384,14 +8384,30 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                     ? `Reopen ${sec.label} ${y}`
                                     : `Close ${sec.label} ${y}`
                                 }
-                                className={`flex items-center gap-1.5 text-sm font-semibold rounded-full px-4 py-2 border transition-colors ${
+                                className={`flex flex-col items-center justify-center gap-1.5 w-24 rounded-2xl px-3 py-3 border transition-all ${
                                   isClosed
-                                    ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
-                                    : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
-                                } ${!canManageYearLock ? "opacity-50 cursor-not-allowed hover:bg-none" : ""}`}
+                                    ? "bg-stone-100 border-stone-200"
+                                    : "bg-amber-50 border-amber-300"
+                                } ${!canManageYearLock ? "opacity-60 cursor-not-allowed" : "hover:brightness-105"}`}
                               >
-                                {isClosed ? <Lock size={13} /> : null}
-                                {sec.label}
+                                <span className="relative">
+                                  {Icon && (
+                                    <Icon
+                                      size={24}
+                                      className={`${sec.iconClassName} transition-all ${
+                                        isClosed
+                                          ? "text-stone-300"
+                                          : "text-amber-500 drop-shadow-[0_0_7px_rgba(245,158,11,0.85)]"
+                                      }`}
+                                    />
+                                  )}
+                                  {isClosed && (
+                                    <Lock size={11} className="absolute -bottom-1 -right-1.5 text-stone-400 bg-stone-100 rounded-full p-[1px]" />
+                                  )}
+                                </span>
+                                <span className={`text-xs font-semibold ${isClosed ? "text-stone-400" : "text-amber-800"}`}>
+                                  {sec.label}
+                                </span>
                               </button>
                             );
                           })}
