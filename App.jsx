@@ -1270,6 +1270,10 @@ const emptyNewEmployee = {
   isAccounting: false,
   canManageCompanies: false,
   isOwner: false,
+  // Accountant-grade only: whether an Accounts Manager has granted this employee
+  // permission to close/reopen years from the Closed years panel. Off by default —
+  // an Accounts Manager switches it on per employee.
+  canLockYears: false,
   sections: { ...DEFAULT_SECTIONS },
   // Per-section view-all/edit/delete overrides; empty until customized per section, in
   // which case each section falls back to the account-wide toggles above.
@@ -3433,7 +3437,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   // Toggles a single year open/closed for one section (flights/hotels/visa/cars/files).
+  // Guarded by canManageYearLock (defined further below, in scope by the time this is
+  // actually called): Admin/Owner/GM/Accounts Manager always pass; a plain Accountant
+  // only passes once granted the "Lock years" permission.
   const toggleClosedYear = (section, year) => {
+    if (!canManageYearLock) return;
     const current = closedYears[section] || [];
     const next = current.includes(year) ? current.filter((y) => y !== year) : [...current, year];
     persistClosedYears({ ...closedYears, [section]: next });
@@ -4804,6 +4812,22 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     recordActivity("Employees", "edited", `${checked ? "Granted" : "Revoked"} "${field}" permission for @${username}`);
   };
 
+  // Grants or revokes the "Lock years" permission for one Accountant-grade employee —
+  // used from the Accountant permissions list inside the Closed years panel. Unlike
+  // handleTogglePermission above (main account/Owner only), this is also open to the
+  // Accounts Manager grade — see canGrantYearLockPermission.
+  const handleToggleYearLockPermission = async (username, checked) => {
+    if (!canGrantYearLockPermission) {
+      setManageError("Only an Accounts Manager (or the main account) can grant the Lock years permission");
+      return;
+    }
+    const next = (employees || []).map((e) =>
+      e.username === username ? { ...e, canLockYears: checked } : e
+    );
+    await persistEmployees(next);
+    recordActivity("Employees", "edited", `${checked ? "Granted" : "Revoked"} the Lock years permission for @${username}`);
+  };
+
   // Toggles one section (Flights/Hotels/Visa/Transportation/Files) on or off for an
   // employee, independent of their ticket permissions above.
   const handleToggleSection = async (username, section, checked) => {
@@ -5883,6 +5907,21 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const isOwnerUser =
     !!currentUser && !currentUser.isAdmin && !!(currentEmployeeRecord && currentEmployeeRecord.isOwner);
   const hasAdminAccess = !!currentUser && (currentUser.isAdmin || isOwnerUser);
+  // The Accounts Manager grade is the senior tier within accounting — on top of what a
+  // plain Accountant gets, they can also grant (or revoke) the "lock years" permission
+  // to individual Accountant-grade employees, from inside the Closed years panel.
+  const isAccountsManager =
+    !!currentUser && !currentUser.isAdmin && !!(currentEmployeeRecord && currentEmployeeRecord.role === "accounting_manager");
+  const canGrantYearLockPermission = !!currentUser && (currentUser.isAdmin || isOwnerUser || isAccountsManager);
+  // Who can actually close/reopen a year (as opposed to just viewing the panel): Admin,
+  // Owner, GM, and Accounts Manager always can; a plain Accountant only can once an
+  // Accounts Manager (or Admin/Owner) has switched their "Lock years" permission on.
+  const canManageYearLock =
+    !!currentUser &&
+    (currentUser.isAdmin ||
+      isOwnerUser ||
+      isAccountsManager ||
+      !!(currentEmployeeRecord && currentEmployeeRecord.role === "accountant" && currentEmployeeRecord.canLockYears));
   const myPendingRequestsCount = (requests || []).filter(
     (r) => currentUser && r.toUsername === currentUser.username && r.status === "pending"
   ).length;
@@ -8317,6 +8356,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <p className="text-sm text-stone-400 mb-6 mt-3">
                   A closed year disappears completely for every employee — from lists, filters, stats, and exports — in
                   that section only. It stays fully visible here and to Admin, Owner, GM, and Accounts.
+                  {!canManageYearLock && (
+                    <span className="block mt-1 text-amber-600">
+                      You can view closed years but can't close or reopen one — ask your Accounts Manager to grant you the "Lock years" permission.
+                    </span>
+                  )}
                 </p>
                 {allYears.length === 0 ? (
                   <p className="text-sm text-stone-400 text-center py-6">No dated records yet.</p>
@@ -8332,12 +8376,19 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <button
                                 key={sec.key}
                                 onClick={() => toggleClosedYear(sec.key, y)}
+                                disabled={!canManageYearLock}
+                                title={
+                                  !canManageYearLock
+                                    ? "You don't have permission to close or reopen years"
+                                    : isClosed
+                                    ? `Reopen ${sec.label} ${y}`
+                                    : `Close ${sec.label} ${y}`
+                                }
                                 className={`flex items-center gap-1.5 text-sm font-semibold rounded-full px-4 py-2 border transition-colors ${
                                   isClosed
                                     ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
                                     : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
-                                }`}
-                                title={isClosed ? `Reopen ${sec.label} ${y}` : `Close ${sec.label} ${y}`}
+                                } ${!canManageYearLock ? "opacity-50 cursor-not-allowed hover:bg-none" : ""}`}
                               >
                                 {isClosed ? <Lock size={13} /> : null}
                                 {sec.label}
@@ -8349,6 +8400,33 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     ))}
                   </div>
                 )}
+                {canGrantYearLockPermission && (() => {
+                  const accountantEmployees = (employees || []).filter((e) => e.role === "accountant");
+                  return (
+                    <div className="mt-6 pt-5 border-t border-stone-200">
+                      <h3 className="text-sm font-semibold text-stone-900 mb-1">Accountant permissions</h3>
+                      <p className="text-xs text-stone-400 mb-3">
+                        Grant an Accountant-grade employee the ability to close and reopen years themselves.
+                      </p>
+                      {accountantEmployees.length === 0 ? (
+                        <p className="text-xs text-stone-400">No Accountant-grade employees yet.</p>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {accountantEmployees.map((e) => (
+                            <div key={e.username} className="border border-stone-200 rounded-xl px-3">
+                              <ToggleSwitch
+                                label={e.name}
+                                description={`@${e.username} — can close/reopen years`}
+                                checked={!!e.canLockYears}
+                                onChange={(v) => handleToggleYearLockPermission(e.username, v)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           );
