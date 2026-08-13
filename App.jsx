@@ -5834,12 +5834,13 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const canAccessAccounts =
     !!currentUser &&
     (currentUser.isAdmin || !!(currentEmployeeRecord && (currentEmployeeRecord.isOwner || currentEmployeeRecord.isAccounting)));
-  // A closed year is hidden from absolutely everyone once closed — from lists, filters,
-  // stats, and exports — with no standing bypass for any role, Admin included. The only
-  // way to see records from a closed year again is to reopen ("recall") that year from
-  // the Closed years panel below, which un-hides it for everyone until it's closed again.
-  // Who gets to open that panel is governed by canManageYearLock (defined further down),
-  // since only someone who can actually reopen a year has any reason to see it.
+  // A closed year is hidden from lists, filters, stats, and exports for everyone who
+  // does NOT hold the "lock years" permission — for them the only way to see records
+  // from a closed year again is to reopen ("recall") that year from the Closed years
+  // panel below. Whoever holds canManageYearLock (defined further down — Admin, Owner,
+  // GM, Accounts Manager, or an Accountant granted the permission) keeps seeing those
+  // records even while the year stays closed, since they're the ones responsible for
+  // it; the year still blocks adds/edits/deletes for them until they actually reopen it.
   // If the current section is no longer (or was never) allowed for this employee —
   // e.g. their access was just changed by the main account — bounce them to the first
   // section they do have access to, instead of leaving them stuck on a blocked one.
@@ -5952,7 +5953,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : tickets.filter((t) =>
           t.employeeUsername ? t.employeeUsername === currentUser.username : t.employee === currentUser.name
         )
-  ).filter((t) => !(closedYears.flights || []).includes((t.date || "").slice(0, 4)));
+  ).filter((t) => canManageYearLock || !(closedYears.flights || []).includes((t.date || "").slice(0, 4)));
 
   const visibleHotelBookings = (
     !currentUser
@@ -5962,7 +5963,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : hotelBookings.filter((h) =>
           h.employeeUsername ? h.employeeUsername === currentUser.username : h.employee === currentUser.name
         )
-  ).filter((h) => !(closedYears.hotels || []).includes((h.bookingDate || "").slice(0, 4)));
+  ).filter((h) => canManageYearLock || !(closedYears.hotels || []).includes((h.bookingDate || "").slice(0, 4)));
 
   // Number of nights a single date range covers, from check-in to check-out (at least 1).
   const nightsBetween = (checkIn, checkOut) => {
@@ -6113,7 +6114,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : visaBookings.filter((v) =>
           v.employeeUsername ? v.employeeUsername === currentUser.username : v.employee === currentUser.name
         )
-  ).filter((v) => !(closedYears.visa || []).includes((v.bookingDate || "").slice(0, 4)));
+  ).filter((v) => canManageYearLock || !(closedYears.visa || []).includes((v.bookingDate || "").slice(0, 4)));
   const visaMonthsAvailable = Array.from(
     new Set(visibleVisaBookings.map((v) => monthKey(v.bookingDate)))
   ).sort((a, b) => b.localeCompare(a));
@@ -6163,7 +6164,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : carBookings.filter((c) =>
           c.employeeUsername ? c.employeeUsername === currentUser.username : c.employee === currentUser.name
         )
-  ).filter((c) => !(closedYears.cars || []).includes((c.bookingDate || "").slice(0, 4)));
+  ).filter((c) => canManageYearLock || !(closedYears.cars || []).includes((c.bookingDate || "").slice(0, 4)));
   const carMonthsAvailable = Array.from(
     new Set(visibleCarBookings.map((c) => monthKey(c.bookingDate)))
   ).sort((a, b) => b.localeCompare(a));
@@ -6678,7 +6679,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           f.employeeUsername ? f.employeeUsername === currentUser.username : f.createdBy === currentUser.name
         )
   )
-    .filter((f) => !(closedYears.files || []).includes((f.createdAt || "").slice(0, 4)))
+    .filter((f) => canManageYearLock || !(closedYears.files || []).includes((f.createdAt || "").slice(0, 4)))
     // Ordered by the file's own date (newest first), with the serial as a tie-breaker
     // for same-day files — the list always follows the dates rather than raw creation/
     // array order.
