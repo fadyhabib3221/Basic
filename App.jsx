@@ -8142,14 +8142,6 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           <Users size={15} className="text-teal-800" /> Manage employees
                         </button>
                       )}
-                      {canManageYearLock && (
-                        <button
-                          onClick={() => { setShowClosedYearsPanel(!showClosedYearsPanel); setShowManagementMenu(false); }}
-                          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
-                        >
-                          <Lock size={15} className="text-teal-800" /> Closed years
-                        </button>
-                      )}
                       {currentUser.isAdmin && (
                         <button
                           onClick={() => { dispatchLicense({ showPanel: !showLicensePanel }); setShowManagementMenu(false); }}
