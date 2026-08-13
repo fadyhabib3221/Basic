@@ -7711,12 +7711,14 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           data-row-key={ticketKey}
           onClick={() => openTicketDetail(t)}
           className={`border-t leading-tight cursor-pointer ${
-            isHighlighted
+            isYearLocked("flights", t.date)
+              ? `border-stone-200 bg-stone-200/70 grayscale hover:bg-stone-200 ${i > 0 ? "border-t-0" : ""}`
+              : isHighlighted
               ? `border-green-300 bg-green-100 ring-1 ring-inset ring-green-400 hover:bg-green-100 ${i > 0 ? "border-t-0" : ""}`
               : t.isReissued
               ? `border-sky-300 bg-sky-100 hover:bg-sky-200 ${i > 0 ? "border-t-0" : ""}`
               : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-teal-50/60"}`
-          } ${isYearLocked("flights", t.date) ? "opacity-40" : ""}`}
+          }`}
         >
           <td className={`px-1 py-0 ${cellText} text-stone-400 whitespace-nowrap`}>{rn}</td>
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`} title={t.employee || ""}>{employeeInitials(t.employee)}</td>
@@ -7809,10 +7811,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           data-row-key={refundKey}
           onClick={() => openTicketDetail(t)}
           className={`border-t border-dashed leading-tight cursor-pointer ${
-            isHighlighted
+            isYearLocked("flights", t.date)
+              ? "border-stone-200 bg-stone-200/70 grayscale hover:bg-stone-200"
+              : isHighlighted
               ? "border-green-300 bg-green-100 ring-1 ring-inset ring-green-400 hover:bg-green-100"
               : "border-red-300 bg-red-100/70 hover:bg-red-200/70"
-          } ${isYearLocked("flights", t.date) ? "opacity-40" : ""}`}
+          }`}
         >
           <td className={`px-1 py-0 ${rowText} whitespace-nowrap`}>{rn}</td>
           <td className={`px-1 py-0 ${rowText} whitespace-nowrap`} title={t.employee || ""}>{employeeInitials(t.employee)}</td>
@@ -11325,7 +11329,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 return sorted.map((h) => (
                 <tr
                   key={h.id}
-                  className={`border-b border-stone-100 hover:bg-stone-50 cursor-pointer ${isYearLocked("hotels", h.bookingDate) ? "opacity-40" : ""}`}
+                  className={`border-b border-stone-100 cursor-pointer ${isYearLocked("hotels", h.bookingDate) ? "bg-stone-200/70 grayscale hover:bg-stone-200" : "hover:bg-stone-50"}`}
                   onClick={() => { setViewingFileContext(null); setViewingHotelBooking(h); }}
                 >
                   <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{rnByRowId[h.id]}</td>
@@ -11977,7 +11981,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     return (
                       <tr
                         key={v.id}
-                        className={`hover:bg-stone-50 cursor-pointer ${isYearLocked("visa", v.bookingDate) ? "opacity-40" : ""}`}
+                        className={`cursor-pointer ${isYearLocked("visa", v.bookingDate) ? "bg-stone-200/70 grayscale hover:bg-stone-200" : "hover:bg-stone-50"}`}
                         onClick={() => { setViewingFileContext(null); setViewingVisaBooking(v); }}
                       >
                         <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{rnByRowId[v.id]}</td>
@@ -12760,7 +12764,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     return (
                       <tr
                         key={c.id}
-                        className={`leading-tight hover:bg-stone-50 cursor-pointer ${isYearLocked("cars", c.bookingDate) ? "opacity-40" : ""}`}
+                        className={`leading-tight cursor-pointer ${isYearLocked("cars", c.bookingDate) ? "bg-stone-200/70 grayscale hover:bg-stone-200" : "hover:bg-stone-50"}`}
                         onClick={() => { setViewingFileContext(null); setViewingCarBooking(c); }}
                       >
                         <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{rnByRowId[c.id]}</td>
@@ -13129,7 +13133,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       return (
                         <div
                           key={f.id}
-                          className={`w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-teal-50/50 ${isYearLocked("files", f.createdAt) ? "opacity-40" : ""}`}
+                          className={`w-full flex items-center justify-between gap-3 px-4 py-3 ${isYearLocked("files", f.createdAt) ? "bg-stone-200/70 grayscale hover:bg-stone-200" : "hover:bg-teal-50/50"}`}
                         >
                           <button
                             onClick={() => { setOpenFileId(f.id); setEditingFileServices(false); }}
