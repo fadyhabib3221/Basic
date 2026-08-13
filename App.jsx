@@ -1137,7 +1137,7 @@ const sectionRolePreset = (section, tier) => {
     isAccounting: false,
     canManageCompanies: p.canManageCompanies,
     isOwner: false,
-    canEditClosedYears: false,
+    closedYearAccess: {},
     sections: sectionOnlyAccess(section),
     sectionPerms: { [section]: { canViewAll: p.canViewAll, canEdit: p.canEdit, canDelete: p.canDelete } },
   };
@@ -1168,14 +1168,14 @@ const EMPLOYEE_ROLES = [
 // every section, rather than leaving the old restriction in place.
 const ALL_SECTIONS_ON = { flights: true, hotels: true, visa: true, cars: true, files: true };
 const ROLE_PRESETS = {
-  supervisor: { canViewAll: true, canAdd: true, canEdit: true, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false, canEditClosedYears: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
-  employee: { canViewAll: false, canAdd: true, canEdit: false, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false, canEditClosedYears: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
-  accountant: { canViewAll: true, canAdd: false, canEdit: false, canDelete: false, isAccounting: true, canManageCompanies: false, isOwner: false, canEditClosedYears: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
+  supervisor: { canViewAll: true, canAdd: true, canEdit: true, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
+  employee: { canViewAll: false, canAdd: true, canEdit: false, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
+  accountant: { canViewAll: true, canAdd: false, canEdit: false, canDelete: false, isAccounting: true, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
   // Accounts Manager: same accounting-only scope as Accountant, but with edit/delete
   // rights on top of it — the senior grade within the accounting tier.
-  accounting_manager: { canViewAll: true, canAdd: false, canEdit: true, canDelete: true, isAccounting: true, canManageCompanies: false, isOwner: false, canEditClosedYears: true, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
-  owner: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: true, canEditClosedYears: true, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
-  gm: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: true, canEditClosedYears: true, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
+  accounting_manager: { canViewAll: true, canAdd: false, canEdit: true, canDelete: true, isAccounting: true, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
+  owner: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: true, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
+  gm: { canViewAll: true, canAdd: true, canEdit: true, canDelete: true, isAccounting: false, canManageCompanies: true, isOwner: true, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
   ...Object.fromEntries(SECTIONS_WITH_EMPLOYEE_GRADE.map((s) => [`employee_${s}`, sectionRolePreset(s, "employee")])),
   ...Object.fromEntries(SECTIONS_WITH_SUPERVISOR_GRADE.map((s) => [`supervisor_${s}`, sectionRolePreset(s, "supervisor")])),
   ...Object.fromEntries(SECTIONS_WITH_MANAGER_GRADE.map((s) => [`manager_${s}`, sectionRolePreset(s, "manager")])),
@@ -1271,12 +1271,12 @@ const emptyNewEmployee = {
   isAccounting: false,
   canManageCompanies: false,
   isOwner: false,
-  // Standalone switch, independent of grade/role: whether this employee can add/edit/
-  // delete records dated in a closed year. Admin and Owner/GM always have this via
-  // canManageYearLock regardless of this flag — it only matters for everyone else, and
-  // even then only does anything if the employee can also view closed-year data
-  // (Accounts access), since otherwise the records are hidden from them entirely.
-  canEditClosedYears: false,
+  // Per-year override, independent of grade/role: which specific closed years this
+  // employee can view and/or edit, granted individually from the "Who can view/edit a
+  // closed year" picker inside the Closed years panel. Admin and Owner/GM always have
+  // full access to every closed year regardless of this map — it only matters for
+  // everyone else. Shape: { [year]: { view: bool, edit: bool } }.
+  closedYearAccess: {},
   sections: { ...DEFAULT_SECTIONS },
   // Per-section view-all/edit/delete overrides; empty until customized per section, in
   // which case each section falls back to the account-wide toggles above.
@@ -2202,6 +2202,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // can be closed independently of the others.
   const [closedYears, setClosedYears] = useState({ flights: [], hotels: [], visa: [], cars: [], files: [] });
   const [showClosedYearsPanel, setShowClosedYearsPanel] = useState(false);
+  // Selections for the "who can view/edit which closed year" picker inside the Closed
+  // years panel — reset each time the panel is reopened, see the reset effect below.
+  const [closedYearPermEmployee, setClosedYearPermEmployee] = useState("");
+  const [closedYearPermYear, setClosedYearPermYear] = useState("");
   const [newRequestTo, setNewRequestTo] = useState("");
   const [newRequestMessage, setNewRequestMessage] = useState("");
   const [requestSendError, setRequestSendError] = useState("");
@@ -2903,6 +2907,16 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       clearInterval(interval);
     };
   }, [currentUser]);
+
+  // Reset the employee/year picker inside the Closed years panel whenever it's closed,
+  // so reopening it always starts from a blank selection rather than showing whatever
+  // was last picked.
+  useEffect(() => {
+    if (!showClosedYearsPanel) {
+      setClosedYearPermEmployee("");
+      setClosedYearPermYear("");
+    }
+  }, [showClosedYearsPanel]);
 
 
   const ONLINE_THRESHOLD_MS = 15 * 1000; // considered "connected" if seen in the last 15s
@@ -3745,7 +3759,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // A closed year blocks every add/edit — whether the booking already belongs to that
     // year, or is being dated into it just now.
     const originalHotel = hotelEditingId ? hotelBookings.find((h) => h.id === hotelEditingId) : null;
-    if (!canEditClosedYears && ((originalHotel && isYearLocked("hotels", originalHotel.bookingDate)) || isYearLocked("hotels", hotelForm.bookingDate))) {
+    if ((originalHotel && isYearLocked("hotels", originalHotel.bookingDate) && !canEditClosedYear((originalHotel.bookingDate || "").slice(0, 4))) || (isYearLocked("hotels", hotelForm.bookingDate) && !canEditClosedYear((hotelForm.bookingDate || "").slice(0, 4)))) {
       setHotelError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
@@ -3847,7 +3861,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleDeleteHotel = (id, onDeleted) => {
     const targetHotel = hotelBookings.find((h) => h.id === id);
-    if (!canEditClosedYears && targetHotel && isYearLocked("hotels", targetHotel.bookingDate)) {
+    if (targetHotel && isYearLocked("hotels", targetHotel.bookingDate) && !canEditClosedYear((targetHotel.bookingDate || "").slice(0, 4))) {
       setHotelError("This booking is in a closed year and can't be deleted. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
@@ -3970,7 +3984,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // A closed year blocks every add/edit — whether the booking already belongs to that
     // year, or is being dated into it just now.
     const originalVisa = visaEditingId ? visaBookings.find((v) => v.id === visaEditingId) : null;
-    if (!canEditClosedYears && ((originalVisa && isYearLocked("visa", originalVisa.bookingDate)) || isYearLocked("visa", visaForm.bookingDate))) {
+    if ((originalVisa && isYearLocked("visa", originalVisa.bookingDate) && !canEditClosedYear((originalVisa.bookingDate || "").slice(0, 4))) || (isYearLocked("visa", visaForm.bookingDate) && !canEditClosedYear((visaForm.bookingDate || "").slice(0, 4)))) {
       setVisaError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
@@ -4041,7 +4055,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleDeleteVisa = (id, onDeleted) => {
     const targetVisa = visaBookings.find((v) => v.id === id);
-    if (!canEditClosedYears && targetVisa && isYearLocked("visa", targetVisa.bookingDate)) {
+    if (targetVisa && isYearLocked("visa", targetVisa.bookingDate) && !canEditClosedYear((targetVisa.bookingDate || "").slice(0, 4))) {
       setVisaError("This booking is in a closed year and can't be deleted. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
@@ -4119,7 +4133,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // A closed year blocks every add/edit — whether the booking already belongs to that
     // year, or is being dated into it just now.
     const originalCar = carEditingId ? carBookings.find((c) => c.id === carEditingId) : null;
-    if (!canEditClosedYears && ((originalCar && isYearLocked("cars", originalCar.bookingDate)) || isYearLocked("cars", carForm.bookingDate))) {
+    if ((originalCar && isYearLocked("cars", originalCar.bookingDate) && !canEditClosedYear((originalCar.bookingDate || "").slice(0, 4))) || (isYearLocked("cars", carForm.bookingDate) && !canEditClosedYear((carForm.bookingDate || "").slice(0, 4)))) {
       setCarError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
@@ -4200,7 +4214,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleDeleteCar = (id, onDeleted) => {
     const targetCar = carBookings.find((c) => c.id === id);
-    if (!canEditClosedYears && targetCar && isYearLocked("cars", targetCar.bookingDate)) {
+    if (targetCar && isYearLocked("cars", targetCar.bookingDate) && !canEditClosedYear((targetCar.bookingDate || "").slice(0, 4))) {
       setCarError("This booking is in a closed year and can't be deleted. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
@@ -4846,6 +4860,28 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     recordActivity("Employees", "edited", `${checked ? "Granted" : "Revoked"} "${field}" on "${section}" for @${username}`);
   };
 
+  // Sets whether one employee can view and/or edit records dated in one specific closed
+  // year — independent of their grade/role, and independent of every other year's
+  // setting for that same employee. Turning "edit" on implies "view" (editing requires
+  // seeing the record first); turning "view" off also clears "edit" for that year, so
+  // the stored state never contradicts itself.
+  const handleSetClosedYearAccess = async (username, year, field, checked) => {
+    if (!currentUser.isAdmin && !isOwnerUser) {
+      setManageError("Only the main account can change employee permissions");
+      return;
+    }
+    const next = (employees || []).map((e) => {
+      if (e.username !== username) return e;
+      const current = (e.closedYearAccess && e.closedYearAccess[year]) || { view: false, edit: false };
+      let updated = { ...current, [field]: checked };
+      if (field === "edit" && checked) updated.view = true;
+      if (field === "view" && !checked) updated.edit = false;
+      return { ...e, closedYearAccess: { ...(e.closedYearAccess || {}), [year]: updated } };
+    });
+    await persistEmployees(next);
+    recordActivity("Employees", "edited", `${checked ? "Granted" : "Revoked"} "${field}" access to closed year ${year} for @${username}`);
+  };
+
   // Promotes an employee to a main/admin account. Any main account can promote another one.
   const handlePromoteToAdmin = async (username) => {
     if (!currentUser.isAdmin) {
@@ -5223,7 +5259,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const original = form.id ? tickets.find((t) => t.id === form.id) : null;
     // A closed year blocks every add/edit — whether the ticket already belongs to that
     // year, or is being dated into it just now.
-    if (!canEditClosedYears && ((original && isYearLocked("flights", original.date)) || isYearLocked("flights", form.date))) {
+    if ((original && isYearLocked("flights", original.date) && !canEditClosedYear((original.date || "").slice(0, 4))) || (isYearLocked("flights", form.date) && !canEditClosedYear((form.date || "").slice(0, 4)))) {
       setError("This year is closed for accounting — tickets dated in a closed year can't be added or edited. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
@@ -5358,7 +5394,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return;
     }
     const targetTicket = tickets.find((t) => t.id === id);
-    if (!canEditClosedYears && targetTicket && isYearLocked("flights", targetTicket.date)) {
+    if (targetTicket && isYearLocked("flights", targetTicket.date) && !canEditClosedYear((targetTicket.date || "").slice(0, 4))) {
       setError("This ticket is in a closed year and can't be deleted. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
@@ -5901,19 +5937,20 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const canManageYearLock = !!currentUser && (currentUser.isAdmin || isOwnerUser);
   // Seeing records from a closed year is a separate, broader permission from actually
   // reopening one: anyone with Accounts access (Admin, Owner, GM, Accounting Manager,
-  // or Accountant — see canAccessAccounts) still needs to see closed-year data for
-  // reporting and review, even though only canManageYearLock holders can reopen the
-  // year to edit it. This is what keeps closed-year records visible for the Accounts
-  // Manager/Accountant grades in lists, stats, and exports.
-  const canViewClosedYears = canManageYearLock || canAccessAccounts;
-  // Actually adding/editing/deleting a record dated in a closed year is a further,
-  // standalone permission — independent of grade — controlled per-employee via the
-  // "Edit closed years" toggle (see EmployeePermissionsModal/canEditClosedYears).
-  // Admin and Owner/GM always have it, since they're the ones who can lock/unlock a
-  // year in the first place; for everyone else it's whatever the main account granted
-  // them by hand, and only matters if they can view closed-year data to begin with.
-  const canEditClosedYears =
-    canManageYearLock || (canViewClosedYears && !!(currentEmployeeRecord && currentEmployeeRecord.canEditClosedYears));
+  // or Accountant — see canAccessAccounts) still sees closed-year data across every
+  // year for reporting and review. On top of that, the main account can grant any other
+  // employee view and/or edit access to one specific closed year at a time, from the
+  // "Who can view/edit a closed year" picker inside the Closed years panel — stored per
+  // employee as closedYearAccess: { [year]: { view, edit } }. Editing a given year still
+  // requires being able to view that same year first.
+  const canViewClosedYear = (year) =>
+    canManageYearLock ||
+    canAccessAccounts ||
+    !!(currentEmployeeRecord && currentEmployeeRecord.closedYearAccess && currentEmployeeRecord.closedYearAccess[year] && currentEmployeeRecord.closedYearAccess[year].view);
+  const canEditClosedYear = (year) =>
+    canManageYearLock ||
+    (canViewClosedYear(year) &&
+      !!(currentEmployeeRecord && currentEmployeeRecord.closedYearAccess && currentEmployeeRecord.closedYearAccess[year] && currentEmployeeRecord.closedYearAccess[year].edit));
   const myPendingRequestsCount = (requests || []).filter(
     (r) => currentUser && r.toUsername === currentUser.username && r.status === "pending"
   ).length;
@@ -5943,7 +5980,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : tickets.filter((t) =>
           t.employeeUsername ? t.employeeUsername === currentUser.username : t.employee === currentUser.name
         )
-  ).filter((t) => canViewClosedYears || !(closedYears.flights || []).includes((t.date || "").slice(0, 4)));
+  ).filter((t) => canViewClosedYear((t.date || "").slice(0, 4)) || !(closedYears.flights || []).includes((t.date || "").slice(0, 4)));
 
   const visibleHotelBookings = (
     !currentUser
@@ -5953,7 +5990,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : hotelBookings.filter((h) =>
           h.employeeUsername ? h.employeeUsername === currentUser.username : h.employee === currentUser.name
         )
-  ).filter((h) => canViewClosedYears || !(closedYears.hotels || []).includes((h.bookingDate || "").slice(0, 4)));
+  ).filter((h) => canViewClosedYear((h.bookingDate || "").slice(0, 4)) || !(closedYears.hotels || []).includes((h.bookingDate || "").slice(0, 4)));
 
   // Number of nights a single date range covers, from check-in to check-out (at least 1).
   const nightsBetween = (checkIn, checkOut) => {
@@ -6104,7 +6141,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : visaBookings.filter((v) =>
           v.employeeUsername ? v.employeeUsername === currentUser.username : v.employee === currentUser.name
         )
-  ).filter((v) => canViewClosedYears || !(closedYears.visa || []).includes((v.bookingDate || "").slice(0, 4)));
+  ).filter((v) => canViewClosedYear((v.bookingDate || "").slice(0, 4)) || !(closedYears.visa || []).includes((v.bookingDate || "").slice(0, 4)));
   const visaMonthsAvailable = Array.from(
     new Set(visibleVisaBookings.map((v) => monthKey(v.bookingDate)))
   ).sort((a, b) => b.localeCompare(a));
@@ -6154,7 +6191,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : carBookings.filter((c) =>
           c.employeeUsername ? c.employeeUsername === currentUser.username : c.employee === currentUser.name
         )
-  ).filter((c) => canViewClosedYears || !(closedYears.cars || []).includes((c.bookingDate || "").slice(0, 4)));
+  ).filter((c) => canViewClosedYear((c.bookingDate || "").slice(0, 4)) || !(closedYears.cars || []).includes((c.bookingDate || "").slice(0, 4)));
   const carMonthsAvailable = Array.from(
     new Set(visibleCarBookings.map((c) => monthKey(c.bookingDate)))
   ).sort((a, b) => b.localeCompare(a));
@@ -6669,7 +6706,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           f.employeeUsername ? f.employeeUsername === currentUser.username : f.createdBy === currentUser.name
         )
   )
-    .filter((f) => canViewClosedYears || !(closedYears.files || []).includes((f.createdAt || "").slice(0, 4)))
+    .filter((f) => canViewClosedYear((f.createdAt || "").slice(0, 4)) || !(closedYears.files || []).includes((f.createdAt || "").slice(0, 4)))
     // Ordered by the file's own date (newest first), with the serial as a tie-breaker
     // for same-day files — the list always follows the dates rather than raw creation/
     // array order.
@@ -8402,33 +8439,65 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 )}
 
                 <div className="border-t border-stone-200 mt-6 pt-5">
-                  <p className="text-sm font-semibold text-stone-900 mb-1">Who can edit closed years</p>
+                  <p className="text-sm font-semibold text-stone-900 mb-1">Who can view/edit a closed year</p>
                   <p className="text-xs text-stone-400 mb-4">
-                    Admin and Owner/GM can always add, edit, or delete records in a closed year — they're the ones
-                    who can close or reopen a year here. Anyone else needs this switched on for them individually,
-                    the same way an Accounts Manager or Accountant needs Accounts access to see closed-year data
-                    in the first place — this just goes one step further and lets them act on it.
+                    Admin and Owner/GM can always see and act on every closed year — they're the ones who can
+                    close or reopen a year here. Pick an employee and a year below to grant that employee view
+                    and/or edit access to that one year specifically.
                   </p>
-                  {(employees || []).filter((e) => !e.isOwner).length === 0 ? (
-                    <p className="text-sm text-stone-400 text-center py-4">No other employees yet.</p>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {(employees || [])
-                        .filter((e) => !e.isOwner)
-                        .map((e) => (
-                          <div key={e.username} className="flex items-center justify-between gap-3 border border-stone-200 rounded-xl px-4 py-2.5">
-                            <span>
-                              <span className="text-sm text-stone-700 font-medium block">{e.name || e.username}</span>
-                              <span className="text-[11px] text-stone-400 block">@{e.username} · {roleLabel(e.role)}</span>
-                            </span>
-                            <ToggleSwitch
-                              checked={!!e.canEditClosedYears}
-                              onChange={(v) => handleTogglePermission(e.username, "canEditClosedYears", v)}
-                            />
-                          </div>
-                        ))}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="text-xs text-stone-500 block mb-1">Employee</label>
+                      <select
+                        value={closedYearPermEmployee}
+                        onChange={(e) => { setClosedYearPermEmployee(e.target.value); setClosedYearPermYear(""); }}
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      >
+                        <option value="">Select an employee...</option>
+                        {(employees || [])
+                          .filter((e) => !e.isOwner)
+                          .map((e) => (
+                            <option key={e.username} value={e.username}>
+                              {(e.name || e.username)} (@{e.username} · {roleLabel(e.role)})
+                            </option>
+                          ))}
+                      </select>
                     </div>
-                  )}
+                    <div>
+                      <label className="text-xs text-stone-500 block mb-1">Year</label>
+                      <select
+                        value={closedYearPermYear}
+                        onChange={(e) => setClosedYearPermYear(e.target.value)}
+                        disabled={!closedYearPermEmployee}
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Select a year...</option>
+                        {allYears.map((y) => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {closedYearPermEmployee && closedYearPermYear && (() => {
+                    const emp = (employees || []).find((e) => e.username === closedYearPermEmployee);
+                    const access = (emp && emp.closedYearAccess && emp.closedYearAccess[closedYearPermYear]) || { view: false, edit: false };
+                    return (
+                      <div className="border border-stone-200 rounded-xl p-4 flex flex-col gap-1">
+                        <ToggleSwitch
+                          label={`View ${closedYearPermYear}`}
+                          description="See this employee's records dated in this year in lists, filters, stats, and exports."
+                          checked={!!access.view}
+                          onChange={(v) => handleSetClosedYearAccess(closedYearPermEmployee, closedYearPermYear, "view", v)}
+                        />
+                        <ToggleSwitch
+                          label={`Edit ${closedYearPermYear}`}
+                          description="Add, edit, and delete records dated in this year, without needing it reopened. Turning this on also turns on View."
+                          checked={!!access.edit}
+                          onChange={(v) => handleSetClosedYearAccess(closedYearPermEmployee, closedYearPermYear, "edit", v)}
+                        />
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
