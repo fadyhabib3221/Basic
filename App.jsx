@@ -1503,14 +1503,6 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
               onChange={(v) => onSetPermission("canManageCompanies", v)}
             />
           </div>
-          <div className="border border-stone-200 rounded-xl p-3">
-            <ToggleSwitch
-              label="Edit closed years"
-              description="Add, edit, and delete bookings dated in a closed year, without needing to reopen it first. Only takes effect if this employee can also see closed-year data (Accounts access) — otherwise those records stay hidden from them regardless of this switch."
-              checked={!!emp.canEditClosedYears}
-              onChange={(v) => onSetPermission("canEditClosedYears", v)}
-            />
-          </div>
         </div>
       </div>
     </div>
@@ -8408,6 +8400,36 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     ))}
                   </div>
                 )}
+
+                <div className="border-t border-stone-200 mt-6 pt-5">
+                  <p className="text-sm font-semibold text-stone-900 mb-1">Who can edit closed years</p>
+                  <p className="text-xs text-stone-400 mb-4">
+                    Admin and Owner/GM can always add, edit, or delete records in a closed year — they're the ones
+                    who can close or reopen a year here. Anyone else needs this switched on for them individually,
+                    the same way an Accounts Manager or Accountant needs Accounts access to see closed-year data
+                    in the first place — this just goes one step further and lets them act on it.
+                  </p>
+                  {(employees || []).filter((e) => !e.isOwner).length === 0 ? (
+                    <p className="text-sm text-stone-400 text-center py-4">No other employees yet.</p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {(employees || [])
+                        .filter((e) => !e.isOwner)
+                        .map((e) => (
+                          <div key={e.username} className="flex items-center justify-between gap-3 border border-stone-200 rounded-xl px-4 py-2.5">
+                            <span>
+                              <span className="text-sm text-stone-700 font-medium block">{e.name || e.username}</span>
+                              <span className="text-[11px] text-stone-400 block">@{e.username} · {roleLabel(e.role)}</span>
+                            </span>
+                            <ToggleSwitch
+                              checked={!!e.canEditClosedYears}
+                              onChange={(v) => handleTogglePermission(e.username, "canEditClosedYears", v)}
+                            />
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
