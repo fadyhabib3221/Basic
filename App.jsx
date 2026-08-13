@@ -6027,44 +6027,63 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     );
   });
 
-  const hotelTotals = filteredHotelBookings.reduce(
-    (acc, h) => {
-      acc.count += 1;
-      acc.net += hotelNetTotal(h);
-      acc.sold += hotelSoldTotal(h);
-      acc.profit += hotelProfitTotal(h);
-      return acc;
-    },
-    { count: 0, net: 0, sold: 0, profit: 0 }
-  );
+  const sumHotelRows = (rows) =>
+    rows.reduce(
+      (acc, h) => {
+        acc.count += 1;
+        acc.net += hotelNetTotal(h);
+        acc.sold += hotelSoldTotal(h);
+        acc.profit += hotelProfitTotal(h);
+        return acc;
+      },
+      { count: 0, net: 0, sold: 0, profit: 0 }
+    );
+  const hotelTotals = sumHotelRows(filteredHotelBookings);
 
   // Visa and Transfers totals, same EGP-conversion approach as hotelTotals above
   // (each booking's own currency is converted to EGP so mixed-currency bookings can
   // be summed together). Counts the number of applicants/customers on each visa
   // booking, and the number of bookings for transfers.
-  const visaTotals = filteredVisaBookings.reduce(
-    (acc, v) => {
-      const net = hotelInEgp(visaNetTotal(v), v.netCurrency, v.usdRate);
-      const sold = hotelInEgp(visaSoldTotal(v), v.soldCurrency, v.usdRate);
-      acc.count += visaCustomersCount(v);
-      acc.net += net;
-      acc.sold += sold;
-      acc.profit += sold - net;
-      return acc;
-    },
-    { count: 0, net: 0, sold: 0, profit: 0 }
+  const sumVisaRows = (rows) =>
+    rows.reduce(
+      (acc, v) => {
+        const net = hotelInEgp(visaNetTotal(v), v.netCurrency, v.usdRate);
+        const sold = hotelInEgp(visaSoldTotal(v), v.soldCurrency, v.usdRate);
+        acc.count += visaCustomersCount(v);
+        acc.net += net;
+        acc.sold += sold;
+        acc.profit += sold - net;
+        return acc;
+      },
+      { count: 0, net: 0, sold: 0, profit: 0 }
+    );
+  const visaTotals = sumVisaRows(filteredVisaBookings);
+  const sumCarRows = (rows) =>
+    rows.reduce(
+      (acc, c) => {
+        const net = hotelInEgp(carNetTotal(c), c.netCurrency, c.usdRate);
+        const sold = hotelInEgp(carSoldTotal(c), c.soldCurrency, c.usdRate);
+        acc.count += 1;
+        acc.net += net;
+        acc.sold += sold;
+        acc.profit += sold - net;
+        return acc;
+      },
+      { count: 0, net: 0, sold: 0, profit: 0 }
+    );
+  const carTotals = sumCarRows(filteredCarBookings);
+
+  // Current calendar month, used to make each section's top summary cards
+  // independent of whatever filters are selected (see Flights/Hotels/Visa/Cars cards).
+  const currentMonthKey = todayDateStr().slice(0, 7);
+  const hotelCurrentMonthTotals = sumHotelRows(
+    visibleHotelBookings.filter((h) => monthKey(h.bookingDate) === currentMonthKey)
   );
-  const carTotals = filteredCarBookings.reduce(
-    (acc, c) => {
-      const net = hotelInEgp(carNetTotal(c), c.netCurrency, c.usdRate);
-      const sold = hotelInEgp(carSoldTotal(c), c.soldCurrency, c.usdRate);
-      acc.count += 1;
-      acc.net += net;
-      acc.sold += sold;
-      acc.profit += sold - net;
-      return acc;
-    },
-    { count: 0, net: 0, sold: 0, profit: 0 }
+  const visaCurrentMonthTotals = sumVisaRows(
+    visibleVisaBookings.filter((v) => monthKey(v.bookingDate) === currentMonthKey)
+  );
+  const carCurrentMonthTotals = sumCarRows(
+    visibleCarBookings.filter((c) => monthKey(c.bookingDate) === currentMonthKey)
   );
 
 
@@ -9129,21 +9148,31 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
 
 
-        {/* Summary cards — always show the CURRENT calendar month's totals,
-            regardless of whatever year/month/company/employee/supplier/search
-            filters are selected below. This is intentionally independent of the
-            filter state (unlike the ticket table and the "Totals by month" table,
-            which still respect the filters). */}
+        {/* Summary cards — default to the CURRENT calendar month's totals. As soon
+            as any filter (year/month/company/employee/supplier/search) is selected
+            below, switch to showing the totals for that filter selection instead. */}
         {(() => {
-          const currentMonthKey = todayDateStr().slice(0, 7);
           const currentMonthTotals =
             monthlyBreakdown.find((m) => m.key === currentMonthKey) ||
             { count: 0, total: 0, net: 0, profit: 0 };
+          const shown = hasActiveFilter ? totals : currentMonthTotals;
           return (
             <>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm text-stone-500">
-                  Totals for: <span className="font-semibold text-stone-700">{monthLabel(currentMonthKey)}</span>
+                  Totals for: <span className="font-semibold text-stone-700">
+                    {hasActiveFilter ? (
+                      <>
+                        {selectedYear.length ? selectedYear.join(", ") : ""}
+                        {selectedMonth.length ? ` · ${selectedMonth.map(monthLabel).join(", ")}` : ""}
+                        {selectedCompany.length ? ` · ${selectedCompany.join(", ")}` : ""}
+                        {selectedEmployee.length ? ` · ${selectedEmployee.join(", ")}` : ""}
+                        {selectedSupplier.length ? ` · ${selectedSupplier.join(", ")}` : ""}
+                      </>
+                    ) : (
+                      monthLabel(currentMonthKey)
+                    )}
+                  </span>
                 </p>
               </div>
               <div className="flex overflow-x-auto gap-2 sm:gap-3 mb-6 pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory scrollbar-none">
@@ -9151,28 +9180,28 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <div className="bg-stone-100 rounded-xl p-1.5 sm:p-2 text-stone-600 shrink-0"><Ticket size={18} className="sm:hidden" /><Ticket size={20} className="hidden sm:block" /></div>
                   <div className="min-w-0">
                     <p className="text-xs text-stone-500 whitespace-nowrap">Tickets</p>
-                    <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{currentMonthTotals.count}</p>
+                    <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{shown.count}</p>
                   </div>
                 </div>
                 <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
                   <div className="bg-teal-50 rounded-xl p-1.5 sm:p-2 text-teal-900 shrink-0"><Wallet size={18} className="sm:hidden" /><Wallet size={20} className="hidden sm:block" /></div>
                   <div className="min-w-0">
                     <p className="text-xs text-stone-500 whitespace-nowrap">Total sales (EGP)</p>
-                    <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{fmt(currentMonthTotals.total)}</p>
+                    <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{fmt(shown.total)}</p>
                   </div>
                 </div>
                 <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
                   <div className="bg-amber-50 rounded-xl p-1.5 sm:p-2 text-amber-700 shrink-0"><Receipt size={18} className="sm:hidden" /><Receipt size={20} className="hidden sm:block" /></div>
                   <div className="min-w-0">
                     <p className="text-xs text-stone-500 whitespace-nowrap">Total net (EGP)</p>
-                    <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{fmt(currentMonthTotals.net)}</p>
+                    <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{fmt(shown.net)}</p>
                   </div>
                 </div>
                 <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
                   <div className="bg-emerald-50 rounded-xl p-1.5 sm:p-2 text-emerald-700 shrink-0"><TrendingUp size={18} className="sm:hidden" /><TrendingUp size={20} className="hidden sm:block" /></div>
                   <div className="min-w-0">
                     <p className="text-xs text-stone-500 whitespace-nowrap">Total profit (EGP)</p>
-                    <p className="text-sm sm:text-lg font-bold text-emerald-700 whitespace-nowrap">{fmt(currentMonthTotals.profit)}</p>
+                    <p className="text-sm sm:text-lg font-bold text-emerald-700 whitespace-nowrap">{fmt(shown.profit)}</p>
                   </div>
                 </div>
               </div>
@@ -10351,27 +10380,44 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
         {activeSection === "hotels" && (
         <>
-        {/* Summary cards, same style as the Flights section */}
+        {/* Summary cards — default to the CURRENT calendar month's totals. As soon
+            as any filter is selected below, switch to the totals for that
+            filter selection instead. */}
+        <p className="text-sm text-stone-500 mb-2">
+          Totals for: <span className="font-semibold text-stone-700">
+            {hasActiveHotelFilter ? (
+              <>
+                {hotelSelectedYear.length ? hotelSelectedYear.join(", ") : ""}
+                {hotelSelectedMonth.length ? ` · ${hotelSelectedMonth.map(monthLabel).join(", ")}` : ""}
+                {hotelSelectedEmployee.length ? ` · ${hotelSelectedEmployee.join(", ")}` : ""}
+                {hotelSelectedSupplier.length ? ` · ${hotelSelectedSupplier.join(", ")}` : ""}
+                {hotelSelectedHotelName.length ? ` · ${hotelSelectedHotelName.join(", ")}` : ""}
+              </>
+            ) : (
+              monthLabel(currentMonthKey)
+            )}
+          </span>
+        </p>
         <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-6">
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="bg-stone-100 rounded-xl p-1.5 sm:p-2 text-stone-600 shrink-0"><Building2 size={18} className="sm:hidden" /><Building2 size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
               <p className="text-xs text-stone-500">Bookings</p>
-              <p className="text-sm sm:text-lg font-bold truncate">{hotelTotals.count}</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{(hasActiveHotelFilter ? hotelTotals : hotelCurrentMonthTotals).count}</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="bg-teal-50 rounded-xl p-1.5 sm:p-2 text-teal-900 shrink-0"><Wallet size={18} className="sm:hidden" /><Wallet size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
               <p className="text-xs text-stone-500">Total sales (EGP)</p>
-              <p className="text-sm sm:text-lg font-bold truncate">{fmt(hotelTotals.sold)}</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{fmt((hasActiveHotelFilter ? hotelTotals : hotelCurrentMonthTotals).sold)}</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="bg-emerald-50 rounded-xl p-1.5 sm:p-2 text-emerald-700 shrink-0"><TrendingUp size={18} className="sm:hidden" /><TrendingUp size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
               <p className="text-xs text-stone-500">Total profit (EGP)</p>
-              <p className="text-sm sm:text-lg font-bold text-emerald-700 truncate">{fmt(hotelTotals.profit)}</p>
+              <p className="text-sm sm:text-lg font-bold text-emerald-700 truncate">{fmt((hasActiveHotelFilter ? hotelTotals : hotelCurrentMonthTotals).profit)}</p>
             </div>
           </div>
         </div>
@@ -11208,27 +11254,43 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
         {activeSection === "visa" && (
         <>
-        {/* Summary cards, same style as the Flights section */}
+        {/* Summary cards — default to the CURRENT calendar month's totals. As soon
+            as any filter is selected below, switch to the totals for that
+            filter selection instead. */}
+        <p className="text-sm text-stone-500 mb-2">
+          Totals for: <span className="font-semibold text-stone-700">
+            {hasActiveVisaFilter ? (
+              <>
+                {visaSelectedYear.length ? visaSelectedYear.join(", ") : ""}
+                {visaSelectedMonth.length ? ` · ${visaSelectedMonth.map(monthLabel).join(", ")}` : ""}
+                {visaSelectedEmployee.length ? ` · ${visaSelectedEmployee.join(", ")}` : ""}
+                {visaSelectedSupplier.length ? ` · ${visaSelectedSupplier.join(", ")}` : ""}
+              </>
+            ) : (
+              monthLabel(currentMonthKey)
+            )}
+          </span>
+        </p>
         <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-6">
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="bg-stone-100 rounded-xl p-1.5 sm:p-2 text-stone-600 shrink-0"><PassportIcon size={18} className="sm:hidden" /><PassportIcon size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
               <p className="text-xs text-stone-500">Applicants</p>
-              <p className="text-sm sm:text-lg font-bold truncate">{visaTotals.count}</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{(hasActiveVisaFilter ? visaTotals : visaCurrentMonthTotals).count}</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="bg-teal-50 rounded-xl p-1.5 sm:p-2 text-teal-900 shrink-0"><Wallet size={18} className="sm:hidden" /><Wallet size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
               <p className="text-xs text-stone-500">Total sales (EGP)</p>
-              <p className="text-sm sm:text-lg font-bold truncate">{fmt(visaTotals.sold)}</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{fmt((hasActiveVisaFilter ? visaTotals : visaCurrentMonthTotals).sold)}</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="bg-emerald-50 rounded-xl p-1.5 sm:p-2 text-emerald-700 shrink-0"><TrendingUp size={18} className="sm:hidden" /><TrendingUp size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
               <p className="text-xs text-stone-500">Total profit (EGP)</p>
-              <p className="text-sm sm:text-lg font-bold text-emerald-700 truncate">{fmt(visaTotals.profit)}</p>
+              <p className="text-sm sm:text-lg font-bold text-emerald-700 truncate">{fmt((hasActiveVisaFilter ? visaTotals : visaCurrentMonthTotals).profit)}</p>
             </div>
           </div>
         </div>
@@ -11821,27 +11883,42 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
         {activeSection === "cars" && (
         <>
-        {/* Summary cards, same style as the Flights section */}
+        {/* Summary cards — default to the CURRENT calendar month's totals. As soon
+            as any filter is selected below, switch to the totals for that
+            filter selection instead. */}
+        <p className="text-sm text-stone-500 mb-2">
+          Totals for: <span className="font-semibold text-stone-700">
+            {hasActiveCarFilter ? (
+              <>
+                {carSelectedYear.length ? carSelectedYear.join(", ") : ""}
+                {carSelectedMonth.length ? ` · ${carSelectedMonth.map(monthLabel).join(", ")}` : ""}
+                {carSelectedSupplier.length ? ` · ${carSelectedSupplier.join(", ")}` : ""}
+              </>
+            ) : (
+              monthLabel(currentMonthKey)
+            )}
+          </span>
+        </p>
         <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-6">
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="bg-stone-100 rounded-xl p-1.5 sm:p-2 text-stone-600 shrink-0"><Car size={18} className="sm:hidden" /><Car size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
               <p className="text-xs text-stone-500">Bookings</p>
-              <p className="text-sm sm:text-lg font-bold truncate">{carTotals.count}</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{(hasActiveCarFilter ? carTotals : carCurrentMonthTotals).count}</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="bg-teal-50 rounded-xl p-1.5 sm:p-2 text-teal-900 shrink-0"><Wallet size={18} className="sm:hidden" /><Wallet size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
               <p className="text-xs text-stone-500">Total sales (EGP)</p>
-              <p className="text-sm sm:text-lg font-bold truncate">{fmt(carTotals.sold)}</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{fmt((hasActiveCarFilter ? carTotals : carCurrentMonthTotals).sold)}</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="bg-emerald-50 rounded-xl p-1.5 sm:p-2 text-emerald-700 shrink-0"><TrendingUp size={18} className="sm:hidden" /><TrendingUp size={20} className="hidden sm:block" /></div>
             <div className="min-w-0">
               <p className="text-xs text-stone-500">Total profit (EGP)</p>
-              <p className="text-sm sm:text-lg font-bold text-emerald-700 truncate">{fmt(carTotals.profit)}</p>
+              <p className="text-sm sm:text-lg font-bold text-emerald-700 truncate">{fmt((hasActiveCarFilter ? carTotals : carCurrentMonthTotals).profit)}</p>
             </div>
           </div>
         </div>
