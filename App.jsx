@@ -5892,6 +5892,13 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // both set isOwner: true, so isOwnerUser covers both). Accounts Manager and Accountant
   // are deliberately excluded — a closed year can only be reopened with GM/Admin approval.
   const canManageYearLock = !!currentUser && (currentUser.isAdmin || isOwnerUser);
+  // Seeing records from a closed year is a separate, broader permission from actually
+  // reopening one: anyone with Accounts access (Admin, Owner, GM, Accounting Manager,
+  // or Accountant — see canAccessAccounts) still needs to see closed-year data for
+  // reporting and review, even though only canManageYearLock holders can reopen the
+  // year to edit it. This is what keeps closed-year records visible for the Accounts
+  // Manager/Accountant grades in lists, stats, and exports.
+  const canViewClosedYears = canManageYearLock || canAccessAccounts;
   const myPendingRequestsCount = (requests || []).filter(
     (r) => currentUser && r.toUsername === currentUser.username && r.status === "pending"
   ).length;
@@ -5921,7 +5928,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : tickets.filter((t) =>
           t.employeeUsername ? t.employeeUsername === currentUser.username : t.employee === currentUser.name
         )
-  ).filter((t) => canManageYearLock || !(closedYears.flights || []).includes((t.date || "").slice(0, 4)));
+  ).filter((t) => canViewClosedYears || !(closedYears.flights || []).includes((t.date || "").slice(0, 4)));
 
   const visibleHotelBookings = (
     !currentUser
@@ -5931,7 +5938,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : hotelBookings.filter((h) =>
           h.employeeUsername ? h.employeeUsername === currentUser.username : h.employee === currentUser.name
         )
-  ).filter((h) => canManageYearLock || !(closedYears.hotels || []).includes((h.bookingDate || "").slice(0, 4)));
+  ).filter((h) => canViewClosedYears || !(closedYears.hotels || []).includes((h.bookingDate || "").slice(0, 4)));
 
   // Number of nights a single date range covers, from check-in to check-out (at least 1).
   const nightsBetween = (checkIn, checkOut) => {
@@ -6082,7 +6089,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : visaBookings.filter((v) =>
           v.employeeUsername ? v.employeeUsername === currentUser.username : v.employee === currentUser.name
         )
-  ).filter((v) => canManageYearLock || !(closedYears.visa || []).includes((v.bookingDate || "").slice(0, 4)));
+  ).filter((v) => canViewClosedYears || !(closedYears.visa || []).includes((v.bookingDate || "").slice(0, 4)));
   const visaMonthsAvailable = Array.from(
     new Set(visibleVisaBookings.map((v) => monthKey(v.bookingDate)))
   ).sort((a, b) => b.localeCompare(a));
@@ -6132,7 +6139,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : carBookings.filter((c) =>
           c.employeeUsername ? c.employeeUsername === currentUser.username : c.employee === currentUser.name
         )
-  ).filter((c) => canManageYearLock || !(closedYears.cars || []).includes((c.bookingDate || "").slice(0, 4)));
+  ).filter((c) => canViewClosedYears || !(closedYears.cars || []).includes((c.bookingDate || "").slice(0, 4)));
   const carMonthsAvailable = Array.from(
     new Set(visibleCarBookings.map((c) => monthKey(c.bookingDate)))
   ).sort((a, b) => b.localeCompare(a));
@@ -6647,7 +6654,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           f.employeeUsername ? f.employeeUsername === currentUser.username : f.createdBy === currentUser.name
         )
   )
-    .filter((f) => canManageYearLock || !(closedYears.files || []).includes((f.createdAt || "").slice(0, 4)))
+    .filter((f) => canViewClosedYears || !(closedYears.files || []).includes((f.createdAt || "").slice(0, 4)))
     // Ordered by the file's own date (newest first), with the serial as a tie-breaker
     // for same-day files — the list always follows the dates rather than raw creation/
     // array order.
