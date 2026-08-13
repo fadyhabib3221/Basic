@@ -3444,6 +3444,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     );
   };
 
+  // Whether a record dated `dateStr` falls inside a year that's been closed for
+  // `section` (flights/hotels/visa/cars) — once a year is closed, records dated in it
+  // can't be added, edited, or deleted until someone with access reopens that year from
+  // the Closed years panel.
+  const isYearLocked = (section, dateStr) => (closedYears[section] || []).includes((dateStr || "").slice(0, 4));
+
   const persistExpenses = async (next) => {
     setExpenses(next);
     try {
@@ -3726,6 +3732,14 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
     }
 
+    // A closed year blocks every add/edit — whether the booking already belongs to that
+    // year, or is being dated into it just now.
+    const originalHotel = hotelEditingId ? hotelBookings.find((h) => h.id === hotelEditingId) : null;
+    if ((originalHotel && isYearLocked("hotels", originalHotel.bookingDate)) || isYearLocked("hotels", hotelForm.bookingDate)) {
+      setHotelError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask an accounting employee to reopen the year first.");
+      return;
+    }
+
     if (hotelEditingId) {
       const commitHotel = async () => {
         const next = hotelBookings.map((h) =>
@@ -3822,6 +3836,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleDeleteHotel = (id, onDeleted) => {
+    const targetHotel = hotelBookings.find((h) => h.id === id);
+    if (targetHotel && isYearLocked("hotels", targetHotel.bookingDate)) {
+      setHotelError("This booking is in a closed year and can't be deleted. Ask an accounting employee to reopen the year first.");
+      return;
+    }
     requestConfirm("Delete this hotel booking?", async () => {
       const deleted = hotelBookings.find((h) => h.id === id);
       const linkedFileEntries = findFileLinksFor("hotels", id);
@@ -3938,6 +3957,13 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       setVisaError("Please fill in the net and sold prices");
       return;
     }
+    // A closed year blocks every add/edit — whether the booking already belongs to that
+    // year, or is being dated into it just now.
+    const originalVisa = visaEditingId ? visaBookings.find((v) => v.id === visaEditingId) : null;
+    if ((originalVisa && isYearLocked("visa", originalVisa.bookingDate)) || isYearLocked("visa", visaForm.bookingDate)) {
+      setVisaError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask an accounting employee to reopen the year first.");
+      return;
+    }
     if (visaEditingId) {
       const commitVisa = async () => {
         const next = visaBookings.map((v) => (v.id === visaEditingId ? { ...v, ...visaForm, id: visaEditingId, usdRate: visaForm.usdRate ?? v.usdRate } : v));
@@ -4004,6 +4030,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleDeleteVisa = (id, onDeleted) => {
+    const targetVisa = visaBookings.find((v) => v.id === id);
+    if (targetVisa && isYearLocked("visa", targetVisa.bookingDate)) {
+      setVisaError("This booking is in a closed year and can't be deleted. Ask an accounting employee to reopen the year first.");
+      return;
+    }
     requestConfirm("Delete this visa booking?", async () => {
       const deleted = visaBookings.find((v) => v.id === id);
       const linkedFileEntries = findFileLinksFor("visa", id);
@@ -4073,6 +4104,13 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     if (carForm.netPrice === "" || carForm.soldPrice === "") {
       setCarError("Please fill in the net and sold prices");
+      return;
+    }
+    // A closed year blocks every add/edit — whether the booking already belongs to that
+    // year, or is being dated into it just now.
+    const originalCar = carEditingId ? carBookings.find((c) => c.id === carEditingId) : null;
+    if ((originalCar && isYearLocked("cars", originalCar.bookingDate)) || isYearLocked("cars", carForm.bookingDate)) {
+      setCarError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask an accounting employee to reopen the year first.");
       return;
     }
     if (carEditingId) {
@@ -4151,6 +4189,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const handleDeleteCar = (id, onDeleted) => {
+    const targetCar = carBookings.find((c) => c.id === id);
+    if (targetCar && isYearLocked("cars", targetCar.bookingDate)) {
+      setCarError("This booking is in a closed year and can't be deleted. Ask an accounting employee to reopen the year first.");
+      return;
+    }
     requestConfirm("Delete this transfer booking?", async () => {
       const deleted = carBookings.find((c) => c.id === id);
       const linkedFileEntries = findFileLinksFor("cars", id);
@@ -5168,6 +5211,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // else's ticket doesn't reassign it to themselves); new tickets belong to whoever adds them.
     const isEditingExisting = !!(form.id && form.employeeUsername);
     const original = form.id ? tickets.find((t) => t.id === form.id) : null;
+    // A closed year blocks every add/edit — whether the ticket already belongs to that
+    // year, or is being dated into it just now.
+    if ((original && isYearLocked("flights", original.date)) || isYearLocked("flights", form.date)) {
+      setError("This year is closed for accounting — tickets dated in a closed year can't be added or edited. Ask an accounting employee to reopen the year first.");
+      return;
+    }
     let record = {
       ...form,
       customers,
@@ -5296,6 +5345,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const handleDelete = (id, afterConfirm) => {
     if (!currentUser.isAdmin && !canDeleteTickets) {
       setError("You don't have permission to delete tickets");
+      return;
+    }
+    const targetTicket = tickets.find((t) => t.id === id);
+    if (targetTicket && isYearLocked("flights", targetTicket.date)) {
+      setError("This ticket is in a closed year and can't be deleted. Ask an accounting employee to reopen the year first.");
       return;
     }
     requestConfirm("Delete this ticket?", () => {
@@ -7982,6 +8036,14 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <LogOut size={15} />
                 </button>
               </div>
+              {isAccountingUser && (
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <button onClick={() => setShowClosedYearsPanel(true)} title="Lock year"
+                    className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
+                    <Lock size={15} />
+                  </button>
+                </div>
+              )}
               {canManageCompanies && (
                 <div className="flex flex-col items-end gap-1.5 sm:gap-2">
                   <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage Corporates"
