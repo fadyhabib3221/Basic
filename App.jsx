@@ -3468,6 +3468,27 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     );
   };
 
+  // Closes or reopens every section (flights/hotels/visa/cars/files) for one year at
+  // once, instead of toggling each section's icon individually. `sections` is the full
+  // list of section keys the year card shows, so this stays in sync if that list ever
+  // changes. Guarded the same way as toggleClosedYear above.
+  const toggleAllSectionsForYear = (year, sections, shouldClose) => {
+    if (!canManageYearLock) return;
+    const next = { ...closedYears };
+    sections.forEach((section) => {
+      const current = next[section] || [];
+      next[section] = shouldClose
+        ? (current.includes(year) ? current : [...current, year])
+        : current.filter((y) => y !== year);
+    });
+    persistClosedYears(next);
+    recordActivity(
+      "Settings",
+      shouldClose ? "closed" : "reopened",
+      `${shouldClose ? "Closed" : "Reopened"} year ${year} for all sections`
+    );
+  };
+
   // Whether a record dated `dateStr` falls inside a year that's been closed for
   // `section` (flights/hotels/visa/cars) — once a year is closed, records dated in it
   // can't be added, edited, or deleted until a GM or Admin reopens that year from the
@@ -8386,9 +8407,33 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <p className="text-sm text-stone-400 text-center py-6">No dated records yet.</p>
                 ) : (
                   <div className="flex flex-col gap-5">
-                    {allYears.map((y) => (
+                    {allYears.map((y) => {
+                      const yearSectionKeys = CLOSED_YEARS_SECTIONS.map((sec) => sec.key);
+                      const allClosed = yearSectionKeys.every((key) => (closedYears[key] || []).includes(y));
+                      return (
                       <div key={y} className="border border-stone-200 rounded-xl p-5">
-                        <p className="text-lg font-semibold text-stone-900 mb-3">{y}</p>
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-lg font-semibold text-stone-900">{y}</p>
+                          <button
+                            onClick={() => toggleAllSectionsForYear(y, yearSectionKeys, !allClosed)}
+                            disabled={!canManageYearLock}
+                            title={
+                              !canManageYearLock
+                                ? "You don't have permission to close or reopen years"
+                                : allClosed
+                                ? `Reopen every section for ${y}`
+                                : `Close every section for ${y}`
+                            }
+                            className={`flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 border transition-all ${
+                              allClosed
+                                ? "bg-stone-100 border-stone-200 text-stone-500"
+                                : "bg-amber-50 border-amber-300 text-amber-800"
+                            } ${!canManageYearLock ? "opacity-60 cursor-not-allowed" : "hover:brightness-105"}`}
+                          >
+                            <Lock size={13} />
+                            {allClosed ? "Reopen all" : "Close all"}
+                          </button>
+                        </div>
                         <div className="flex flex-wrap gap-3">
                           {CLOSED_YEARS_SECTIONS.map((sec) => {
                             const isClosed = (closedYears[sec.key] || []).includes(y);
@@ -8434,7 +8479,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           })}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 
