@@ -8302,19 +8302,19 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 if (e.target === e.currentTarget) setShowClosedYearsPanel(false);
               }}
             >
-              <div className="bg-white rounded-2xl border border-stone-200 p-5 md:p-6 w-full max-w-2xl my-8 md:my-0 max-h-[90vh] overflow-y-auto">
+              <div className="bg-white rounded-2xl border border-stone-200 p-6 md:p-8 w-full max-w-4xl my-8 md:my-0 max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between mb-1">
-                  <h2 className="font-semibold text-stone-900 flex items-center gap-2 text-lg">
-                    <Lock size={18} className="text-teal-800" /> Closed years
+                  <h2 className="font-semibold text-stone-900 flex items-center gap-2 text-xl">
+                    <Lock size={20} className="text-teal-800" /> Closed years
                   </h2>
                   <button
                     onClick={() => setShowClosedYearsPanel(false)}
                     className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
                   >
-                    <X size={20} />
+                    <X size={22} />
                   </button>
                 </div>
-                <p className="text-sm text-stone-400 mb-5 mt-3">
+                <p className="text-sm text-stone-400 mb-6 mt-3">
                   A closed year disappears completely for every employee — from lists, filters, stats, and exports — in
                   that section only. It stays fully visible here and to Admin, Owner, GM, and Accounts.
                 </p>
@@ -8323,24 +8323,24 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 ) : (
                   <div className="flex flex-col gap-5">
                     {allYears.map((y) => (
-                      <div key={y} className="border border-stone-200 rounded-xl p-4">
-                        <p className="text-base font-semibold text-stone-900 mb-3">{y}</p>
-                        <div className="flex flex-col gap-2">
+                      <div key={y} className="border border-stone-200 rounded-xl p-5">
+                        <p className="text-lg font-semibold text-stone-900 mb-3">{y}</p>
+                        <div className="flex flex-wrap gap-2.5">
                           {CLOSED_YEARS_SECTIONS.map((sec) => {
                             const isClosed = (closedYears[sec.key] || []).includes(y);
                             return (
                               <button
                                 key={sec.key}
                                 onClick={() => toggleClosedYear(sec.key, y)}
-                                className={`w-full flex items-center justify-between gap-1.5 text-sm font-semibold rounded-xl px-4 py-2.5 border transition-colors ${
+                                className={`flex items-center gap-1.5 text-sm font-semibold rounded-full px-4 py-2 border transition-colors ${
                                   isClosed
                                     ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
                                     : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
                                 }`}
                                 title={isClosed ? `Reopen ${sec.label} ${y}` : `Close ${sec.label} ${y}`}
                               >
-                                <span>{sec.label}</span>
                                 {isClosed ? <Lock size={13} /> : null}
+                                {sec.label}
                               </button>
                             );
                           })}
