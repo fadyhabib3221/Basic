@@ -4887,8 +4887,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // seeing the record first); turning "view" off also clears "edit" for that year, so
   // the stored state never contradicts itself.
   const handleSetClosedYearAccess = async (username, year, field, checked) => {
-    if (!currentUser.isAdmin && !isOwnerUser) {
-      setManageError("Only the main account can change employee permissions");
+    if (!currentUser.isAdmin && !isOwnerUser && !isAccountsManagerUser) {
+      setManageError("You don't have permission to change closed-year access");
       return;
     }
     const next = (employees || []).map((e) => {
