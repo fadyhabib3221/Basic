@@ -9129,7 +9129,54 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
 
 
-        {/* Summary cards */}
+        {/* Summary cards. When no specific month is selected, show one labeled
+            row of cards per month (newest first) instead of a single "all months"
+            aggregate — so the totals are visible monthly at a glance without having
+            to scroll to the "Totals by month" table below. Any other filter (year,
+            company, employee, supplier, search, or an explicit month pick) still
+            collapses back to a single aggregate row for that selection. */}
+        {selectedMonth.length === 0 && monthlyBreakdown.length > 0 ? (
+          <div className="mb-6 space-y-4">
+            {monthlyBreakdown.map((m) => (
+              <div key={m.key}>
+                <p className="text-sm text-stone-500 mb-2">
+                  Totals for: <span className="font-semibold text-stone-700">{monthLabel(m.key)}</span>
+                </p>
+                <div className="flex overflow-x-auto gap-2 sm:gap-3 pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory scrollbar-none">
+                  <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
+                    <div className="bg-stone-100 rounded-xl p-1.5 sm:p-2 text-stone-600 shrink-0"><Ticket size={18} className="sm:hidden" /><Ticket size={20} className="hidden sm:block" /></div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-stone-500 whitespace-nowrap">Tickets</p>
+                      <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{m.count}</p>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
+                    <div className="bg-teal-50 rounded-xl p-1.5 sm:p-2 text-teal-900 shrink-0"><Wallet size={18} className="sm:hidden" /><Wallet size={20} className="hidden sm:block" /></div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-stone-500 whitespace-nowrap">Total sales (EGP)</p>
+                      <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{fmt(m.total)}</p>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
+                    <div className="bg-amber-50 rounded-xl p-1.5 sm:p-2 text-amber-700 shrink-0"><Receipt size={18} className="sm:hidden" /><Receipt size={20} className="hidden sm:block" /></div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-stone-500 whitespace-nowrap">Total net (EGP)</p>
+                      <p className="text-sm sm:text-lg font-bold whitespace-nowrap">{fmt(m.net)}</p>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-2xl border border-stone-200 p-2.5 sm:p-4 flex items-center gap-2 sm:gap-3 shrink-0 snap-start basis-[42%] sm:basis-0 sm:flex-1">
+                    <div className="bg-emerald-50 rounded-xl p-1.5 sm:p-2 text-emerald-700 shrink-0"><TrendingUp size={18} className="sm:hidden" /><TrendingUp size={20} className="hidden sm:block" /></div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-stone-500 whitespace-nowrap">Total profit (EGP)</p>
+                      <p className="text-sm sm:text-lg font-bold text-emerald-700 whitespace-nowrap">{fmt(m.profit)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+        <>
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm text-stone-500">
             Totals for: <span className="font-semibold text-stone-700">
@@ -9172,6 +9219,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </div>
         </div>
+        </>
+        )}
 
         {/* Entry form: hidden for accounting accounts (view-only + notes-only), and for
             anyone with neither add nor edit permission. Shown while editing an existing
