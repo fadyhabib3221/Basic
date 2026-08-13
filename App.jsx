@@ -2194,11 +2194,6 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // as { flights: ["2023"], hotels: [], visa: [], cars: [], files: [] } so each section
   // can be closed independently of the others.
   const [closedYears, setClosedYears] = useState({ flights: [], hotels: [], visa: [], cars: [], files: [] });
-  // A separate, narrower switch: while a year stays closed (hidden, per above), a GM or
-  // Admin can flip this on for a specific section+year to temporarily allow adding/
-  // editing/deleting its records without fully reopening (and so un-hiding) the year.
-  // Same shape and storage pattern as closedYears; irrelevant once a year isn't closed.
-  const [editableClosedYears, setEditableClosedYears] = useState({ flights: [], hotels: [], visa: [], cars: [], files: [] });
   const [showClosedYearsPanel, setShowClosedYearsPanel] = useState(false);
   const [newRequestTo, setNewRequestTo] = useState("");
   const [newRequestMessage, setNewRequestMessage] = useState("");
@@ -2893,18 +2888,6 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         // Key doesn't exist yet (nobody has closed a year) or a transient read error —
         // either way, safe to ignore; the default (nothing closed) already applies.
       }
-      try {
-        const res = await window.storage.get("tickets:editableClosedYears", true);
-        if (!cancelled && res && res.value) {
-          setEditableClosedYears({
-            flights: [], hotels: [], visa: [], cars: [], files: [],
-            ...JSON.parse(res.value),
-          });
-        }
-      } catch (e) {
-        // Key doesn't exist yet (nobody has enabled editing on a closed year) or a
-        // transient read error — safe to ignore; default (nothing edit-unlocked) applies.
-      }
     };
     loadClosedYears();
     const interval = setInterval(loadClosedYears, 30 * 1000);
@@ -3449,68 +3432,26 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
   };
 
-  // Same pattern as persistClosedYears, for the separate "allow editing while closed"
-  // map.
-  const persistEditableClosedYears = async (next) => {
-    setEditableClosedYears(next);
-    try {
-      await storageSet("tickets:editableClosedYears", JSON.stringify(next), true);
-    } catch (e) {
-      // Silent — worst case the toggle re-syncs on the next poll.
-    }
-  };
-
   // Toggles a single year open/closed for one section (flights/hotels/visa/cars/files).
   // Guarded by canManageYearLock (defined further below, in scope by the time this is
   // actually called): only Admin or GM/Owner-grade employees pass.
   const toggleClosedYear = (section, year) => {
     if (!canManageYearLock) return;
     const current = closedYears[section] || [];
-    const reopening = current.includes(year);
-    const next = reopening ? current.filter((y) => y !== year) : [...current, year];
+    const next = current.includes(year) ? current.filter((y) => y !== year) : [...current, year];
     persistClosedYears({ ...closedYears, [section]: next });
-    // Reopening a year makes its "allow editing while closed" flag meaningless — clear
-    // it so it doesn't resurface with a stale "editing allowed" state if the year is
-    // closed again later.
-    if (reopening) {
-      const editCurrent = editableClosedYears[section] || [];
-      if (editCurrent.includes(year)) {
-        persistEditableClosedYears({ ...editableClosedYears, [section]: editCurrent.filter((y) => y !== year) });
-      }
-    }
     recordActivity(
       "Settings",
-      reopening ? "reopened" : "closed",
-      `${reopening ? "Reopened" : "Closed"} year ${year} for ${SECTION_ROLE_LABELS[section] || section}`
-    );
-  };
-
-  // Toggles whether editing (add/edit/delete) is temporarily allowed for one section's
-  // closed year, without reopening (and so without un-hiding) it. Same permission gate
-  // as toggleClosedYear — only Admin or GM/Owner-grade employees pass.
-  const toggleYearEditPermission = (section, year) => {
-    if (!canManageYearLock) return;
-    const current = editableClosedYears[section] || [];
-    const allowing = !current.includes(year);
-    const next = allowing ? [...current, year] : current.filter((y) => y !== year);
-    persistEditableClosedYears({ ...editableClosedYears, [section]: next });
-    recordActivity(
-      "Settings",
-      allowing ? "editUnlocked" : "editLocked",
-      `${allowing ? "Allowed" : "Disallowed"} editing for closed year ${year} (${SECTION_ROLE_LABELS[section] || section}) while it stays closed`
+      current.includes(year) ? "reopened" : "closed",
+      `${current.includes(year) ? "Reopened" : "Closed"} year ${year} for ${SECTION_ROLE_LABELS[section] || section}`
     );
   };
 
   // Whether a record dated `dateStr` falls inside a year that's been closed for
-  // `section` (flights/hotels/visa/cars) — a closed year is always hidden from anyone
-  // without canViewClosedYears, regardless of the edit-permission flag below.
+  // `section` (flights/hotels/visa/cars) — once a year is closed, records dated in it
+  // can't be added, edited, or deleted until a GM or Admin reopens that year from the
+  // Closed years panel.
   const isYearLocked = (section, dateStr) => (closedYears[section] || []).includes((dateStr || "").slice(0, 4));
-  // Whether a GM/Admin has temporarily allowed editing for this closed year+section
-  // (see toggleYearEditPermission) — meaningless when the year isn't closed.
-  const isYearEditAllowed = (section, dateStr) => (editableClosedYears[section] || []).includes((dateStr || "").slice(0, 4));
-  // What actually gates add/edit/delete: a closed year blocks it UNLESS a GM/Admin has
-  // switched editing on for that specific year+section from the Closed years panel.
-  const isEditBlocked = (section, dateStr) => isYearLocked(section, dateStr) && !isYearEditAllowed(section, dateStr);
 
   const persistExpenses = async (next) => {
     setExpenses(next);
@@ -3797,8 +3738,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // A closed year blocks every add/edit — whether the booking already belongs to that
     // year, or is being dated into it just now.
     const originalHotel = hotelEditingId ? hotelBookings.find((h) => h.id === hotelEditingId) : null;
-    if ((originalHotel && isEditBlocked("hotels", originalHotel.bookingDate)) || isEditBlocked("hotels", hotelForm.bookingDate)) {
-      setHotelError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask a General Manager or Admin to reopen the year, or temporarily allow editing, from Closed years.");
+    if ((originalHotel && isYearLocked("hotels", originalHotel.bookingDate)) || isYearLocked("hotels", hotelForm.bookingDate)) {
+      setHotelError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
 
@@ -3899,8 +3840,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleDeleteHotel = (id, onDeleted) => {
     const targetHotel = hotelBookings.find((h) => h.id === id);
-    if (targetHotel && isEditBlocked("hotels", targetHotel.bookingDate)) {
-      setHotelError("This booking is in a closed year and can't be deleted. Ask a General Manager or Admin to reopen the year, or temporarily allow editing, from Closed years.");
+    if (targetHotel && isYearLocked("hotels", targetHotel.bookingDate)) {
+      setHotelError("This booking is in a closed year and can't be deleted. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
     requestConfirm("Delete this hotel booking?", async () => {
@@ -4022,8 +3963,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // A closed year blocks every add/edit — whether the booking already belongs to that
     // year, or is being dated into it just now.
     const originalVisa = visaEditingId ? visaBookings.find((v) => v.id === visaEditingId) : null;
-    if ((originalVisa && isEditBlocked("visa", originalVisa.bookingDate)) || isEditBlocked("visa", visaForm.bookingDate)) {
-      setVisaError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask a General Manager or Admin to reopen the year, or temporarily allow editing, from Closed years.");
+    if ((originalVisa && isYearLocked("visa", originalVisa.bookingDate)) || isYearLocked("visa", visaForm.bookingDate)) {
+      setVisaError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
     if (visaEditingId) {
@@ -4093,8 +4034,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleDeleteVisa = (id, onDeleted) => {
     const targetVisa = visaBookings.find((v) => v.id === id);
-    if (targetVisa && isEditBlocked("visa", targetVisa.bookingDate)) {
-      setVisaError("This booking is in a closed year and can't be deleted. Ask a General Manager or Admin to reopen the year, or temporarily allow editing, from Closed years.");
+    if (targetVisa && isYearLocked("visa", targetVisa.bookingDate)) {
+      setVisaError("This booking is in a closed year and can't be deleted. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
     requestConfirm("Delete this visa booking?", async () => {
@@ -4171,8 +4112,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // A closed year blocks every add/edit — whether the booking already belongs to that
     // year, or is being dated into it just now.
     const originalCar = carEditingId ? carBookings.find((c) => c.id === carEditingId) : null;
-    if ((originalCar && isEditBlocked("cars", originalCar.bookingDate)) || isEditBlocked("cars", carForm.bookingDate)) {
-      setCarError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask a General Manager or Admin to reopen the year, or temporarily allow editing, from Closed years.");
+    if ((originalCar && isYearLocked("cars", originalCar.bookingDate)) || isYearLocked("cars", carForm.bookingDate)) {
+      setCarError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
     if (carEditingId) {
@@ -4252,8 +4193,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleDeleteCar = (id, onDeleted) => {
     const targetCar = carBookings.find((c) => c.id === id);
-    if (targetCar && isEditBlocked("cars", targetCar.bookingDate)) {
-      setCarError("This booking is in a closed year and can't be deleted. Ask a General Manager or Admin to reopen the year, or temporarily allow editing, from Closed years.");
+    if (targetCar && isYearLocked("cars", targetCar.bookingDate)) {
+      setCarError("This booking is in a closed year and can't be deleted. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
     requestConfirm("Delete this transfer booking?", async () => {
@@ -5275,8 +5216,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const original = form.id ? tickets.find((t) => t.id === form.id) : null;
     // A closed year blocks every add/edit — whether the ticket already belongs to that
     // year, or is being dated into it just now.
-    if ((original && isEditBlocked("flights", original.date)) || isEditBlocked("flights", form.date)) {
-      setError("This year is closed for accounting — tickets dated in a closed year can't be added or edited. Ask a General Manager or Admin to reopen the year, or temporarily allow editing, from Closed years.");
+    if ((original && isYearLocked("flights", original.date)) || isYearLocked("flights", form.date)) {
+      setError("This year is closed for accounting — tickets dated in a closed year can't be added or edited. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
     let record = {
@@ -5410,8 +5351,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return;
     }
     const targetTicket = tickets.find((t) => t.id === id);
-    if (targetTicket && isEditBlocked("flights", targetTicket.date)) {
-      setError("This ticket is in a closed year and can't be deleted. Ask a General Manager or Admin to reopen the year, or temporarily allow editing, from Closed years.");
+    if (targetTicket && isYearLocked("flights", targetTicket.date)) {
+      setError("This ticket is in a closed year and can't be deleted. Ask a General Manager or Admin to reopen the year first.");
       return;
     }
     requestConfirm("Delete this ticket?", () => {
@@ -8387,16 +8328,13 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <p className="text-sm text-stone-400 mb-6 mt-3">
                   A closed year disappears completely for every employee — from lists, filters, stats, and exports — in
                   that section only, with no exceptions. Reopen it from here whenever you need to recall its records;
-                  it stays visible to everyone again until you close it once more. You can also temporarily allow
-                  editing for a closed section/year below, without reopening (and so without un-hiding) it.
+                  it stays visible to everyone again until you close it once more.
                 </p>
                 {allYears.length === 0 ? (
                   <p className="text-sm text-stone-400 text-center py-6">No dated records yet.</p>
                 ) : (
                   <div className="flex flex-col gap-5">
-                    {allYears.map((y) => {
-                      const closedSectionsThisYear = CLOSED_YEARS_SECTIONS.filter((sec) => (closedYears[sec.key] || []).includes(y));
-                      return (
+                    {allYears.map((y) => (
                       <div key={y} className="border border-stone-200 rounded-xl p-5">
                         <p className="text-lg font-semibold text-stone-900 mb-3">{y}</p>
                         <div className="flex flex-wrap gap-3">
@@ -8443,25 +8381,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             );
                           })}
                         </div>
-                        {closedSectionsThisYear.length > 0 && (
-                          <div className="mt-4 pt-4 border-t border-stone-100">
-                            <p className="text-xs font-semibold text-stone-500 mb-1">Allow editing while closed</p>
-                            <div className="flex flex-col gap-0.5">
-                              {closedSectionsThisYear.map((sec) => (
-                                <ToggleSwitch
-                                  key={sec.key}
-                                  label={sec.label}
-                                  description="Temporarily allow adding, editing, and deleting this year's records for this section — without reopening (and un-hiding) it"
-                                  checked={(editableClosedYears[sec.key] || []).includes(y)}
-                                  onChange={() => toggleYearEditPermission(sec.key, y)}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
-                      );
-                    })}
+                    ))}
                   </div>
                 )}
               </div>
