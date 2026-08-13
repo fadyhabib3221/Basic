@@ -5950,12 +5950,16 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const isOwnerUser =
     !!currentUser && !currentUser.isAdmin && !!(currentEmployeeRecord && currentEmployeeRecord.isOwner);
   const hasAdminAccess = !!currentUser && (currentUser.isAdmin || isOwnerUser);
+  // Accounts Manager is the senior grade within the accounting tier (role: "accounting_
+  // manager") — distinct from the plain Accountant grade, which shares isAccounting but
+  // stays excluded from year-lock management below.
+  const isAccountsManagerUser =
+    !!currentUser && !currentUser.isAdmin && !!(currentEmployeeRecord && currentEmployeeRecord.role === "accounting_manager");
   // Who can actually close/reopen a year (as opposed to just viewing the panel), and
-  // therefore who can approve editing data in a closed year: Admin or GM only (Owner
-  // grade shares this too, since GM is defined as an exact copy of the Owner preset —
-  // both set isOwner: true, so isOwnerUser covers both). Accounts Manager and Accountant
-  // are deliberately excluded — a closed year can only be reopened with GM/Admin approval.
-  const canManageYearLock = !!currentUser && (currentUser.isAdmin || isOwnerUser);
+  // therefore who can approve editing data in a closed year: Admin, Owner/GM, or an
+  // Accounts Manager. Plain Accountant is deliberately excluded — closing/reopening a
+  // year stays reserved for GM/Admin/Accounts-Manager approval.
+  const canManageYearLock = !!currentUser && (currentUser.isAdmin || isOwnerUser || isAccountsManagerUser);
   // Seeing records from a closed year is a separate, broader permission from actually
   // reopening one: anyone with Accounts access (Admin, Owner, GM, Accounting Manager,
   // or Accountant — see canAccessAccounts) still sees closed-year data across every
@@ -8501,7 +8505,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       >
                         <option value="">Select an employee...</option>
                         {(employees || [])
-                          .filter((e) => !e.isOwner)
+                          .filter((e) => !e.isOwner && e.role !== "accounting_manager")
                           .map((e) => (
                             <option key={e.username} value={e.username}>
                               {(e.name || e.username)} (@{e.username} · {roleLabel(e.role)})
