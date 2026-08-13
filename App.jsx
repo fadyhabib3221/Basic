@@ -2186,6 +2186,15 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // addressed to them without a manual refresh.
   const [requests, setRequests] = useState([]);
   const [showRequestsPanel, setShowRequestsPanel] = useState(false);
+
+  // ---------- Closed years (per section) ----------
+  // A year "closed" for a given section is fully hidden — from lists, filter options,
+  // stats, and exports alike — for anyone who isn't Admin/Owner/GM/Accounts. Stored
+  // centrally (shared, unencrypted — just a list of year strings, not sensitive data)
+  // as { flights: ["2023"], hotels: [], visa: [], cars: [], files: [] } so each section
+  // can be closed independently of the others.
+  const [closedYears, setClosedYears] = useState({ flights: [], hotels: [], visa: [], cars: [], files: [] });
+  const [showClosedYearsPanel, setShowClosedYearsPanel] = useState(false);
   const [newRequestTo, setNewRequestTo] = useState("");
   const [newRequestMessage, setNewRequestMessage] = useState("");
   const [requestSendError, setRequestSendError] = useState("");
@@ -2611,7 +2620,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         // has logged in, so there's no workspace key in memory. secureLoad with a null
         // key correctly returns the given fallback ([]) without touching stored data.
         // They get their real values moments later via the login-triggered poll effect.
-        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, employeesRes, sessionRes, suggestionsRes, setupRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes] = await Promise.all([
+        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, employeesRes, sessionRes, suggestionsRes, setupRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes, closedYearsRes] = await Promise.all([
           secureLoad("tickets:list", null, []),
           secureLoad("tickets:hotels", null, []),
           secureLoad("tickets:visas", null, []),
@@ -2630,6 +2639,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           window.storage.get("tickets:requests", true).catch(() => null),
           window.storage.get("tickets:loginHistory", true).catch(() => null),
           window.storage.get("tickets:activityLog", true).catch(() => null),
+          window.storage.get("tickets:closedYears", true).catch(() => null),
         ]);
         const employeesData = safeJsonParse(employeesRes && employeesRes.value, []);
         const requestsData = safeJsonParse(requestsRes && requestsRes.value, []);
@@ -2647,6 +2657,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         setTreasuryEntries(treasuryEntriesData);
         setLoginHistory(loginHistoryRes && loginHistoryRes.value ? JSON.parse(loginHistoryRes.value) : []);
         setActivityLog(activityLogRes && activityLogRes.value ? JSON.parse(activityLogRes.value) : []);
+        setClosedYears({
+          flights: [], hotels: [], visa: [], cars: [], files: [],
+          ...safeJsonParse(closedYearsRes && closedYearsRes.value, {}),
+        });
         requestsData.forEach((r) => seenRequestIdsRef.current.add(r.id));
         if (licenseRes && licenseRes.value) {
           try {
@@ -2740,7 +2754,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
       inFlight = true;
       try {
-        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, employeesRes, suggestionsRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes] = await Promise.all([
+        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, employeesRes, suggestionsRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes, closedYearsRes] = await Promise.all([
           secureLoad("tickets:list", workspaceKey, null),
           secureLoad("tickets:hotels", workspaceKey, null),
           secureLoad("tickets:visas", workspaceKey, null),
@@ -2757,6 +2771,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           window.storage.get("tickets:requests", true).catch(() => null),
           currentUser.isAdmin ? window.storage.get("tickets:loginHistory", true).catch(() => null) : Promise.resolve(null),
           currentUser.isAdmin ? window.storage.get("tickets:activityLog", true).catch(() => null) : Promise.resolve(null),
+          window.storage.get("tickets:closedYears", true).catch(() => null),
         ]);
         if (cancelled) return;
         if (loginHistoryRes && loginHistoryRes.value) {
@@ -2764,6 +2779,14 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         }
         if (activityLogRes && activityLogRes.value) {
           try { setActivityLog(JSON.parse(activityLogRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
+        }
+        if (closedYearsRes && closedYearsRes.value) {
+          try {
+            setClosedYears({
+              flights: [], hotels: [], visa: [], cars: [], files: [],
+              ...JSON.parse(closedYearsRes.value),
+            });
+          } catch (e) { /* ignore malformed data for this cycle */ }
         }
         // These 10 collections are encrypted at rest — secureLoad returns null above if
         // the workspace key isn't unlocked yet (nothing to apply this poll) rather than
@@ -3378,6 +3401,30 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     } catch (e) {
       setRequestSendError("Could not save the request, please try again");
     }
+  };
+
+  // Saves the full closed-years map and updates local state immediately (optimistic —
+  // matches the pattern used for requests/suggestions above). Failures are silent since
+  // this is a low-stakes settings toggle, not user data.
+  const persistClosedYears = async (next) => {
+    setClosedYears(next);
+    try {
+      await storageSet("tickets:closedYears", JSON.stringify(next), true);
+    } catch (e) {
+      // Silent — worst case the toggle re-syncs on the next poll.
+    }
+  };
+
+  // Toggles a single year open/closed for one section (flights/hotels/visa/cars/files).
+  const toggleClosedYear = (section, year) => {
+    const current = closedYears[section] || [];
+    const next = current.includes(year) ? current.filter((y) => y !== year) : [...current, year];
+    persistClosedYears({ ...closedYears, [section]: next });
+    recordActivity(
+      "Settings",
+      current.includes(year) ? "reopened" : "closed",
+      `${current.includes(year) ? "Reopened" : "Closed"} year ${year} for ${SECTION_ROLE_LABELS[section] || section}`
+    );
   };
 
   const persistExpenses = async (next) => {
@@ -5692,6 +5739,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const canAccessAccounts =
     !!currentUser &&
     (currentUser.isAdmin || !!(currentEmployeeRecord && (currentEmployeeRecord.isOwner || currentEmployeeRecord.isAccounting)));
+  // Who can see (and manage) closed years: Admin, Owner, GM (GM is stored as an Owner-
+  // grade employee — see ROLE_PRESETS), and Accounts. Deliberately the same set as
+  // canAccessAccounts above — closed years hide financially-relevant history, so the
+  // same trusted group that can already see the Accounts section can also see past it.
+  const canViewClosedYears = canAccessAccounts;
   // If the current section is no longer (or was never) allowed for this employee —
   // e.g. their access was just changed by the main account — bounce them to the first
   // section they do have access to, instead of leaving them stuck on a blocked one.
@@ -5781,21 +5833,25 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       if (aOnline !== bOnline) return aOnline - bOnline;
       return (a.name || "").localeCompare(b.name || "");
     });
-  const visibleTickets = !currentUser
-    ? []
-    : canViewAllTickets
-    ? tickets
-    : tickets.filter((t) =>
-        t.employeeUsername ? t.employeeUsername === currentUser.username : t.employee === currentUser.name
-      );
+  const visibleTickets = (
+    !currentUser
+      ? []
+      : canViewAllTickets
+      ? tickets
+      : tickets.filter((t) =>
+          t.employeeUsername ? t.employeeUsername === currentUser.username : t.employee === currentUser.name
+        )
+  ).filter((t) => canViewClosedYears || !(closedYears.flights || []).includes((t.date || "").slice(0, 4)));
 
-  const visibleHotelBookings = !currentUser
-    ? []
-    : hotelsPerm.canViewAll
-    ? hotelBookings
-    : hotelBookings.filter((h) =>
-        h.employeeUsername ? h.employeeUsername === currentUser.username : h.employee === currentUser.name
-      );
+  const visibleHotelBookings = (
+    !currentUser
+      ? []
+      : hotelsPerm.canViewAll
+      ? hotelBookings
+      : hotelBookings.filter((h) =>
+          h.employeeUsername ? h.employeeUsername === currentUser.username : h.employee === currentUser.name
+        )
+  ).filter((h) => canViewClosedYears || !(closedYears.hotels || []).includes((h.bookingDate || "").slice(0, 4)));
 
   // Number of nights a single date range covers, from check-in to check-out (at least 1).
   const nightsBetween = (checkIn, checkOut) => {
@@ -5938,13 +5994,15 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Flights/Hotels/Files — falls back to matching on the display name for any legacy
   // booking saved before this field existed. There's still no Employee filter dropdown
   // here, unlike Hotels, since that wasn't asked for.
-  const visibleVisaBookings = !currentUser
-    ? []
-    : visaPerm.canViewAll
-    ? visaBookings
-    : visaBookings.filter((v) =>
-        v.employeeUsername ? v.employeeUsername === currentUser.username : v.employee === currentUser.name
-      );
+  const visibleVisaBookings = (
+    !currentUser
+      ? []
+      : visaPerm.canViewAll
+      ? visaBookings
+      : visaBookings.filter((v) =>
+          v.employeeUsername ? v.employeeUsername === currentUser.username : v.employee === currentUser.name
+        )
+  ).filter((v) => canViewClosedYears || !(closedYears.visa || []).includes((v.bookingDate || "").slice(0, 4)));
   const visaMonthsAvailable = Array.from(
     new Set(visibleVisaBookings.map((v) => monthKey(v.bookingDate)))
   ).sort((a, b) => b.localeCompare(a));
@@ -5986,13 +6044,15 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Car bookings are tagged with an owning employee (employeeUsername) the same way,
   // falling back to the display name for any legacy booking saved before this field
   // existed. Still no Employee filter dropdown here, unlike Hotels.
-  const visibleCarBookings = !currentUser
-    ? []
-    : carsPerm.canViewAll
-    ? carBookings
-    : carBookings.filter((c) =>
-        c.employeeUsername ? c.employeeUsername === currentUser.username : c.employee === currentUser.name
-      );
+  const visibleCarBookings = (
+    !currentUser
+      ? []
+      : carsPerm.canViewAll
+      ? carBookings
+      : carBookings.filter((c) =>
+          c.employeeUsername ? c.employeeUsername === currentUser.username : c.employee === currentUser.name
+        )
+  ).filter((c) => canViewClosedYears || !(closedYears.cars || []).includes((c.bookingDate || "").slice(0, 4)));
   const carMonthsAvailable = Array.from(
     new Set(visibleCarBookings.map((c) => monthKey(c.bookingDate)))
   ).sort((a, b) => b.localeCompare(a));
@@ -6507,6 +6567,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           f.employeeUsername ? f.employeeUsername === currentUser.username : f.createdBy === currentUser.name
         )
   )
+    .filter((f) => canViewClosedYears || !(closedYears.files || []).includes((f.createdAt || "").slice(0, 4)))
     // Ordered by the file's own date (newest first), with the serial as a tie-breaker
     // for same-day files — the list always follows the dates rather than raw creation/
     // array order.
@@ -7961,6 +8022,14 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           <Users size={15} className="text-teal-800" /> Manage employees
                         </button>
                       )}
+                      {canViewClosedYears && (
+                        <button
+                          onClick={() => { setShowClosedYearsPanel(!showClosedYearsPanel); setShowManagementMenu(false); }}
+                          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
+                        >
+                          <Lock size={15} className="text-teal-800" /> Closed years
+                        </button>
+                      )}
                       {currentUser.isAdmin && (
                         <button
                           onClick={() => { dispatchLicense({ showPanel: !showLicensePanel }); setShowManagementMenu(false); }}
@@ -8125,6 +8194,79 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </div>
           </div>
         )}
+
+        {showClosedYearsPanel && canViewClosedYears && (() => {
+          const CLOSED_YEARS_SECTIONS = [
+            { key: "flights", label: "Flights", dates: tickets.map((t) => t.date) },
+            { key: "hotels", label: "Hotels", dates: hotelBookings.map((h) => h.bookingDate) },
+            { key: "visa", label: "Visa", dates: visaBookings.map((v) => v.bookingDate) },
+            { key: "cars", label: "Transportation", dates: carBookings.map((c) => c.bookingDate) },
+            { key: "files", label: "Files", dates: files.map((f) => f.createdAt) },
+          ];
+          return (
+            <div
+              className="fixed inset-0 z-50 bg-black/40 flex items-start md:items-center justify-center p-4 overflow-y-auto"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setShowClosedYearsPanel(false);
+              }}
+            >
+              <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 w-full max-w-lg my-8 md:my-0 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="font-semibold text-stone-900 flex items-center gap-2">
+                    <Lock size={16} className="text-teal-800" /> Closed years
+                  </h2>
+                  <button
+                    onClick={() => setShowClosedYearsPanel(false)}
+                    className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                <p className="text-xs text-stone-400 mb-4 mt-3">
+                  A closed year disappears completely for every employee — from lists, filters, stats, and exports — in
+                  that section only. It stays fully visible here and to Admin, Owner, GM, and Accounts.
+                </p>
+                <div className="flex flex-col gap-4">
+                  {CLOSED_YEARS_SECTIONS.map((sec) => {
+                    const years = Array.from(
+                      new Set(sec.dates.map((d) => (d ? d.slice(0, 4) : "")).filter(Boolean))
+                    ).sort((a, b) => b.localeCompare(a));
+                    const secClosed = closedYears[sec.key] || [];
+                    return (
+                      <div key={sec.key} className="border border-stone-200 rounded-xl p-3">
+                        <p className="text-sm font-semibold text-stone-900 mb-2">{sec.label}</p>
+                        {years.length === 0 ? (
+                          <p className="text-xs text-stone-400">No dated records yet.</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {years.map((y) => {
+                              const isClosed = secClosed.includes(y);
+                              return (
+                                <button
+                                  key={y}
+                                  onClick={() => toggleClosedYear(sec.key, y)}
+                                  className={`flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 border transition-colors ${
+                                    isClosed
+                                      ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+                                      : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+                                  }`}
+                                  title={isClosed ? `Reopen ${y}` : `Close ${y}`}
+                                >
+                                  {isClosed ? <Lock size={11} /> : null}
+                                  {y}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {showLoginHistory && currentUser.isAdmin && (() => {
           const q = loginHistoryQuery.trim().toLowerCase();
