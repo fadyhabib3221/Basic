@@ -2620,7 +2620,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         // has logged in, so there's no workspace key in memory. secureLoad with a null
         // key correctly returns the given fallback ([]) without touching stored data.
         // They get their real values moments later via the login-triggered poll effect.
-        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, employeesRes, sessionRes, suggestionsRes, setupRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes, closedYearsRes] = await Promise.all([
+        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, employeesRes, sessionRes, suggestionsRes, setupRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes] = await Promise.all([
           secureLoad("tickets:list", null, []),
           secureLoad("tickets:hotels", null, []),
           secureLoad("tickets:visas", null, []),
@@ -2639,7 +2639,6 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           window.storage.get("tickets:requests", true).catch(() => null),
           window.storage.get("tickets:loginHistory", true).catch(() => null),
           window.storage.get("tickets:activityLog", true).catch(() => null),
-          window.storage.get("tickets:closedYears", true).catch(() => null),
         ]);
         const employeesData = safeJsonParse(employeesRes && employeesRes.value, []);
         const requestsData = safeJsonParse(requestsRes && requestsRes.value, []);
@@ -2657,10 +2656,6 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         setTreasuryEntries(treasuryEntriesData);
         setLoginHistory(loginHistoryRes && loginHistoryRes.value ? JSON.parse(loginHistoryRes.value) : []);
         setActivityLog(activityLogRes && activityLogRes.value ? JSON.parse(activityLogRes.value) : []);
-        setClosedYears({
-          flights: [], hotels: [], visa: [], cars: [], files: [],
-          ...safeJsonParse(closedYearsRes && closedYearsRes.value, {}),
-        });
         requestsData.forEach((r) => seenRequestIdsRef.current.add(r.id));
         if (licenseRes && licenseRes.value) {
           try {
@@ -2754,7 +2749,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
       inFlight = true;
       try {
-        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, employeesRes, suggestionsRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes, closedYearsRes] = await Promise.all([
+        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, employeesRes, suggestionsRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes] = await Promise.all([
           secureLoad("tickets:list", workspaceKey, null),
           secureLoad("tickets:hotels", workspaceKey, null),
           secureLoad("tickets:visas", workspaceKey, null),
@@ -2771,7 +2766,6 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           window.storage.get("tickets:requests", true).catch(() => null),
           currentUser.isAdmin ? window.storage.get("tickets:loginHistory", true).catch(() => null) : Promise.resolve(null),
           currentUser.isAdmin ? window.storage.get("tickets:activityLog", true).catch(() => null) : Promise.resolve(null),
-          window.storage.get("tickets:closedYears", true).catch(() => null),
         ]);
         if (cancelled) return;
         if (loginHistoryRes && loginHistoryRes.value) {
@@ -2779,14 +2773,6 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         }
         if (activityLogRes && activityLogRes.value) {
           try { setActivityLog(JSON.parse(activityLogRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
-        }
-        if (closedYearsRes && closedYearsRes.value) {
-          try {
-            setClosedYears({
-              flights: [], hotels: [], visa: [], cars: [], files: [],
-              ...JSON.parse(closedYearsRes.value),
-            });
-          } catch (e) { /* ignore malformed data for this cycle */ }
         }
         // These 10 collections are encrypted at rest — secureLoad returns null above if
         // the workspace key isn't unlocked yet (nothing to apply this poll) rather than
@@ -2879,6 +2865,37 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       window.removeEventListener("online", wake);
     };
   }, [currentUser, workspaceKey]);
+
+  // ---------- Closed years: independent load/poll ----------
+  // Deliberately its own effect, separate from the core data Promise.all above. This is
+  // low-stakes settings data (not financial/booking records), so it's kept out of the
+  // critical path entirely — a failure or slow response here can never block or break
+  // the loading of tickets/hotels/visa/cars/files. Polled every 30s (plenty for a
+  // rarely-changed setting) rather than the 5s cadence used for live booking data.
+  useEffect(() => {
+    if (!currentUser) return;
+    let cancelled = false;
+    const loadClosedYears = async () => {
+      try {
+        const res = await window.storage.get("tickets:closedYears", true);
+        if (!cancelled && res && res.value) {
+          setClosedYears({
+            flights: [], hotels: [], visa: [], cars: [], files: [],
+            ...JSON.parse(res.value),
+          });
+        }
+      } catch (e) {
+        // Key doesn't exist yet (nobody has closed a year) or a transient read error —
+        // either way, safe to ignore; the default (nothing closed) already applies.
+      }
+    };
+    loadClosedYears();
+    const interval = setInterval(loadClosedYears, 30 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [currentUser]);
 
 
   const ONLINE_THRESHOLD_MS = 15 * 1000; // considered "connected" if seen in the last 15s
