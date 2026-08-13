@@ -3743,7 +3743,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // A closed year blocks every add/edit — whether the booking already belongs to that
     // year, or is being dated into it just now.
     const originalHotel = hotelEditingId ? hotelBookings.find((h) => h.id === hotelEditingId) : null;
-    if (!canBypassYearLock && ((originalHotel && isYearLocked("hotels", originalHotel.bookingDate)) || isYearLocked("hotels", hotelForm.bookingDate))) {
+    if ((originalHotel && isYearLocked("hotels", originalHotel.bookingDate)) || isYearLocked("hotels", hotelForm.bookingDate)) {
       setHotelError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask an accounting employee to reopen the year first.");
       return;
     }
@@ -3845,7 +3845,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleDeleteHotel = (id, onDeleted) => {
     const targetHotel = hotelBookings.find((h) => h.id === id);
-    if (!canBypassYearLock && targetHotel && isYearLocked("hotels", targetHotel.bookingDate)) {
+    if (targetHotel && isYearLocked("hotels", targetHotel.bookingDate)) {
       setHotelError("This booking is in a closed year and can't be deleted. Ask an accounting employee to reopen the year first.");
       return;
     }
@@ -3968,7 +3968,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // A closed year blocks every add/edit — whether the booking already belongs to that
     // year, or is being dated into it just now.
     const originalVisa = visaEditingId ? visaBookings.find((v) => v.id === visaEditingId) : null;
-    if (!canBypassYearLock && ((originalVisa && isYearLocked("visa", originalVisa.bookingDate)) || isYearLocked("visa", visaForm.bookingDate))) {
+    if ((originalVisa && isYearLocked("visa", originalVisa.bookingDate)) || isYearLocked("visa", visaForm.bookingDate)) {
       setVisaError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask an accounting employee to reopen the year first.");
       return;
     }
@@ -4039,7 +4039,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleDeleteVisa = (id, onDeleted) => {
     const targetVisa = visaBookings.find((v) => v.id === id);
-    if (!canBypassYearLock && targetVisa && isYearLocked("visa", targetVisa.bookingDate)) {
+    if (targetVisa && isYearLocked("visa", targetVisa.bookingDate)) {
       setVisaError("This booking is in a closed year and can't be deleted. Ask an accounting employee to reopen the year first.");
       return;
     }
@@ -4117,7 +4117,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // A closed year blocks every add/edit — whether the booking already belongs to that
     // year, or is being dated into it just now.
     const originalCar = carEditingId ? carBookings.find((c) => c.id === carEditingId) : null;
-    if (!canBypassYearLock && ((originalCar && isYearLocked("cars", originalCar.bookingDate)) || isYearLocked("cars", carForm.bookingDate))) {
+    if ((originalCar && isYearLocked("cars", originalCar.bookingDate)) || isYearLocked("cars", carForm.bookingDate)) {
       setCarError("This year is closed for accounting — bookings dated in a closed year can't be added or edited. Ask an accounting employee to reopen the year first.");
       return;
     }
@@ -4198,7 +4198,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const handleDeleteCar = (id, onDeleted) => {
     const targetCar = carBookings.find((c) => c.id === id);
-    if (!canBypassYearLock && targetCar && isYearLocked("cars", targetCar.bookingDate)) {
+    if (targetCar && isYearLocked("cars", targetCar.bookingDate)) {
       setCarError("This booking is in a closed year and can't be deleted. Ask an accounting employee to reopen the year first.");
       return;
     }
@@ -5237,7 +5237,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const original = form.id ? tickets.find((t) => t.id === form.id) : null;
     // A closed year blocks every add/edit — whether the ticket already belongs to that
     // year, or is being dated into it just now.
-    if (!canBypassYearLock && ((original && isYearLocked("flights", original.date)) || isYearLocked("flights", form.date))) {
+    if ((original && isYearLocked("flights", original.date)) || isYearLocked("flights", form.date)) {
       setError("This year is closed for accounting — tickets dated in a closed year can't be added or edited. Ask an accounting employee to reopen the year first.");
       return;
     }
@@ -5372,7 +5372,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       return;
     }
     const targetTicket = tickets.find((t) => t.id === id);
-    if (!canBypassYearLock && targetTicket && isYearLocked("flights", targetTicket.date)) {
+    if (targetTicket && isYearLocked("flights", targetTicket.date)) {
       setError("This ticket is in a closed year and can't be deleted. Ask an accounting employee to reopen the year first.");
       return;
     }
@@ -5834,11 +5834,17 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const canAccessAccounts =
     !!currentUser &&
     (currentUser.isAdmin || !!(currentEmployeeRecord && (currentEmployeeRecord.isOwner || currentEmployeeRecord.isAccounting)));
-  // Who can see (and manage) closed years: Admin, Owner, GM (GM is stored as an Owner-
-  // grade employee — see ROLE_PRESETS), and Accounts. Deliberately the same set as
-  // canAccessAccounts above — closed years hide financially-relevant history, so the
-  // same trusted group that can already see the Accounts section can also see past it.
-  const canViewClosedYears = canAccessAccounts;
+  // Who can see (view/retrieve) records from a closed year even while it stays locked
+  // for everyone else — Admin, Owner, GM (GM is stored as an Owner-grade employee, see
+  // ROLE_PRESETS), and Accounts Manager specifically. A plain Accountant is deliberately
+  // excluded here (unlike canAccessAccounts, which does include them) — narrower than
+  // the general Accounts-section gate on purpose. This is a permission check on the
+  // existing read-filter below (isYearLocked / the closedYears exclusion), not a bypass
+  // of the lock itself: the year stays closed for everyone else, nothing is reopened.
+  const canViewClosedYears =
+    !!currentUser &&
+    (currentUser.isAdmin ||
+      !!(currentEmployeeRecord && (currentEmployeeRecord.isOwner || currentEmployeeRecord.role === "accounting_manager")));
   // If the current section is no longer (or was never) allowed for this employee —
   // e.g. their access was just changed by the main account — bounce them to the first
   // section they do have access to, instead of leaving them stuck on a blocked one.
@@ -5922,12 +5928,6 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       isOwnerUser ||
       isAccountsManager ||
       !!(currentEmployeeRecord && currentEmployeeRecord.role === "accountant" && currentEmployeeRecord.canLockYears));
-  // Admin, Owner, GM, and Accounts Manager can add/edit/delete a record dated inside a
-  // closed year directly, without reopening that year first — reopening would also
-  // expose it back to every regular employee, which isn't necessary just for this group
-  // to reach it. A plain Accountant (even one granted canManageYearLock above) is NOT
-  // included here — they still have to reopen the year like anyone else.
-  const canBypassYearLock = !!currentUser && (currentUser.isAdmin || isOwnerUser || isAccountsManager);
   const myPendingRequestsCount = (requests || []).filter(
     (r) => currentUser && r.toUsername === currentUser.username && r.status === "pending"
   ).length;
