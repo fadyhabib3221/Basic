@@ -8214,12 +8214,25 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
         {showClosedYearsPanel && canViewClosedYears && (() => {
           const CLOSED_YEARS_SECTIONS = [
-            { key: "flights", label: "Flights", dates: tickets.map((t) => t.date) },
-            { key: "hotels", label: "Hotels", dates: hotelBookings.map((h) => h.bookingDate) },
-            { key: "visa", label: "Visa", dates: visaBookings.map((v) => v.bookingDate) },
-            { key: "cars", label: "Transportation", dates: carBookings.map((c) => c.bookingDate) },
-            { key: "files", label: "Files", dates: files.map((f) => f.createdAt) },
+            { key: "flights", label: "Flights" },
+            { key: "hotels", label: "Hotels" },
+            { key: "visa", label: "Visa" },
+            { key: "cars", label: "Transportation" },
+            { key: "files", label: "Files" },
           ];
+          // Every year that has at least one dated record in ANY section — the year
+          // itself is the fixed axis here, with each section toggled open/closed
+          // underneath it, independently of the other sections for that same year.
+          const allDates = [
+            ...tickets.map((t) => t.date),
+            ...hotelBookings.map((h) => h.bookingDate),
+            ...visaBookings.map((v) => v.bookingDate),
+            ...carBookings.map((c) => c.bookingDate),
+            ...files.map((f) => f.createdAt),
+          ];
+          const allYears = Array.from(
+            new Set(allDates.map((d) => (d ? d.slice(0, 4) : "")).filter(Boolean))
+          ).sort((a, b) => b.localeCompare(a));
           return (
             <div
               className="fixed inset-0 z-50 bg-black/40 flex items-start md:items-center justify-center p-4 overflow-y-auto"
@@ -8243,43 +8256,37 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   A closed year disappears completely for every employee — from lists, filters, stats, and exports — in
                   that section only. It stays fully visible here and to Admin, Owner, GM, and Accounts.
                 </p>
-                <div className="flex flex-col gap-4">
-                  {CLOSED_YEARS_SECTIONS.map((sec) => {
-                    const years = Array.from(
-                      new Set(sec.dates.map((d) => (d ? d.slice(0, 4) : "")).filter(Boolean))
-                    ).sort((a, b) => b.localeCompare(a));
-                    const secClosed = closedYears[sec.key] || [];
-                    return (
-                      <div key={sec.key} className="border border-stone-200 rounded-xl p-3">
-                        <p className="text-sm font-semibold text-stone-900 mb-2">{sec.label}</p>
-                        {years.length === 0 ? (
-                          <p className="text-xs text-stone-400">No dated records yet.</p>
-                        ) : (
-                          <div className="flex flex-wrap gap-2">
-                            {years.map((y) => {
-                              const isClosed = secClosed.includes(y);
-                              return (
-                                <button
-                                  key={y}
-                                  onClick={() => toggleClosedYear(sec.key, y)}
-                                  className={`flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 border transition-colors ${
-                                    isClosed
-                                      ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
-                                      : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
-                                  }`}
-                                  title={isClosed ? `Reopen ${y}` : `Close ${y}`}
-                                >
-                                  {isClosed ? <Lock size={11} /> : null}
-                                  {y}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
+                {allYears.length === 0 ? (
+                  <p className="text-xs text-stone-400 text-center py-6">No dated records yet.</p>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {allYears.map((y) => (
+                      <div key={y} className="border border-stone-200 rounded-xl p-3">
+                        <p className="text-sm font-semibold text-stone-900 mb-2">{y}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {CLOSED_YEARS_SECTIONS.map((sec) => {
+                            const isClosed = (closedYears[sec.key] || []).includes(y);
+                            return (
+                              <button
+                                key={sec.key}
+                                onClick={() => toggleClosedYear(sec.key, y)}
+                                className={`flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 border transition-colors ${
+                                  isClosed
+                                    ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+                                    : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+                                }`}
+                                title={isClosed ? `Reopen ${sec.label} ${y}` : `Close ${sec.label} ${y}`}
+                              >
+                                {isClosed ? <Lock size={11} /> : null}
+                                {sec.label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -9233,6 +9240,19 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </button>
           )}
         </div>
+
+        {canViewClosedYears && activeSection === "accounts" && (
+          <div className="flex mb-4">
+            <button
+              onClick={() => setShowClosedYearsPanel(true)}
+              title="Close/reopen a year"
+              className="shrink-0 flex flex-col items-center gap-1.5 px-4 py-2.5 rounded-2xl border text-xs font-semibold transition-colors bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
+            >
+              <Lock size={20} />
+              Close year
+            </button>
+          </div>
+        )}
 
         {/* USD -> EGP exchange rate bar — shown once above every section (not just
             Hotels) since the rate is now applied across Flights/Hotels/Visa/Transfers
