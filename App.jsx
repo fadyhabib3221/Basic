@@ -5834,17 +5834,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const canAccessAccounts =
     !!currentUser &&
     (currentUser.isAdmin || !!(currentEmployeeRecord && (currentEmployeeRecord.isOwner || currentEmployeeRecord.isAccounting)));
-  // Who can see (view/retrieve) records from a closed year even while it stays locked
-  // for everyone else — Admin, Owner, GM (GM is stored as an Owner-grade employee, see
-  // ROLE_PRESETS), and Accounts Manager specifically. A plain Accountant is deliberately
-  // excluded here (unlike canAccessAccounts, which does include them) — narrower than
-  // the general Accounts-section gate on purpose. This is a permission check on the
-  // existing read-filter below (isYearLocked / the closedYears exclusion), not a bypass
-  // of the lock itself: the year stays closed for everyone else, nothing is reopened.
-  const canViewClosedYears =
-    !!currentUser &&
-    (currentUser.isAdmin ||
-      !!(currentEmployeeRecord && (currentEmployeeRecord.isOwner || currentEmployeeRecord.role === "accounting_manager")));
+  // A closed year is hidden from absolutely everyone once closed — from lists, filters,
+  // stats, and exports — with no standing bypass for any role, Admin included. The only
+  // way to see records from a closed year again is to reopen ("recall") that year from
+  // the Closed years panel below, which un-hides it for everyone until it's closed again.
+  // Who gets to open that panel is governed by canManageYearLock (defined further down),
+  // since only someone who can actually reopen a year has any reason to see it.
   // If the current section is no longer (or was never) allowed for this employee —
   // e.g. their access was just changed by the main account — bounce them to the first
   // section they do have access to, instead of leaving them stuck on a blocked one.
@@ -5957,7 +5952,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : tickets.filter((t) =>
           t.employeeUsername ? t.employeeUsername === currentUser.username : t.employee === currentUser.name
         )
-  ).filter((t) => canViewClosedYears || !(closedYears.flights || []).includes((t.date || "").slice(0, 4)));
+  ).filter((t) => !(closedYears.flights || []).includes((t.date || "").slice(0, 4)));
 
   const visibleHotelBookings = (
     !currentUser
@@ -5967,7 +5962,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : hotelBookings.filter((h) =>
           h.employeeUsername ? h.employeeUsername === currentUser.username : h.employee === currentUser.name
         )
-  ).filter((h) => canViewClosedYears || !(closedYears.hotels || []).includes((h.bookingDate || "").slice(0, 4)));
+  ).filter((h) => !(closedYears.hotels || []).includes((h.bookingDate || "").slice(0, 4)));
 
   // Number of nights a single date range covers, from check-in to check-out (at least 1).
   const nightsBetween = (checkIn, checkOut) => {
@@ -6118,7 +6113,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : visaBookings.filter((v) =>
           v.employeeUsername ? v.employeeUsername === currentUser.username : v.employee === currentUser.name
         )
-  ).filter((v) => canViewClosedYears || !(closedYears.visa || []).includes((v.bookingDate || "").slice(0, 4)));
+  ).filter((v) => !(closedYears.visa || []).includes((v.bookingDate || "").slice(0, 4)));
   const visaMonthsAvailable = Array.from(
     new Set(visibleVisaBookings.map((v) => monthKey(v.bookingDate)))
   ).sort((a, b) => b.localeCompare(a));
@@ -6168,7 +6163,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : carBookings.filter((c) =>
           c.employeeUsername ? c.employeeUsername === currentUser.username : c.employee === currentUser.name
         )
-  ).filter((c) => canViewClosedYears || !(closedYears.cars || []).includes((c.bookingDate || "").slice(0, 4)));
+  ).filter((c) => !(closedYears.cars || []).includes((c.bookingDate || "").slice(0, 4)));
   const carMonthsAvailable = Array.from(
     new Set(visibleCarBookings.map((c) => monthKey(c.bookingDate)))
   ).sort((a, b) => b.localeCompare(a));
@@ -6683,7 +6678,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           f.employeeUsername ? f.employeeUsername === currentUser.username : f.createdBy === currentUser.name
         )
   )
-    .filter((f) => canViewClosedYears || !(closedYears.files || []).includes((f.createdAt || "").slice(0, 4)))
+    .filter((f) => !(closedYears.files || []).includes((f.createdAt || "").slice(0, 4)))
     // Ordered by the file's own date (newest first), with the serial as a tie-breaker
     // for same-day files — the list always follows the dates rather than raw creation/
     // array order.
@@ -8081,7 +8076,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <LogOut size={15} />
                 </button>
               </div>
-              {isAccountingUser && (
+              {canManageYearLock && (
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <button onClick={() => setShowClosedYearsPanel(true)} title="Lock years"
                     className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
@@ -8146,7 +8141,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           <Users size={15} className="text-teal-800" /> Manage employees
                         </button>
                       )}
-                      {canViewClosedYears && (
+                      {canManageYearLock && (
                         <button
                           onClick={() => { setShowClosedYearsPanel(!showClosedYearsPanel); setShowManagementMenu(false); }}
                           className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm text-stone-700 hover:bg-stone-100 transition-colors"
@@ -8319,7 +8314,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
         )}
 
-        {showClosedYearsPanel && canViewClosedYears && (() => {
+        {showClosedYearsPanel && canManageYearLock && (() => {
           const CLOSED_YEARS_SECTIONS = SECTION_OPTIONS.filter((o) => o.value !== undefined).map((o) => ({
             key: o.value,
             label: o.label,
@@ -8360,12 +8355,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
                 <p className="text-sm text-stone-400 mb-6 mt-3">
                   A closed year disappears completely for every employee — from lists, filters, stats, and exports — in
-                  that section only. It stays fully visible here and to Admin, Owner, GM, and Accounts.
-                  {!canManageYearLock && (
-                    <span className="block mt-1 text-amber-600">
-                      You can view closed years but can't close or reopen one — ask your Accounts Manager to grant you the "Lock years" permission.
-                    </span>
-                  )}
+                  that section only, with no exceptions. Reopen it from here whenever you need to recall its records;
+                  it stays visible to everyone again until you close it once more.
                 </p>
                 {allYears.length === 0 ? (
                   <p className="text-sm text-stone-400 text-center py-6">No dated records yet.</p>
@@ -9403,7 +9394,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           )}
         </div>
 
-        {canViewClosedYears && activeSection === "accounts" && (
+        {canManageYearLock && activeSection === "accounts" && (
           <div className="flex mb-4">
             <button
               onClick={() => setShowClosedYearsPanel(true)}
