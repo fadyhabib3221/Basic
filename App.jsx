@@ -8038,9 +8038,9 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
               {isAccountingUser && (
                 <div className="flex items-center gap-1.5 sm:gap-2">
-                  <button onClick={() => setShowClosedYearsPanel(true)} title="Lock year"
-                    className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
-                    <Lock size={15} />
+                  <button onClick={() => setShowClosedYearsPanel(true)} title="Lock years"
+                    className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
+                    <Lock size={15} /> <span className="hidden sm:inline">Lock years</span>
                   </button>
                 </div>
               )}
