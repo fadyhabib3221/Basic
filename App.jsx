@@ -14,7 +14,7 @@ import {
   MapPin, Compass, Luggage, Anchor, Sparkles, Plus, Printer, SlidersHorizontal, ChevronDown,
   History, Bell, Send, Landmark, Receipt, PieChart, ArrowUpCircle, ArrowDownCircle,
   Banknote, HandCoins, ClipboardList, Globe, Key, Truck, Filter, Settings, Clock, Copy,
-  BarChart3, GripVertical, Unlock, Monitor,
+  BarChart3, GripVertical, Unlock, Monitor, CalendarOff,
 } from "lucide-react";
 
 // A small passport-shaped icon (booklet with a globe emblem) for the Visa section, drawn
@@ -8134,7 +8134,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               {canManageYearLock && (
                   <button onClick={() => setShowClosedYearsPanel(true)} title="Lock years"
                     className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
-                    <Lock size={15} /> <span className="hidden sm:inline">Lock years</span>
+                    <CalendarOff size={15} /> <span className="hidden sm:inline">Lock years</span>
                   </button>
               )}
               {canManageCompanies && (
