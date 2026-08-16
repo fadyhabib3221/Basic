@@ -8095,7 +8095,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
           <header className="relative flex flex-col gap-2 sm:gap-3 px-3 py-2.5 sm:px-4 sm:py-3 md:px-6 md:py-4">
             <div className="flex items-start justify-between flex-wrap gap-2 sm:gap-3">
-            <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 z-10 order-2 max-w-full">
+            <div className="flex flex-col items-end gap-1.5 sm:gap-2 z-10 order-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   onClick={() => {
                     setShowRequestsPanel(!showRequestsPanel);
@@ -8131,14 +8132,17 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-sm rounded-2xl p-2 flex items-center justify-center transition-colors">
                   <LogOut size={15} />
                 </button>
+              </div>
               {canManageYearLock && (
+                <div className="flex items-center gap-1.5 sm:gap-2">
                   <button onClick={() => setShowClosedYearsPanel(true)} title="Lock years"
                     className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
                     <CalendarOff size={15} /> <span className="hidden sm:inline">Lock years</span>
                   </button>
+                </div>
               )}
               {canManageCompanies && (
-                <>
+                <div className="flex flex-col items-end gap-1.5 sm:gap-2">
                   <button onClick={() => setShowManageCompanies(!showManageCompanies)} title="Manage Corporates"
                     className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
                     <Factory size={15} /> <span className="hidden sm:inline">Corporates</span>
@@ -8147,7 +8151,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     className="border border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold rounded-2xl px-2.5 sm:px-3 py-1.5 sm:p-2 flex items-center justify-center gap-1.5 transition-colors">
                     <Truck size={15} /> <span className="hidden sm:inline">Suppliers</span>
                   </button>
-                </>
+                </div>
               )}
               {/* "Management" flyout — groups the account/admin icon actions behind one
                   labeled button. Opens sideways (toward the left) with a small arrow
