@@ -89,6 +89,25 @@ const VISA_RULE_COLOR_CLASSES = {
   red: "bg-red-50 text-red-700 border-red-200",
 };
 
+// Flight status values returned by the AviationStack API, mapped to a display
+// label and a badge color for the flight lookup panel / ticket form.
+const FLIGHT_STATUS_LABELS = {
+  scheduled: "Scheduled",
+  active: "In the air",
+  landed: "Landed",
+  cancelled: "Cancelled",
+  incident: "Incident",
+  diverted: "Diverted",
+};
+const FLIGHT_STATUS_COLOR_CLASSES = {
+  scheduled: "bg-sky-50 text-sky-700 border-sky-200",
+  active: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  landed: "bg-stone-50 text-stone-700 border-stone-200",
+  cancelled: "bg-red-50 text-red-700 border-red-200",
+  incident: "bg-red-50 text-red-700 border-red-200",
+  diverted: "bg-amber-50 text-amber-700 border-amber-200",
+};
+
 // ---------- Password hashing ----------
 // Employee passwords are stored as a SALTED PBKDF2-SHA256 hash (100,000 iterations),
 // not a bare unsalted hash — a random per-password salt means two employees who pick
@@ -852,6 +871,9 @@ const getEmptyForm = () => ({
   // Trip type shown next to the multi-destination toggle: "oneWay" or "roundTrip".
   tripType: "oneWay",
   airline: "",
+  // Flight number (e.g. "MS985") — optional, used only to look up the flight via
+  // the AviationStack API and auto-fill From/To/Airline plus show live status.
+  flightNumber: "",
   date: todayDateStr(),
   netPrice: "",
   soldPrice: "",
@@ -2343,6 +2365,19 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Whether the Supplier field is in "type your own name" mode (chosen via the Other option).
   const [supplierOther, setSupplierOther] = useState(false);
 
+  // Flight lookup — looks up a flight number via the AviationStack API to
+  // auto-fill From/To/Airline on the ticket form and show live flight status.
+  // The API key is saved once (by any manager) into the same encrypted shared
+  // storage as the rest of the workspace's data, so every employee who logs in
+  // already has it — nobody has to paste their own key.
+  const [showFlightLookup, setShowFlightLookup] = useState(false);
+  const [flightApiKey, setFlightApiKey] = useState("");
+  const [flightApiKeyDraft, setFlightApiKeyDraft] = useState("");
+  const [flightLookupNumber, setFlightLookupNumber] = useState("");
+  const [flightLookupLoading, setFlightLookupLoading] = useState(false);
+  const [flightLookupError, setFlightLookupError] = useState("");
+  const [flightLookupResult, setFlightLookupResult] = useState(null);
+
   // ---------- Hotels ----------
   const [hotelBookings, setHotelBookings] = useState([]);
   const [hotelForm, setHotelForm] = useState(getEmptyHotelForm);
@@ -2379,9 +2414,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Visa requirement checker — looks up entry rules for a passport/destination
   // pair via the Travel Buddy Visa Requirements API (RapidAPI). The API key is
-  // kept in localStorage only (never sent anywhere but the API itself).
+  // saved once into the same encrypted shared storage as the rest of the
+  // workspace's data, so every employee who logs in already has it.
   const [showVisaChecker, setShowVisaChecker] = useState(false);
-  const [visaApiKey, setVisaApiKey] = useState(() => localStorage.getItem("visaApiKey") || "");
+  const [visaApiKey, setVisaApiKey] = useState("");
   const [visaApiKeyDraft, setVisaApiKeyDraft] = useState("");
   const [visaCheckPassport, setVisaCheckPassport] = useState("EG");
   const [visaCheckDestination, setVisaCheckDestination] = useState("");
@@ -2817,7 +2853,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
       inFlight = true;
       try {
-        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, employeesRes, suggestionsRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes] = await Promise.all([
+        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, flightApiKeyData, visaApiKeyData, employeesRes, suggestionsRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes] = await Promise.all([
           secureLoad("tickets:list", workspaceKey, null),
           secureLoad("tickets:hotels", workspaceKey, null),
           secureLoad("tickets:visas", workspaceKey, null),
@@ -2828,6 +2864,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           secureLoad("tickets:customerPayments", workspaceKey, null),
           secureLoad("tickets:treasuryAccounts", workspaceKey, null),
           secureLoad("tickets:treasuryEntries", workspaceKey, null),
+          secureLoad("tickets:flightApiKey", workspaceKey, null),
+          secureLoad("tickets:visaApiKey", workspaceKey, null),
           window.storage.get("tickets:employees", true).catch(() => null),
           window.storage.get("tickets:suggestions", true).catch(() => null),
           window.storage.get("tickets:license", true).catch(() => null),
@@ -2855,6 +2893,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         if (visasData) setVisaBookings(visasData);
         if (carsData) setCarBookings(carsData);
         if (filesData) setFiles(filesData);
+        // flightApiKeyData/visaApiKeyData can legitimately be "" (key removed) —
+        // unlike the collections above, only skip applying them when genuinely
+        // absent/locked (null).
+        if (flightApiKeyData !== null) setFlightApiKey(flightApiKeyData);
+        if (visaApiKeyData !== null) setVisaApiKey(visaApiKeyData);
         if (employeesRes && employeesRes.value) {
           try {
             setEmployees(JSON.parse(employeesRes.value));
@@ -4777,21 +4820,32 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     try { sessionStorage.setItem(LOCK_FLAG_KEY, "1"); } catch (e) {}
   };
 
-  // Visa requirement checker — saves the RapidAPI key locally, then calls the
-  // Travel Buddy Visa Requirements API for one passport/destination pair.
-  const handleSaveVisaApiKey = () => {
+  // Visa requirement checker — saves the RapidAPI key into the same encrypted
+  // shared storage as the rest of the workspace's data (so every employee gets
+  // it on login, nobody re-pastes their own), then calls the Travel Buddy Visa
+  // Requirements API for one passport/destination pair.
+  const handleSaveVisaApiKey = async () => {
     const key = visaApiKeyDraft.trim();
     if (!key) return;
-    localStorage.setItem("visaApiKey", key);
     setVisaApiKey(key);
     setVisaApiKeyDraft("");
+    try {
+      await secureSave("tickets:visaApiKey", workspaceKey, key, { requireKey: true });
+    } catch (e) {
+      setVisaCheckError("Couldn't save the key to shared storage — try again.");
+    }
   };
 
-  const handleClearVisaApiKey = () => {
-    localStorage.removeItem("visaApiKey");
+  const handleClearVisaApiKey = async () => {
+    if (!currentUser.isAdmin) return;
     setVisaApiKey("");
     setVisaCheckResult(null);
     setVisaCheckError("");
+    try {
+      await secureSave("tickets:visaApiKey", workspaceKey, "", { requireKey: true });
+    } catch (e) {
+      // Best-effort — the key still gets cleared locally either way.
+    }
   };
 
   const checkVisaRequirement = async () => {
@@ -4823,6 +4877,73 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     } finally {
       setVisaCheckLoading(false);
     }
+  };
+
+  // Flight lookup — saves the AviationStack key into the same encrypted shared
+  // storage as the rest of the workspace's data (so every employee gets it on
+  // login, nobody re-pastes their own), then calls the AviationStack flights
+  // endpoint for one flight number.
+  const handleSaveFlightApiKey = async () => {
+    const key = flightApiKeyDraft.trim();
+    if (!key) return;
+    setFlightApiKey(key);
+    setFlightApiKeyDraft("");
+    try {
+      await secureSave("tickets:flightApiKey", workspaceKey, key, { requireKey: true });
+    } catch (e) {
+      setFlightLookupError("Couldn't save the key to shared storage — try again.");
+    }
+  };
+
+  const handleClearFlightApiKey = async () => {
+    if (!currentUser.isAdmin) return;
+    setFlightApiKey("");
+    setFlightLookupResult(null);
+    setFlightLookupError("");
+    try {
+      await secureSave("tickets:flightApiKey", workspaceKey, "", { requireKey: true });
+    } catch (e) {
+      // Best-effort — the key still gets cleared locally either way.
+    }
+  };
+
+  // Shared lookup used by both the standalone "Check flight status" panel and the
+  // ticket form's inline flight-number lookup button. Returns the raw flight record
+  // (or null on failure) so callers can decide what to do with it.
+  const lookupFlight = async (flightNumberRaw) => {
+    const num = (flightNumberRaw || "").trim().toUpperCase().replace(/\s+/g, "");
+    if (!flightApiKey) { setFlightLookupError("Add an AviationStack API key first."); return null; }
+    if (!num) { setFlightLookupError("Enter a flight number."); return null; }
+    setFlightLookupLoading(true);
+    setFlightLookupError("");
+    setFlightLookupResult(null);
+    try {
+      const res = await fetch(`https://api.aviationstack.com/v1/flights?access_key=${encodeURIComponent(flightApiKey)}&flight_iata=${encodeURIComponent(num)}`);
+      const json = await res.json();
+      if (json.error) throw new Error(json.error.message || "Lookup failed.");
+      const flightData = Array.isArray(json.data) ? json.data[0] : null;
+      if (!flightData) throw new Error("No flight found for that number.");
+      setFlightLookupResult(flightData);
+      return flightData;
+    } catch (err) {
+      setFlightLookupError(err.message || "Something went wrong while checking.");
+      return null;
+    } finally {
+      setFlightLookupLoading(false);
+    }
+  };
+
+  // Triggered from the ticket form's own flight-number field — looks the flight up
+  // and auto-fills From/To/Airline on the ticket being edited from the result.
+  const handleFormFlightLookup = async () => {
+    const flightData = await lookupFlight(form.flightNumber);
+    if (!flightData) return;
+    setForm((prev) => ({
+      ...prev,
+      from: flightData.departure?.iata ? flightData.departure.iata.toUpperCase() : prev.from,
+      to: flightData.arrival?.iata ? flightData.arrival.iata.toUpperCase() : prev.to,
+      airline: flightData.airline?.iata ? flightData.airline.iata.toUpperCase() : prev.airline,
+    }));
   };
 
   // Only the password of the account that's currently signed in can dismiss the
@@ -9738,6 +9859,142 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           );
         })()}
 
+        {/* Button + modal to look up a flight's live status via AviationStack,
+            independent of the ticket form's own flight-number field. */}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <button
+            onClick={() => setShowFlightLookup(!showFlightLookup)}
+            className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-xl px-3 py-2 hover:bg-teal-50 flex items-center gap-1.5"
+          >
+            <Plane size={14} className="rotate-45" /> Check flight status
+          </button>
+        </div>
+
+        {showFlightLookup && (
+          <div
+            className="fixed inset-0 z-50 bg-black/40 flex items-start md:items-center justify-center p-4 overflow-y-auto"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowFlightLookup(false); }}
+          >
+            <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 w-full max-w-md my-8 md:my-0 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="font-semibold text-stone-900 flex items-center gap-2">
+                  <Plane size={16} className="text-teal-800 rotate-45" /> Flight status checker
+                </h2>
+                <button
+                  onClick={() => setShowFlightLookup(false)}
+                  className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <p className="text-xs text-stone-400 mb-4">Powered by AviationStack · live flight status and schedules</p>
+
+              {!flightApiKey ? (
+                <div className="bg-stone-50 border border-stone-200 rounded-xl p-3">
+                  <p className="text-xs text-stone-600 mb-2">
+                    Add your AviationStack API key to enable this (sign up at aviationstack.com — a free
+                    tier is available). Saved once here for the whole workspace — every signed-in employee
+                    gets it automatically, including the "Look up flight" button on the ticket form.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      className="flex-1 min-w-[200px] border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={flightApiKeyDraft}
+                      onChange={(e) => setFlightApiKeyDraft(e.target.value)}
+                      placeholder="Paste your AviationStack API key"
+                      type="password"
+                    />
+                    <button
+                      onClick={handleSaveFlightApiKey}
+                      className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110"
+                    >
+                      Save key
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-3 mb-3">
+                    <div>
+                      <label className="block text-xs text-stone-500 mb-1">Flight number</label>
+                      <input
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        value={flightLookupNumber}
+                        onChange={(e) => setFlightLookupNumber(e.target.value)}
+                        placeholder="e.g. MS985"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => lookupFlight(flightLookupNumber)}
+                        disabled={flightLookupLoading}
+                        className="flex-1 bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2.5 hover:brightness-110 disabled:opacity-60"
+                      >
+                        {flightLookupLoading ? "Checking..." : "Check status"}
+                      </button>
+                      {currentUser.isAdmin && (
+                        <button
+                          onClick={handleClearFlightApiKey}
+                          title="Remove saved API key"
+                          className="text-xs text-stone-400 hover:text-red-600 px-2 py-2 shrink-0"
+                        >
+                          Remove key
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {flightLookupError && (
+                    <p className="text-xs text-red-600 mb-2">{flightLookupError}</p>
+                  )}
+
+                  {flightLookupResult && (
+                    <div className="border border-stone-200 rounded-xl p-3 mt-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold bg-stone-50 text-stone-700 border border-stone-200 rounded-lg px-2.5 py-1">
+                          {flightLookupResult.airline?.name || "Unknown airline"} · {flightLookupResult.flight?.iata || flightLookupNumber}
+                        </span>
+                        <span className={`text-xs font-semibold border rounded-lg px-2.5 py-1 ${FLIGHT_STATUS_COLOR_CLASSES[flightLookupResult.flight_status] || "bg-stone-50 text-stone-700 border-stone-200"}`}>
+                          {FLIGHT_STATUS_LABELS[flightLookupResult.flight_status] || flightLookupResult.flight_status || "Unknown status"}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs border-t border-stone-100 pt-2 mt-1">
+                        <div>
+                          <p className="text-stone-400">Departure</p>
+                          <p className="font-semibold text-stone-800">{flightLookupResult.departure?.airport || "-"} ({flightLookupResult.departure?.iata || "-"})</p>
+                          {flightLookupResult.departure?.scheduled && (
+                            <p className="text-stone-500">{new Date(flightLookupResult.departure.scheduled).toLocaleString()}</p>
+                          )}
+                          {flightLookupResult.departure?.terminal && (
+                            <p className="text-stone-500">Terminal {flightLookupResult.departure.terminal}{flightLookupResult.departure.gate ? `, Gate ${flightLookupResult.departure.gate}` : ""}</p>
+                          )}
+                          {flightLookupResult.departure?.delay ? (
+                            <p className="text-amber-700">Delayed {flightLookupResult.departure.delay} min</p>
+                          ) : null}
+                        </div>
+                        <div>
+                          <p className="text-stone-400">Arrival</p>
+                          <p className="font-semibold text-stone-800">{flightLookupResult.arrival?.airport || "-"} ({flightLookupResult.arrival?.iata || "-"})</p>
+                          {flightLookupResult.arrival?.scheduled && (
+                            <p className="text-stone-500">{new Date(flightLookupResult.arrival.scheduled).toLocaleString()}</p>
+                          )}
+                          {flightLookupResult.arrival?.terminal && (
+                            <p className="text-stone-500">Terminal {flightLookupResult.arrival.terminal}{flightLookupResult.arrival.gate ? `, Gate ${flightLookupResult.arrival.gate}` : ""}</p>
+                          )}
+                          {flightLookupResult.arrival?.delay ? (
+                            <p className="text-amber-700">Delayed {flightLookupResult.arrival.delay} min</p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Entry form: hidden for accounting accounts (view-only + notes-only), and for
             anyone with neither add nor edit permission. Shown while editing an existing
             ticket as long as the person has edit access, even if add access is off. */}
@@ -10269,6 +10526,37 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 placeholder="MS"
                 list="airline-suggestions"
               />
+            </div>
+            <div>
+              <label className="text-xs text-stone-500 mb-1 flex items-center gap-1.5">
+                <span>Flight number</span>
+                {flightLookupResult?.flight?.iata?.toUpperCase() === (form.flightNumber || "").trim().toUpperCase() && flightLookupResult?.flight_status && (
+                  <span className={`border rounded px-1.5 py-0.5 text-[10px] font-semibold ${FLIGHT_STATUS_COLOR_CLASSES[flightLookupResult.flight_status] || "bg-stone-50 text-stone-700 border-stone-200"}`}>
+                    {FLIGHT_STATUS_LABELS[flightLookupResult.flight_status] || flightLookupResult.flight_status}
+                  </span>
+                )}
+              </label>
+              <div className="flex items-center gap-1">
+                <input
+                  className="w-20 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
+                  value={form.flightNumber}
+                  onChange={(e) => setForm({ ...form, flightNumber: e.target.value })}
+                  placeholder="MS985"
+                  title="Optional — look this up to auto-fill From/To/Airline and see live status"
+                />
+                <button
+                  type="button"
+                  onClick={handleFormFlightLookup}
+                  disabled={flightLookupLoading || !form.flightNumber.trim()}
+                  title={flightApiKey ? "Look up flight (AviationStack)" : "Add an AviationStack API key in \"Check flight status\" first"}
+                  className="shrink-0 border border-stone-300 rounded-lg p-1.5 text-stone-600 hover:bg-stone-50 disabled:opacity-40"
+                >
+                  <Search size={14} />
+                </button>
+              </div>
+              {flightLookupError && (
+                <p className="text-[10px] text-red-600 mt-1 max-w-[9rem]">{flightLookupError}</p>
+              )}
             </div>
           </div>
 
@@ -11865,6 +12153,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <p className="text-xs text-stone-600 mb-2">
                   Add a free RapidAPI key for the Travel Buddy Visa Requirements API to enable this
                   (sign up at rapidapi.com and subscribe to "Visa Requirement" — a free tier is available).
+                  Saved once here for the whole workspace — every signed-in employee gets it automatically.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <input
@@ -11918,13 +12207,15 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     >
                       {visaCheckLoading ? "Checking..." : "Check"}
                     </button>
-                    <button
-                      onClick={handleClearVisaApiKey}
-                      title="Remove saved API key"
-                      className="text-xs text-stone-400 hover:text-red-600 px-2 py-2 shrink-0"
-                    >
-                      Remove key
-                    </button>
+                    {currentUser.isAdmin && (
+                      <button
+                        onClick={handleClearVisaApiKey}
+                        title="Remove saved API key"
+                        className="text-xs text-stone-400 hover:text-red-600 px-2 py-2 shrink-0"
+                      >
+                        Remove key
+                      </button>
+                    )}
                   </div>
                 </div>
 
