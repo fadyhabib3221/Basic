@@ -44,6 +44,51 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+// ---------- Visa requirement checker ----------
+// Passport/destination country list (ISO 3166-1 alpha-2 codes) used by the
+// Visa requirement checker below. Covers the nationalities and destinations
+// most relevant to a travel agency's day-to-day bookings.
+const VISA_COUNTRIES = [
+  { code: "EG", name: "Egypt" }, { code: "SA", name: "Saudi Arabia" }, { code: "AE", name: "United Arab Emirates" },
+  { code: "KW", name: "Kuwait" }, { code: "QA", name: "Qatar" }, { code: "BH", name: "Bahrain" },
+  { code: "OM", name: "Oman" }, { code: "JO", name: "Jordan" }, { code: "LB", name: "Lebanon" },
+  { code: "SY", name: "Syria" }, { code: "IQ", name: "Iraq" }, { code: "YE", name: "Yemen" },
+  { code: "PS", name: "Palestinian Territories" }, { code: "LY", name: "Libya" }, { code: "TN", name: "Tunisia" },
+  { code: "DZ", name: "Algeria" }, { code: "MA", name: "Morocco" }, { code: "SD", name: "Sudan" },
+  { code: "SO", name: "Somalia" }, { code: "DJ", name: "Djibouti" }, { code: "MR", name: "Mauritania" },
+  { code: "TR", name: "Türkiye" }, { code: "IR", name: "Iran" }, { code: "PK", name: "Pakistan" },
+  { code: "IN", name: "India" }, { code: "BD", name: "Bangladesh" }, { code: "LK", name: "Sri Lanka" },
+  { code: "NP", name: "Nepal" }, { code: "PH", name: "Philippines" }, { code: "ID", name: "Indonesia" },
+  { code: "MY", name: "Malaysia" }, { code: "TH", name: "Thailand" }, { code: "VN", name: "Viet Nam" },
+  { code: "CN", name: "China" }, { code: "JP", name: "Japan" }, { code: "KR", name: "South Korea" },
+  { code: "GB", name: "United Kingdom" }, { code: "IE", name: "Ireland" }, { code: "FR", name: "France" },
+  { code: "DE", name: "Germany" }, { code: "IT", name: "Italy" }, { code: "ES", name: "Spain" },
+  { code: "PT", name: "Portugal" }, { code: "NL", name: "Netherlands" }, { code: "BE", name: "Belgium" },
+  { code: "CH", name: "Switzerland" }, { code: "AT", name: "Austria" }, { code: "GR", name: "Greece" },
+  { code: "CY", name: "Cyprus" }, { code: "MT", name: "Malta" }, { code: "SE", name: "Sweden" },
+  { code: "NO", name: "Norway" }, { code: "DK", name: "Denmark" }, { code: "FI", name: "Finland" },
+  { code: "PL", name: "Poland" }, { code: "CZ", name: "Czech Republic" }, { code: "RO", name: "Romania" },
+  { code: "RU", name: "Russian Federation" }, { code: "UA", name: "Ukraine" }, { code: "GE", name: "Georgia" },
+  { code: "AM", name: "Armenia" }, { code: "AZ", name: "Azerbaijan" }, { code: "KZ", name: "Kazakhstan" },
+  { code: "US", name: "United States of America" }, { code: "CA", name: "Canada" }, { code: "MX", name: "Mexico" },
+  { code: "BR", name: "Brazil" }, { code: "AR", name: "Argentina" },
+  { code: "AU", name: "Australia" }, { code: "NZ", name: "New Zealand" },
+  { code: "ZA", name: "South Africa" }, { code: "NG", name: "Nigeria" }, { code: "KE", name: "Kenya" },
+  { code: "ET", name: "Ethiopia" }, { code: "GH", name: "Ghana" },
+  { code: "SG", name: "Singapore" }, { code: "HK", name: "Hong Kong" }, { code: "GE", name: "Georgia" },
+  { code: "MV", name: "Maldives" }, { code: "SC", name: "Seychelles" }, { code: "MU", name: "Mauritius" },
+  { code: "GE", name: "Georgia" },
+];
+// Dedupe (a couple of codes were listed twice above for readability while typing).
+const VISA_COUNTRY_LIST = Array.from(new Map(VISA_COUNTRIES.map((c) => [c.code, c])).values())
+  .sort((a, b) => a.name.localeCompare(b.name));
+const VISA_RULE_COLOR_CLASSES = {
+  green: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  blue: "bg-sky-50 text-sky-700 border-sky-200",
+  yellow: "bg-amber-50 text-amber-700 border-amber-200",
+  red: "bg-red-50 text-red-700 border-red-200",
+};
+
 // ---------- Password hashing ----------
 // Employee passwords are stored as a SALTED PBKDF2-SHA256 hash (100,000 iterations),
 // not a bare unsalted hash — a random per-password salt means two employees who pick
@@ -2331,6 +2376,18 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // are independent lists.
   const [showAddVisaSupplierPanel, setShowAddVisaSupplierPanel] = useState(false);
   const [newVisaSupplierDraft, setNewVisaSupplierDraft] = useState("");
+
+  // Visa requirement checker — looks up entry rules for a passport/destination
+  // pair via the Travel Buddy Visa Requirements API (RapidAPI). The API key is
+  // kept in localStorage only (never sent anywhere but the API itself).
+  const [showVisaChecker, setShowVisaChecker] = useState(false);
+  const [visaApiKey, setVisaApiKey] = useState(() => localStorage.getItem("visaApiKey") || "");
+  const [visaApiKeyDraft, setVisaApiKeyDraft] = useState("");
+  const [visaCheckPassport, setVisaCheckPassport] = useState("EG");
+  const [visaCheckDestination, setVisaCheckDestination] = useState("");
+  const [visaCheckLoading, setVisaCheckLoading] = useState(false);
+  const [visaCheckError, setVisaCheckError] = useState("");
+  const [visaCheckResult, setVisaCheckResult] = useState(null);
 
   // ---------- Transfers (Cars) ----------
   const [carBookings, setCarBookings] = useState([]);
@@ -4718,6 +4775,54 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setShowLockPassword(false);
     setIsLocked(true);
     try { sessionStorage.setItem(LOCK_FLAG_KEY, "1"); } catch (e) {}
+  };
+
+  // Visa requirement checker — saves the RapidAPI key locally, then calls the
+  // Travel Buddy Visa Requirements API for one passport/destination pair.
+  const handleSaveVisaApiKey = () => {
+    const key = visaApiKeyDraft.trim();
+    if (!key) return;
+    localStorage.setItem("visaApiKey", key);
+    setVisaApiKey(key);
+    setVisaApiKeyDraft("");
+  };
+
+  const handleClearVisaApiKey = () => {
+    localStorage.removeItem("visaApiKey");
+    setVisaApiKey("");
+    setVisaCheckResult(null);
+    setVisaCheckError("");
+  };
+
+  const checkVisaRequirement = async () => {
+    if (!visaApiKey) { setVisaCheckError("Add a RapidAPI key first."); return; }
+    if (!visaCheckDestination) { setVisaCheckError("Choose a destination."); return; }
+    if (visaCheckPassport === visaCheckDestination) { setVisaCheckError("Passport and destination can't be the same country."); return; }
+    setVisaCheckLoading(true);
+    setVisaCheckError("");
+    setVisaCheckResult(null);
+    try {
+      const res = await fetch("https://visa-requirement.p.rapidapi.com/v2/visa/check", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-rapidapi-host": "visa-requirement.p.rapidapi.com",
+          "x-rapidapi-key": visaApiKey,
+        },
+        body: JSON.stringify({ passport: visaCheckPassport, destination: visaCheckDestination }),
+      });
+      if (!res.ok) {
+        if (res.status === 401) throw new Error("Invalid API key.");
+        if (res.status === 422) throw new Error("Couldn't find that passport/destination pair.");
+        throw new Error(`Lookup failed (${res.status}).`);
+      }
+      const json = await res.json();
+      setVisaCheckResult(json.data || null);
+    } catch (err) {
+      setVisaCheckError(err.message || "Something went wrong while checking.");
+    } finally {
+      setVisaCheckLoading(false);
+    }
   };
 
   // Only the password of the account that's currently signed in can dismiss the
@@ -11728,7 +11833,122 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           >
             <Plus size={14} /> Add supplier
           </button>
+          <button
+            onClick={() => setShowVisaChecker(!showVisaChecker)}
+            className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-xl px-3 py-2 hover:bg-teal-50 flex items-center gap-1.5"
+          >
+            <Globe size={14} /> Check visa requirement
+          </button>
         </div>
+
+        {showVisaChecker && (
+          <div className="bg-white border border-stone-200 rounded-2xl p-4 mb-4">
+            <h3 className="text-sm font-bold text-stone-700 mb-1">Visa requirement checker</h3>
+            <p className="text-xs text-stone-400 mb-3">Powered by Travel Buddy · data refreshed daily</p>
+
+            {!visaApiKey ? (
+              <div className="bg-stone-50 border border-stone-200 rounded-xl p-3">
+                <p className="text-xs text-stone-600 mb-2">
+                  Add a free RapidAPI key for the Travel Buddy Visa Requirements API to enable this
+                  (sign up at rapidapi.com and subscribe to "Visa Requirement" — a free tier is available).
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    className="flex-1 min-w-[200px] border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={visaApiKeyDraft}
+                    onChange={(e) => setVisaApiKeyDraft(e.target.value)}
+                    placeholder="Paste your RapidAPI key"
+                    type="password"
+                  />
+                  <button
+                    onClick={handleSaveVisaApiKey}
+                    className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110"
+                  >
+                    Save key
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-end gap-2 mb-3">
+                  <div>
+                    <label className="block text-xs text-stone-500 mb-1">Passport</label>
+                    <select
+                      value={visaCheckPassport}
+                      onChange={(e) => setVisaCheckPassport(e.target.value)}
+                      className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    >
+                      {VISA_COUNTRY_LIST.map((c) => (
+                        <option key={c.code} value={c.code}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-stone-500 mb-1">Destination</label>
+                    <select
+                      value={visaCheckDestination}
+                      onChange={(e) => setVisaCheckDestination(e.target.value)}
+                      className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    >
+                      <option value="">Select destination</option>
+                      {VISA_COUNTRY_LIST.map((c) => (
+                        <option key={c.code} value={c.code}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={checkVisaRequirement}
+                    disabled={visaCheckLoading}
+                    className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110 disabled:opacity-60"
+                  >
+                    {visaCheckLoading ? "Checking..." : "Check"}
+                  </button>
+                  <button
+                    onClick={handleClearVisaApiKey}
+                    title="Remove saved API key"
+                    className="text-xs text-stone-400 hover:text-red-600 px-2 py-2"
+                  >
+                    Remove key
+                  </button>
+                </div>
+
+                {visaCheckError && (
+                  <p className="text-xs text-red-600 mb-2">{visaCheckError}</p>
+                )}
+
+                {visaCheckResult && (
+                  <div className="border border-stone-200 rounded-xl p-3 mt-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className={`text-xs font-semibold border rounded-lg px-2.5 py-1 ${VISA_RULE_COLOR_CLASSES[visaCheckResult.visa_rules?.primary_rule?.color] || "bg-stone-50 text-stone-700 border-stone-200"}`}>
+                        {visaCheckResult.visa_rules?.primary_rule?.name}
+                        {visaCheckResult.visa_rules?.secondary_rule?.name ? ` / ${visaCheckResult.visa_rules.secondary_rule.name}` : ""}
+                        {(visaCheckResult.visa_rules?.primary_rule?.duration || visaCheckResult.visa_rules?.secondary_rule?.duration)
+                          ? ` — ${visaCheckResult.visa_rules?.primary_rule?.duration || visaCheckResult.visa_rules?.secondary_rule?.duration}`
+                          : ""}
+                      </span>
+                    </div>
+                    {visaCheckResult.mandatory_registration && (
+                      <p className="text-xs text-amber-700 mb-1">
+                        Mandatory registration: {visaCheckResult.mandatory_registration.name}
+                        {visaCheckResult.mandatory_registration.link && (
+                          <> · <a href={visaCheckResult.mandatory_registration.link} target="_blank" rel="noreferrer" className="underline">official link</a></>
+                        )}
+                      </p>
+                    )}
+                    {visaCheckResult.visa_rules?.secondary_rule?.link && (
+                      <p className="text-xs text-stone-500 mb-1">
+                        <a href={visaCheckResult.visa_rules.secondary_rule.link} target="_blank" rel="noreferrer" className="underline">Apply / official link</a>
+                      </p>
+                    )}
+                    {visaCheckResult.destination?.passport_validity && (
+                      <p className="text-xs text-stone-500">Passport validity required: {visaCheckResult.destination.passport_validity}</p>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {showAddVisaSupplierPanel && (
           <div className="bg-white border border-stone-200 rounded-2xl p-4 mb-4">
