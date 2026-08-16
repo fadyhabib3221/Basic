@@ -11842,9 +11842,23 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         </div>
 
         {showVisaChecker && (
-          <div className="bg-white border border-stone-200 rounded-2xl p-4 mb-4">
-            <h3 className="text-sm font-bold text-stone-700 mb-1">Visa requirement checker</h3>
-            <p className="text-xs text-stone-400 mb-3">Powered by Travel Buddy · data refreshed daily</p>
+          <div
+            className="fixed inset-0 z-50 bg-black/40 flex items-start md:items-center justify-center p-4 overflow-y-auto"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowVisaChecker(false); }}
+          >
+            <div className="bg-white rounded-2xl border border-stone-200 p-4 md:p-5 w-full max-w-md my-8 md:my-0 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="font-semibold text-stone-900 flex items-center gap-2">
+                  <Globe size={16} className="text-teal-800" /> Visa requirement checker
+                </h2>
+                <button
+                  onClick={() => setShowVisaChecker(false)}
+                  className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <p className="text-xs text-stone-400 mb-4">Powered by Travel Buddy · data refreshed daily</p>
 
             {!visaApiKey ? (
               <div className="bg-stone-50 border border-stone-200 rounded-xl p-3">
@@ -11870,13 +11884,13 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             ) : (
               <>
-                <div className="flex flex-wrap items-end gap-2 mb-3">
+                <div className="flex flex-col gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-stone-500 mb-1">Passport</label>
                     <select
                       value={visaCheckPassport}
                       onChange={(e) => setVisaCheckPassport(e.target.value)}
-                      className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                     >
                       {VISA_COUNTRY_LIST.map((c) => (
                         <option key={c.code} value={c.code}>{c.name}</option>
@@ -11888,7 +11902,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <select
                       value={visaCheckDestination}
                       onChange={(e) => setVisaCheckDestination(e.target.value)}
-                      className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                     >
                       <option value="">Select destination</option>
                       {VISA_COUNTRY_LIST.map((c) => (
@@ -11896,20 +11910,22 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       ))}
                     </select>
                   </div>
-                  <button
-                    onClick={checkVisaRequirement}
-                    disabled={visaCheckLoading}
-                    className="bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2 hover:brightness-110 disabled:opacity-60"
-                  >
-                    {visaCheckLoading ? "Checking..." : "Check"}
-                  </button>
-                  <button
-                    onClick={handleClearVisaApiKey}
-                    title="Remove saved API key"
-                    className="text-xs text-stone-400 hover:text-red-600 px-2 py-2"
-                  >
-                    Remove key
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={checkVisaRequirement}
+                      disabled={visaCheckLoading}
+                      className="flex-1 bg-gradient-to-b from-teal-700 to-teal-900 text-white text-sm font-semibold rounded-xl px-4 py-2.5 hover:brightness-110 disabled:opacity-60"
+                    >
+                      {visaCheckLoading ? "Checking..." : "Check"}
+                    </button>
+                    <button
+                      onClick={handleClearVisaApiKey}
+                      title="Remove saved API key"
+                      className="text-xs text-stone-400 hover:text-red-600 px-2 py-2 shrink-0"
+                    >
+                      Remove key
+                    </button>
+                  </div>
                 </div>
 
                 {visaCheckError && (
@@ -11947,6 +11963,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 )}
               </>
             )}
+            </div>
           </div>
         )}
 
