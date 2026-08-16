@@ -11933,31 +11933,60 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 )}
 
                 {visaCheckResult && (
-                  <div className="border border-stone-200 rounded-xl p-3 mt-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <div className="border border-stone-200 rounded-xl p-3 mt-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className={`text-xs font-semibold border rounded-lg px-2.5 py-1 ${VISA_RULE_COLOR_CLASSES[visaCheckResult.visa_rules?.primary_rule?.color] || "bg-stone-50 text-stone-700 border-stone-200"}`}>
-                        {visaCheckResult.visa_rules?.primary_rule?.name}
-                        {visaCheckResult.visa_rules?.secondary_rule?.name ? ` / ${visaCheckResult.visa_rules.secondary_rule.name}` : ""}
-                        {(visaCheckResult.visa_rules?.primary_rule?.duration || visaCheckResult.visa_rules?.secondary_rule?.duration)
-                          ? ` — ${visaCheckResult.visa_rules?.primary_rule?.duration || visaCheckResult.visa_rules?.secondary_rule?.duration}`
-                          : ""}
+                        {visaCheckResult.visa_rules?.primary_rule?.name || "No primary rule returned"}
+                        {visaCheckResult.visa_rules?.primary_rule?.duration ? ` — ${visaCheckResult.visa_rules.primary_rule.duration}` : ""}
                       </span>
+                      {visaCheckResult.visa_rules?.secondary_rule?.name && (
+                        <span className={`text-xs font-semibold border rounded-lg px-2.5 py-1 ${VISA_RULE_COLOR_CLASSES[visaCheckResult.visa_rules.secondary_rule.color] || "bg-stone-50 text-stone-700 border-stone-200"}`}>
+                          {visaCheckResult.visa_rules.secondary_rule.name}
+                          {visaCheckResult.visa_rules.secondary_rule.duration ? ` — ${visaCheckResult.visa_rules.secondary_rule.duration}` : ""}
+                        </span>
+                      )}
                     </div>
+
+                    {visaCheckResult.visa_rules?.secondary_rule?.link && (
+                      <p className="text-xs text-stone-600">
+                        <a href={visaCheckResult.visa_rules.secondary_rule.link} target="_blank" rel="noreferrer" className="underline text-teal-800">Apply / official visa link</a>
+                      </p>
+                    )}
+
+                    {visaCheckResult.visa_rules?.exception_rule?.full_text && (
+                      <p className="text-xs text-stone-600 bg-stone-50 rounded-lg p-2">
+                        <span className="font-semibold">Exception: </span>{visaCheckResult.visa_rules.exception_rule.full_text}
+                      </p>
+                    )}
+
                     {visaCheckResult.mandatory_registration && (
-                      <p className="text-xs text-amber-700 mb-1">
-                        Mandatory registration: {visaCheckResult.mandatory_registration.name}
+                      <p className="text-xs text-amber-700">
+                        <span className="font-semibold">Mandatory registration:</span> {visaCheckResult.mandatory_registration.name}
                         {visaCheckResult.mandatory_registration.link && (
                           <> · <a href={visaCheckResult.mandatory_registration.link} target="_blank" rel="noreferrer" className="underline">official link</a></>
                         )}
                       </p>
                     )}
-                    {visaCheckResult.visa_rules?.secondary_rule?.link && (
-                      <p className="text-xs text-stone-500 mb-1">
-                        <a href={visaCheckResult.visa_rules.secondary_rule.link} target="_blank" rel="noreferrer" className="underline">Apply / official link</a>
-                      </p>
-                    )}
+
                     {visaCheckResult.destination?.passport_validity && (
-                      <p className="text-xs text-stone-500">Passport validity required: {visaCheckResult.destination.passport_validity}</p>
+                      <p className="text-xs text-stone-600"><span className="font-semibold">Passport validity required:</span> {visaCheckResult.destination.passport_validity}</p>
+                    )}
+
+                    {/* Destination reference details — capital, currency, phone code, timezone, etc. */}
+                    {visaCheckResult.destination && (
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-stone-500 border-t border-stone-100 pt-2 mt-1">
+                        {visaCheckResult.destination.capital && <p><span className="text-stone-400">Capital:</span> {visaCheckResult.destination.capital}</p>}
+                        {visaCheckResult.destination.continent && <p><span className="text-stone-400">Continent:</span> {visaCheckResult.destination.continent}</p>}
+                        {visaCheckResult.destination.currency && <p><span className="text-stone-400">Currency:</span> {visaCheckResult.destination.currency} ({visaCheckResult.destination.currency_code})</p>}
+                        {visaCheckResult.destination.phone_code && <p><span className="text-stone-400">Phone code:</span> {visaCheckResult.destination.phone_code}</p>}
+                        {visaCheckResult.destination.timezone && <p><span className="text-stone-400">Timezone:</span> {visaCheckResult.destination.timezone}</p>}
+                        {visaCheckResult.destination.population && <p><span className="text-stone-400">Population:</span> {Number(visaCheckResult.destination.population).toLocaleString()}</p>}
+                      </div>
+                    )}
+                    {visaCheckResult.destination?.embassy_url && (
+                      <p className="text-xs">
+                        <a href={visaCheckResult.destination.embassy_url} target="_blank" rel="noreferrer" className="underline text-teal-800">Embassy info</a>
+                      </p>
                     )}
                   </div>
                 )}
