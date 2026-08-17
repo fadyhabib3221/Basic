@@ -2675,19 +2675,23 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     {
       id: "kiwitaxi-search",
       title: "Search & book a transfer",
+      icon: Truck,
       src: "https://tpscr.com/content?currency=USD&trs=563109&shmarker=765452.765452&language=en&theme=6&powered_by=true&campaign_id=1&promo_id=1486",
     },
     {
       id: "localrent-search",
       title: "Search & book a car rental",
+      icon: Car,
       src: "https://tpscr.com/content?trs=563109&shmarker=765452.765452&locale=en&powered_by=true&campaign_id=87&promo_id=2466",
     },
     {
       id: "esim-search",
       title: "Search & buy an eSIM",
+      icon: Wifi,
       src: "https://tpscr.com/content?trs=563109&shmarker=765452.765452&locale=en&powered_by=true&color_button=%23f2685f&color_focused=%23f2685f&secondary=%23FFFFFF&dark=%2311100f&light=%23FFFFFF&special=%23C4C4C4&border_radius=30&plain=false&no_labels=true&promo_id=8588&campaign_id=541",
     },
   ];
+  const [activeActivityWidgetId, setActiveActivityWidgetId] = useState(null);
 
   const WEGOTRIP_SUB_ID = "563109";
 
@@ -13909,12 +13913,47 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
         {activeSection === "activities" && (
           <>
-            {ACTIVITY_WIDGETS.map((w) => (
-              <div key={w.id} className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
-                <h2 className="font-semibold text-stone-900 text-sm mb-3">{w.title}</h2>
-                <TravelpayoutsWidget src={w.src} />
+            {activeActivityWidgetId ? (
+              (() => {
+                const w = ACTIVITY_WIDGETS.find((x) => x.id === activeActivityWidgetId);
+                if (!w) return null;
+                return (
+                  <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
+                    <button
+                      onClick={() => setActiveActivityWidgetId(null)}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-stone-500 hover:text-stone-700 mb-3"
+                    >
+                      <ArrowLeft size={14} /> Back
+                    </button>
+                    <h2 className="font-semibold text-stone-900 text-sm mb-3">{w.title}</h2>
+                    <TravelpayoutsWidget src={w.src} />
+                  </div>
+                );
+              })()
+            ) : (
+              <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
+                <h2 className="font-semibold text-stone-900 text-sm mb-3">Quick search</h2>
+                <div className="flex flex-wrap gap-4">
+                  {ACTIVITY_WIDGETS.map((w) => {
+                    const Icon = w.icon;
+                    return (
+                      <button
+                        key={w.id}
+                        onClick={() => setActiveActivityWidgetId(w.id)}
+                        className="flex flex-col items-center gap-1.5 w-20 group"
+                      >
+                        <span className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-800 flex items-center justify-center group-hover:bg-teal-100 transition-colors">
+                          <Icon size={22} />
+                        </span>
+                        <span className="text-[11px] font-medium text-stone-600 text-center leading-tight">
+                          {w.title}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            ))}
+            )}
 
             {ACTIVITY_QUICK_LINKS.length > 0 && (
               <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
