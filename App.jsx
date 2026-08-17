@@ -685,6 +685,58 @@ const TravelpayoutsWidget = ({ src, minHeight = 320 }) => {
   return <div ref={containerRef} style={{ minHeight }} />;
 };
 
+// Renders the Discover Cars car-rental search widget. Same idea as TravelpayoutsWidget,
+// but this one ships as a <script> tag with a long list of data-* attributes (colors,
+// copy, layout toggles) instead of just a src — so we recreate the script element with
+// every attribute and append it into a container div on mount.
+const DISCOVERCARS_SCRIPT_ATTRS = {
+  id: "dchwidget",
+  "data-dev-env": "com",
+  "data-location": "",
+  "data-lang": "en",
+  "data-utm-source": "23ea55cb",
+  "data-utm-medium": "widget",
+  "data-aff-code": "a_aid",
+  "data-autocomplete": "on",
+  "data-style-submit-bg-color": "#007ac2",
+  "data-style-submit-font-color": "#ffffff",
+  "data-style-form-bg-color": "#fcd34d",
+  "data-style-form-font-color": "#000000",
+  "data-style-submit-text": "Search now",
+  "data-style-title-color": "#000000",
+  "data-title-text": "Search and compare car rentals and save up to 70%!",
+  "data-style_rounded_corners": "on",
+  "data-localization_currency_box": "on",
+  "data-layout_benefits": "on",
+  "data-layout_description": "on",
+  "data-layout_description_text": "We've selected the best deals from our car rental partners.",
+  "data-layout_logo_style": "on dark",
+  "data-layout_powered_by": "on",
+  "data-layout_style_form_bg_color": "#007ac2",
+  "data-layout_title": "on",
+  "data-layout_top_logo": "on",
+  "data-layout_supplier_logos": "on",
+};
+const DiscoverCarsWidget = ({ minHeight = 320 }) => {
+  const containerRef = useRef(null);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    container.innerHTML = "";
+    const script = document.createElement("script");
+    script.src = "https://www.discovercars.com/widget.js?v1";
+    script.async = true;
+    Object.entries(DISCOVERCARS_SCRIPT_ATTRS).forEach(([key, value]) => {
+      script.setAttribute(key, value);
+    });
+    container.appendChild(script);
+    return () => {
+      container.innerHTML = "";
+    };
+  }, []);
+  return <div ref={containerRef} style={{ minHeight }} />;
+};
+
 // Saved companies were originally plain strings; this reads the name whether an entry
 // is still a legacy string or the newer { name, taxNumber, commercialReg, phones } record.
 const companyName = (c) => (typeof c === "string" ? c : (c && c.name) || "");
@@ -2695,6 +2747,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       title: "Partner offer", // placeholder — tell me which service this is (campaign_id=10) and I'll rename it
       icon: Sparkles,
       src: "https://tpscr.com/content?trs=563109&shmarker=765452.765452&locale=en&width=100&height=100&powered_by=true&campaign_id=10&promo_id=2082",
+    },
+    {
+      id: "discovercars-search",
+      title: "Discover Cars",
+      icon: Luggage,
+      isDiscoverCars: true, // rendered via <DiscoverCarsWidget /> below instead of TravelpayoutsWidget (different script format)
     },
   ];
   const [activeActivityWidgetId, setActiveActivityWidgetId] = useState(null);
@@ -13932,7 +13990,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <ArrowLeft size={14} /> Back
                     </button>
                     <h2 className="font-semibold text-stone-900 text-sm mb-3">{w.title}</h2>
-                    <TravelpayoutsWidget src={w.src} />
+                    {w.isDiscoverCars ? <DiscoverCarsWidget /> : <TravelpayoutsWidget src={w.src} />}
                   </div>
                 );
               })()
