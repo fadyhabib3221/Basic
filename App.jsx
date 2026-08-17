@@ -3327,7 +3327,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // loaded". Requests are routed through a small proxy (see wegotrip-proxy-worker.js)
   // that calls WeGoTrip server-side and adds CORS. Deploy that worker (instructions
   // in the file) and paste its URL below.
-  const WEGOTRIP_PROXY_BASE = "https://YOUR-WORKER-SUBDOMAIN.workers.dev"; // <-- replace after deploying the proxy
+  const WEGOTRIP_PROXY_BASE = "https://wegotrip-proxy.fadyhabib3221.workers.dev";
   const WEGOTRIP_API = `${WEGOTRIP_PROXY_BASE}/api/v2`;
   const [activityCitiesCache, setActivityCitiesCache] = useState(null); // null = not loaded yet
 
