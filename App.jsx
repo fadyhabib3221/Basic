@@ -661,9 +661,35 @@ const TimeSelect = ({ value, onChange }) => {
   );
 };
 
+// Renders a Travelpayouts widget (transfer/flight/hotel search forms, etc.). These widgets
+// are delivered as a raw <script src="..."> snippet from the Travelpayouts dashboard — a
+// <script> tag dropped directly into JSX never executes, so instead we create the script
+// element ourselves and append it into a container div on mount. The Travelpayouts script
+// then renders its own widget markup inside that div. minHeight avoids a layout jump while
+// the widget's async script is still loading.
+const TravelpayoutsWidget = ({ src, minHeight = 320 }) => {
+  const containerRef = useRef(null);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !src) return;
+    container.innerHTML = "";
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.charset = "utf-8";
+    container.appendChild(script);
+    return () => {
+      container.innerHTML = "";
+    };
+  }, [src]);
+  return <div ref={containerRef} style={{ minHeight }} />;
+};
+
 // Saved companies were originally plain strings; this reads the name whether an entry
 // is still a legacy string or the newer { name, taxNumber, commercialReg, phones } record.
 const companyName = (c) => (typeof c === "string" ? c : (c && c.name) || "");
+
+
 
 const emptyCompanyDraft = { name: "", taxNumber: "", commercialReg: "", phones: "" };
 
@@ -2642,6 +2668,17 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // links. WEGOTRIP_SUB_ID is this account's Travelpayouts Project ID (the "trs"
   // value), which WeGoTrip's own docs say to send back as sub_id on every outbound
   // link so bookings get credited correctly.
+  // Interactive Travelpayouts widget (search form), as opposed to the simple redirect
+  // links in ACTIVITY_QUICK_LINKS above — this one actually renders a live transfer
+  // search box inline in the Activities tab instead of just linking out.
+  const ACTIVITY_WIDGETS = [
+    {
+      id: "kiwitaxi-search",
+      title: "Search & book a transfer",
+      src: "https://tpscr.com/content?currency=USD&trs=563109&shmarker=765452.765452&language=en&theme=6&powered_by=true&campaign_id=1&promo_id=1486",
+    },
+  ];
+
   const WEGOTRIP_SUB_ID = "563109";
 
   // Quick-link partner resources shown at the top of the Activities tab — for
@@ -13862,6 +13899,13 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
         {activeSection === "activities" && (
           <>
+            {ACTIVITY_WIDGETS.map((w) => (
+              <div key={w.id} className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
+                <h2 className="font-semibold text-stone-900 text-sm mb-3">{w.title}</h2>
+                <TravelpayoutsWidget src={w.src} />
+              </div>
+            ))}
+
             {ACTIVITY_QUICK_LINKS.length > 0 && (
               <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
                 <h2 className="font-semibold text-stone-900 text-sm mb-1">Other resources</h2>
