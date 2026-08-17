@@ -685,58 +685,6 @@ const TravelpayoutsWidget = ({ src, minHeight = 320 }) => {
   return <div ref={containerRef} style={{ minHeight }} />;
 };
 
-// Renders the Discover Cars car-rental search widget. Same idea as TravelpayoutsWidget,
-// but this one ships as a <script> tag with a long list of data-* attributes (colors,
-// copy, layout toggles) instead of just a src — so we recreate the script element with
-// every attribute and append it into a container div on mount.
-const DISCOVERCARS_SCRIPT_ATTRS = {
-  id: "dchwidget",
-  "data-dev-env": "com",
-  "data-location": "",
-  "data-lang": "en",
-  "data-utm-source": "23ea55cb",
-  "data-utm-medium": "widget",
-  "data-aff-code": "a_aid",
-  "data-autocomplete": "on",
-  "data-style-submit-bg-color": "#007ac2",
-  "data-style-submit-font-color": "#ffffff",
-  "data-style-form-bg-color": "#fcd34d",
-  "data-style-form-font-color": "#000000",
-  "data-style-submit-text": "Search now",
-  "data-style-title-color": "#000000",
-  "data-title-text": "Search and compare car rentals and save up to 70%!",
-  "data-style_rounded_corners": "on",
-  "data-localization_currency_box": "on",
-  "data-layout_benefits": "on",
-  "data-layout_description": "on",
-  "data-layout_description_text": "We've selected the best deals from our car rental partners.",
-  "data-layout_logo_style": "on dark",
-  "data-layout_powered_by": "on",
-  "data-layout_style_form_bg_color": "#007ac2",
-  "data-layout_title": "on",
-  "data-layout_top_logo": "on",
-  "data-layout_supplier_logos": "on",
-};
-const DiscoverCarsWidget = ({ minHeight = 320 }) => {
-  const containerRef = useRef(null);
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    container.innerHTML = "";
-    const script = document.createElement("script");
-    script.src = "https://www.discovercars.com/widget.js?v1";
-    script.async = true;
-    Object.entries(DISCOVERCARS_SCRIPT_ATTRS).forEach(([key, value]) => {
-      script.setAttribute(key, value);
-    });
-    container.appendChild(script);
-    return () => {
-      container.innerHTML = "";
-    };
-  }, []);
-  return <div ref={containerRef} style={{ minHeight }} />;
-};
-
 // Saved companies were originally plain strings; this reads the name whether an entry
 // is still a legacy string or the newer { name, taxNumber, commercialReg, phones } record.
 const companyName = (c) => (typeof c === "string" ? c : (c && c.name) || "");
@@ -2720,9 +2668,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // links. WEGOTRIP_SUB_ID is this account's Travelpayouts Project ID (the "trs"
   // value), which WeGoTrip's own docs say to send back as sub_id on every outbound
   // link so bookings get credited correctly.
-  // Interactive Travelpayouts widget (search form), as opposed to the simple redirect
-  // links in ACTIVITY_QUICK_LINKS above — this one actually renders a live transfer
-  // search box inline in the Activities tab instead of just linking out.
+  // Interactive Travelpayouts widgets (search forms) shown in the Activities tab.
   const ACTIVITY_WIDGETS = [
     {
       id: "kiwitaxi-search",
@@ -2748,47 +2694,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       icon: Sparkles,
       src: "https://tpscr.com/content?trs=563109&shmarker=765452.765452&locale=en&width=100&height=100&powered_by=true&campaign_id=10&promo_id=2082",
     },
-    {
-      id: "discovercars-search",
-      title: "Discover Cars",
-      icon: Luggage,
-      isDiscoverCars: true, // rendered via <DiscoverCarsWidget /> below instead of TravelpayoutsWidget (different script format)
-    },
   ];
   const [activeActivityWidgetId, setActiveActivityWidgetId] = useState(null);
 
   const WEGOTRIP_SUB_ID = "563109";
 
-  // Quick-link partner resources shown at the top of the Activities tab — for
-  // affiliate offers that aren't part of the WeGoTrip catalog (e.g. eSIM data
-  // plans). Each entry just needs a label, short blurb, and the ready-made
-  // affiliate URL; add more objects here to show more cards.
-  const ACTIVITY_QUICK_LINKS = [
-    {
-      id: "yesim",
-      name: "Yesim eSIM",
-      blurb: "Travel data eSIMs — instant activation, no physical SIM needed.",
-      url: "https://tp.media/r?campaign_id=224&marker=765452&p=5998&sub_id=563109&trs=563109&u=https%3A%2F%2Fyesim.tech",
-    },
-    {
-      id: "kiwitaxi",
-      name: "Kiwitaxi",
-      blurb: "Airport transfers and private rides — book a car in advance worldwide.",
-      url: "https://tp.media/r?campaign_id=1&marker=765452&p=647&sub_id=563109&trs=563109&u=https%3A%2F%2Fkiwitaxi.com",
-    },
-    {
-      id: "localrent",
-      name: "Localrent",
-      blurb: "Car rentals worldwide — compare and book self-drive cars in advance.",
-      url: "https://tp.media/r?campaign_id=87&marker=765452&p=2043&sub_id=563109&trs=563109&u=https%3A%2F%2Flocalrent.com%2Fen",
-    },
-    {
-      id: "welcomepickups",
-      name: "Welcome Pickups",
-      blurb: "Private airport transfers with a local, English-speaking driver.",
-      url: "https://tp.media/r?campaign_id=627&marker=765452&p=8919&sub_id=563109&trs=563109&u=https%3A%2F%2Fwelcomepickups.com",
-    },
-  ];
   const [activityCityQuery, setActivityCityQuery] = useState("");
   const [activityCityResults, setActivityCityResults] = useState([]);
   const [activityCitySearching, setActivityCitySearching] = useState(false);
@@ -13990,7 +13900,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <ArrowLeft size={14} /> Back
                     </button>
                     <h2 className="font-semibold text-stone-900 text-sm mb-3">{w.title}</h2>
-                    {w.isDiscoverCars ? <DiscoverCarsWidget /> : <TravelpayoutsWidget src={w.src} />}
+                    <TravelpayoutsWidget src={w.src} />
                   </div>
                 );
               })()
@@ -14015,40 +13925,6 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       </button>
                     );
                   })}
-                </div>
-              </div>
-            )}
-
-            {ACTIVITY_QUICK_LINKS.length > 0 && (
-              <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
-                <h2 className="font-semibold text-stone-900 text-sm mb-1">Other resources</h2>
-                <p className="text-xs text-stone-500 mb-3">
-                  Ready booking links for partner services outside the WeGoTrip catalog.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {ACTIVITY_QUICK_LINKS.map((r) => (
-                    <div key={r.id} className="border border-stone-200 rounded-xl p-3 flex flex-col gap-1.5">
-                      <p className="text-sm font-semibold text-stone-800">{r.name}</p>
-                      <p className="text-xs text-stone-500 flex-1">{r.blurb}</p>
-                      <div className="flex items-center gap-1.5 pt-1">
-                        <a
-                          href={r.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs font-semibold text-white bg-teal-800 rounded-lg px-2.5 py-1.5 hover:bg-teal-900"
-                        >
-                          Book / open link
-                        </a>
-                        <button
-                          onClick={() => navigator.clipboard && navigator.clipboard.writeText(r.url)}
-                          title="Copy booking link"
-                          className="text-xs font-semibold text-stone-500 border border-stone-300 rounded-lg px-2 py-1.5 hover:bg-stone-50"
-                        >
-                          <Copy size={13} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
