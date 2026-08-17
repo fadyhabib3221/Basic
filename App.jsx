@@ -3321,7 +3321,14 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // https://gist.github.com/4eRTuk/6b6a4b06b5f6d4ce90973e1931052991
   // City search is done against the documented /cities/ list (fetched once and cached)
   // rather than the loosely-documented /search/ endpoint, so the response shape is known.
-  const WEGOTRIP_API = "https://app.wegotrip.com/api/v2";
+  //
+  // IMPORTANT: WeGoTrip's API doesn't send CORS headers, so the browser can't call
+  // app.wegotrip.com directly — that's why the Activities tab was showing "0 cities
+  // loaded". Requests are routed through a small proxy (see wegotrip-proxy-worker.js)
+  // that calls WeGoTrip server-side and adds CORS. Deploy that worker (instructions
+  // in the file) and paste its URL below.
+  const WEGOTRIP_PROXY_BASE = "https://YOUR-WORKER-SUBDOMAIN.workers.dev"; // <-- replace after deploying the proxy
+  const WEGOTRIP_API = `${WEGOTRIP_PROXY_BASE}/api/v2`;
   const [activityCitiesCache, setActivityCitiesCache] = useState(null); // null = not loaded yet
 
   const loadActivityCitiesCache = async () => {
