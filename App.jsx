@@ -13848,7 +13848,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
                 <h2 className="font-semibold text-stone-900 text-sm mb-1">Other resources</h2>
                 <p className="text-xs text-stone-500 mb-3">
-                  Ready affiliate links for partner services outside the WeGoTrip catalog.
+                  Ready booking links for partner services outside the WeGoTrip catalog.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {ACTIVITY_QUICK_LINKS.map((r) => (
@@ -13866,7 +13866,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         </a>
                         <button
                           onClick={() => navigator.clipboard && navigator.clipboard.writeText(r.url)}
-                          title="Copy affiliate link"
+                          title="Copy booking link"
                           className="text-xs font-semibold text-stone-500 border border-stone-300 rounded-lg px-2 py-1.5 hover:bg-stone-50"
                         >
                           <Copy size={13} />
@@ -13882,7 +13882,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <h2 className="font-semibold text-stone-900 text-sm mb-1">Activities & tours</h2>
               <p className="text-xs text-stone-500 mb-3">
                 Search a destination city to see bookable tours, tickets, and audio guides. Every "Book / copy link"
-                button gives you a ready affiliate link — bookings made through it are tracked to this account.
+                button gives you a ready booking link — bookings made through it are tracked to this account.
               </p>
               <div className="relative max-w-md">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
@@ -13960,7 +13960,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             </a>
                             <button
                               onClick={() => navigator.clipboard && navigator.clipboard.writeText(activityProductLink(p))}
-                              title="Copy affiliate link"
+                              title="Copy booking link"
                               className="text-xs font-semibold text-stone-500 border border-stone-300 rounded-lg px-2 py-1.5 hover:bg-stone-50"
                             >
                               <Copy size={13} />
