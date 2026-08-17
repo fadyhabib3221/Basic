@@ -11159,7 +11159,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         {selectedCompany.length === 0 && companyBreakdown.length > 0 && (
           <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden mt-6">
             <div className="px-4 py-3 border-b border-stone-100">
-              <h2 className="font-semibold text-stone-900 text-sm">Companies and their customers</h2>
+              <h2 className="font-semibold text-stone-900 text-sm">Corporates and their customers</h2>
             </div>
             <div className="divide-y divide-stone-100">
               {companyBreakdown.map((c) => (
@@ -11168,7 +11168,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <div className="flex items-center gap-2">
                       <Building2 size={16} className="text-stone-400" />
                       <button
-                        onClick={() => setSelectedCompany(c.name)}
+                        onClick={() => setSelectedCompany([c.name])}
                         className="font-medium text-stone-800 hover:text-teal-800 hover:underline text-sm"
                       >
                         {c.name}
