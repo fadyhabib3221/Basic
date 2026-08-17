@@ -2680,7 +2680,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     {
       id: "localrent-search",
       title: "Search & book a car rental",
-      src: "https://tpscr.com/content?trs=563109&shmarker=765452.765452&locale=en&country=153&city=68511&powered_by=true&campaign_id=87&promo_id=2466",
+      src: "https://tpscr.com/content?trs=563109&shmarker=765452.765452&locale=en&powered_by=true&campaign_id=87&promo_id=2466",
     },
   ];
 
