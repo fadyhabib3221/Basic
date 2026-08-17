@@ -1233,7 +1233,7 @@ const EMPLOYEE_ROLES = [
 // The five original grades are explicitly all-section (sections + sectionPerms reset to
 // full access) so switching *back* to one of them from a section-limited grade restores
 // every section, rather than leaving the old restriction in place.
-const ALL_SECTIONS_ON = { flights: true, hotels: true, visa: true, cars: true, files: true };
+const ALL_SECTIONS_ON = { flights: true, hotels: true, visa: true, cars: true, files: true, activities: true };
 const ROLE_PRESETS = {
   supervisor: { canViewAll: true, canAdd: true, canEdit: true, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
   employee: { canViewAll: false, canAdd: true, canEdit: false, canDelete: false, isAccounting: false, canManageCompanies: false, isOwner: false, sections: { ...ALL_SECTIONS_ON }, sectionPerms: {} },
@@ -1283,7 +1283,7 @@ const SECTION_OPTIONS = [
   { value: "cars", label: "Transportation", icon: Car },
   { value: "files", label: "Files", icon: FileText },
 ];
-const DEFAULT_SECTIONS = { flights: true, hotels: true, visa: true, cars: true, files: true };
+const DEFAULT_SECTIONS = { flights: true, hotels: true, visa: true, cars: true, files: true, activities: true };
 // Merges an employee's stored section toggles over the all-allowed defaults, so a
 // legacy record with no "sections" field at all (or missing individual keys) still
 // resolves to full access rather than blocking every section.
@@ -2637,6 +2637,21 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [fileSelectedCompany, setFileSelectedCompany] = useState([]);
   const [fileSelectedEmployee, setFileSelectedEmployee] = useState([]);
 
+  // Activities tab — browses WeGoTrip's public catalog (audio tours / attraction
+  // tickets) via their partner API and turns results into ready-to-share affiliate
+  // links. WEGOTRIP_SUB_ID is this account's Travelpayouts Project ID (the "trs"
+  // value), which WeGoTrip's own docs say to send back as sub_id on every outbound
+  // link so bookings get credited correctly.
+  const WEGOTRIP_SUB_ID = "563109";
+  const [activityCityQuery, setActivityCityQuery] = useState("");
+  const [activityCityResults, setActivityCityResults] = useState([]);
+  const [activityCitySearching, setActivityCitySearching] = useState(false);
+  const [activityCityError, setActivityCityError] = useState("");
+  const [activitySelectedCity, setActivitySelectedCity] = useState(null); // { id, name, slug }
+  const [activityProducts, setActivityProducts] = useState([]);
+  const [activityProductsLoading, setActivityProductsLoading] = useState(false);
+  const [activityProductsError, setActivityProductsError] = useState("");
+
   // Every value ever entered (companies, customers, airlines, cities) is kept here so it
   // can be offered as an autocomplete suggestion later, even if the original ticket is deleted.
   const [suggestions, setSuggestions] = useState({ companies: [], customers: [], airlines: [], cities: [], suppliers: [], flightSuppliers: [...SUPPLIERS], hotelNames: [], visaSuppliers: [], carSuppliers: [] });
@@ -2653,7 +2668,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (typeof window === "undefined") return "flights";
     const hash = window.location.hash.replace(/^#/, "");
     const candidate = hash.startsWith("section=") ? hash.slice(8) : hash;
-    const valid = ["flights", "hotels", "visa", "cars", "files", "accounts", "analysis"];
+    const valid = ["flights", "hotels", "visa", "cars", "files", "activities", "accounts", "analysis"];
     return valid.includes(candidate) ? candidate : "flights";
   });
 
@@ -2668,7 +2683,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Browser Back/Forward now represents actual application navigation.
   const navigationReadyRef = useRef(false);
   const navigateToSection = (section, { replace = false } = {}) => {
-    const valid = ["flights", "hotels", "visa", "cars", "files", "accounts", "analysis"];
+    const valid = ["flights", "hotels", "visa", "cars", "files", "activities", "accounts", "analysis"];
     if (!valid.includes(section)) return;
     setActiveSectionState(section);
     if (typeof window === "undefined") return;
@@ -2684,7 +2699,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const hash = window.location.hash.replace(/^#/, "");
       const hashSection = hash.startsWith("section=") ? decodeURIComponent(hash.slice(8)) : hash;
       const section = stateSection || hashSection;
-      const valid = ["flights", "hotels", "visa", "cars", "files", "accounts", "analysis"];
+      const valid = ["flights", "hotels", "visa", "cars", "files", "activities", "accounts", "analysis"];
       if (valid.includes(section)) setActiveSectionState(section);
     };
     window.addEventListener("popstate", handlePopState);
@@ -3052,6 +3067,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
     if (activeSection === "cars") return "Transportation";
     if (activeSection === "files") return "Files";
+    if (activeSection === "activities") return "Browsing activities";
     if (activeSection === "accounts") return "Accounts";
     // Flights (the default section)
     if (viewingTicketId) {
@@ -3299,6 +3315,81 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     } finally {
       setFetchingUsdRate(false);
     }
+  };
+
+  // WeGoTrip search/product lookups — public partner API, no auth token needed. Docs:
+  // https://gist.github.com/4eRTuk/6b6a4b06b5f6d4ce90973e1931052991
+  // City search is done against the documented /cities/ list (fetched once and cached)
+  // rather than the loosely-documented /search/ endpoint, so the response shape is known.
+  const WEGOTRIP_API = "https://app.wegotrip.com/api/v2";
+  const [activityCitiesCache, setActivityCitiesCache] = useState(null); // null = not loaded yet
+
+  const loadActivityCitiesCache = async () => {
+    try {
+      const res = await fetch(`${WEGOTRIP_API}/cities/?popular=true&page=1`, {
+        headers: { "Accept-Language": "en" },
+      });
+      if (!res.ok) throw new Error("Request failed");
+      const data = await res.json();
+      const results = (data && data.data && data.data.results) || [];
+      setActivityCitiesCache(results);
+      return results;
+    } catch (e) {
+      setActivityCitiesCache([]);
+      return [];
+    }
+  };
+
+  const searchActivityCities = async (query) => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setActivityCityResults([]);
+      setActivityCityError("");
+      return;
+    }
+    setActivityCitySearching(true);
+    setActivityCityError("");
+    try {
+      const list = activityCitiesCache === null ? await loadActivityCitiesCache() : activityCitiesCache;
+      const matches = list.filter((c) => (c.name || "").toLowerCase().includes(q.toLowerCase()));
+      setActivityCityResults(matches);
+      if (!matches.length) setActivityCityError("No match in the popular-cities list — try another spelling");
+    } catch (e) {
+      setActivityCityError("Couldn't reach WeGoTrip — try again");
+      setActivityCityResults([]);
+    } finally {
+      setActivityCitySearching(false);
+    }
+  };
+
+  const loadActivityProducts = async (city) => {
+    setActivitySelectedCity(city);
+    setActivityProducts([]);
+    setActivityProductsError("");
+    setActivityProductsLoading(true);
+    try {
+      const res = await fetch(
+        `${WEGOTRIP_API}/products/popular/?lang=en&city=${encodeURIComponent(city.id)}&currency=USD`,
+        { headers: { "Accept-Language": "en" } }
+      );
+      if (!res.ok) throw new Error("Request failed");
+      const data = await res.json();
+      const results = (data && data.data && data.data.results) || [];
+      setActivityProducts(results);
+      if (!results.length) setActivityProductsError("No activities found for this city right now");
+    } catch (e) {
+      setActivityProductsError("Couldn't load activities — try again");
+    } finally {
+      setActivityProductsLoading(false);
+    }
+  };
+
+  // Builds the affiliate deep link for a product's page on wegotrip.com, per WeGoTrip's
+  // partner docs (sub_id = this Travelpayouts Project's trs value, WEGOTRIP_SUB_ID above).
+  const activityProductLink = (product) => {
+    const city = (product.city && product.city.slug) || (activitySelectedCity && activitySelectedCity.slug) || "";
+    const cityId = (product.city && product.city.id) || (activitySelectedCity && activitySelectedCity.id) || "";
+    return `https://wegotrip.com/${city}-d${cityId}/${product.slug}-p${product.id}/?sub_id=${WEGOTRIP_SUB_ID}`;
   };
 
   // IATA balance — same shared-storage pattern as the USD rate above, so every signed-in
@@ -9697,6 +9788,17 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <FileText size={22} />
             Files
           </button>
+          <button
+            onClick={() => navigateToSection("activities")}
+            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl border text-xs font-semibold transition-colors ${
+              activeSection === "activities"
+                ? "bg-gradient-to-b from-teal-700 to-teal-900 text-white border-teal-800 shadow-md shadow-teal-800/30 ring-1 ring-inset ring-amber-600/50"
+                : "bg-white text-stone-500 border-stone-200 hover:border-amber-600 hover:text-teal-800 hover:shadow-sm"
+            }`}
+          >
+            <Compass size={22} />
+            Activities
+          </button>
           {canAccessAccounts && (
           <button
             onClick={() => navigateToSection("accounts")}
@@ -13703,6 +13805,106 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
           </div>
+        )}
+
+        {activeSection === "activities" && (
+          <>
+            <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
+              <h2 className="font-semibold text-stone-900 text-sm mb-1">Activities & tours</h2>
+              <p className="text-xs text-stone-500 mb-3">
+                Search a destination city to see bookable tours, tickets, and audio guides. Every "Book / copy link"
+                button gives you a ready affiliate link — bookings made through it are tracked to this account.
+              </p>
+              <div className="relative max-w-md">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input
+                  value={activityCityQuery}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setActivityCityQuery(v);
+                    searchActivityCities(v);
+                  }}
+                  placeholder="Search a city (e.g. Paris, Rome, Cairo)…"
+                  className="w-full border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                />
+              </div>
+              {activityCitySearching && <p className="text-xs text-stone-400 mt-2">Searching…</p>}
+              {activityCityError && <p className="text-xs text-red-500 mt-2">{activityCityError}</p>}
+              {activityCityResults.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {activityCityResults.slice(0, 12).map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => loadActivityProducts(c)}
+                      className={`flex items-center gap-1.5 text-xs font-medium rounded-full px-3 py-1.5 border transition-colors ${
+                        activitySelectedCity && activitySelectedCity.id === c.id
+                          ? "bg-teal-700 border-teal-700 text-white"
+                          : "bg-white border-stone-300 text-stone-600 hover:bg-stone-50"
+                      }`}
+                    >
+                      <MapPin size={12} /> {c.name || c.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {activitySelectedCity && (
+              <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+                <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
+                  <h2 className="font-semibold text-stone-900 text-sm">
+                    Activities in {activitySelectedCity.name || activitySelectedCity.title}
+                  </h2>
+                  {activityProductsLoading && <span className="text-xs text-stone-400">Loading…</span>}
+                </div>
+                {activityProductsError && (
+                  <p className="text-xs text-red-500 px-4 py-3">{activityProductsError}</p>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+                  {activityProducts.map((p) => (
+                    <div key={p.id} className="border border-stone-200 rounded-xl overflow-hidden flex flex-col">
+                      {p.preview && (
+                        <img src={p.preview} alt={p.title} className="w-full h-32 object-cover" loading="lazy" />
+                      )}
+                      <div className="p-3 flex flex-col gap-1.5 flex-1">
+                        <p className="text-sm font-semibold text-stone-800 leading-snug">{p.title}</p>
+                        <p className="text-xs text-stone-500">
+                          {p.category}{p.duration ? ` · ${p.duration}` : ""}
+                        </p>
+                        {!!p.rating && (
+                          <p className="text-xs text-amber-600 font-medium">
+                            ★ {p.rating} ({p.reviewsCount || 0})
+                          </p>
+                        )}
+                        <div className="mt-auto flex items-center justify-between pt-2">
+                          <span className="text-sm font-bold text-stone-800">
+                            {p.currency}{p.price}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <a
+                              href={activityProductLink(p)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs font-semibold text-white bg-teal-800 rounded-lg px-2.5 py-1.5 hover:bg-teal-900"
+                            >
+                              Book
+                            </a>
+                            <button
+                              onClick={() => navigator.clipboard && navigator.clipboard.writeText(activityProductLink(p))}
+                              title="Copy affiliate link"
+                              className="text-xs font-semibold text-stone-500 border border-stone-300 rounded-lg px-2 py-1.5 hover:bg-stone-50"
+                            >
+                              <Copy size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {activeSection === "files" && (
