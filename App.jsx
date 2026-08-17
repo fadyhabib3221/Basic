@@ -2699,6 +2699,23 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const WEGOTRIP_SUB_ID = "563109";
 
+  // Example item from a different affiliate feed (AWIN/Viator-style product data — not
+  // WeGoTrip). Shown as a one-off "Featured deal" card in the Activities tab so we have a
+  // sample of what a product from this feed looks like once wired up. Swap/remove once a
+  // real feed integration replaces it.
+  const FEATURED_ACTIVITY_DEAL = {
+    name: "Weaving Tradition & Taste: Tokyo Kimono, Tea & Food Tour",
+    image: "https://media.tacdn.com/media/attractions-splice-spp-360x240/15/42/6d/63.jpg",
+    description:
+      "Experience Japanese tradition in Asakusa: visit Sensoji temple, wear a kimono, ride an old Japanese-style car, and enjoy freshly made sushi with a local guide, starting from Kaminarimon Gate.",
+    price: "246.5",
+    currency: "USD",
+    promo: "Save 15.00%!",
+    location: "Tokyo, Japan",
+    category: "Day Trips",
+    link: "https://www.viator.com/tours/Tokyo/Weaving-Tradition-and-Taste-Tokyo-Kimono-Tea-and-Food-Tour/d334-100234P1",
+  };
+
   const [activityCityQuery, setActivityCityQuery] = useState("");
   const [activityCityResults, setActivityCityResults] = useState([]);
   const [activityCitySearching, setActivityCitySearching] = useState(false);
@@ -13928,6 +13945,59 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 </div>
               </div>
             )}
+
+            <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden mb-4">
+              <div className="px-4 pt-3">
+                <h2 className="font-semibold text-stone-900 text-sm mb-1">Featured deal</h2>
+                <p className="text-xs text-stone-500 mb-3">Example item from a partner feed.</p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 px-4 pb-4">
+                <img
+                  src={FEATURED_ACTIVITY_DEAL.image}
+                  alt={FEATURED_ACTIVITY_DEAL.name}
+                  className="w-full sm:w-40 h-40 sm:h-auto object-cover rounded-xl flex-shrink-0"
+                  loading="lazy"
+                />
+                <div className="flex flex-col gap-1.5 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-stone-800 leading-snug">
+                      {FEATURED_ACTIVITY_DEAL.name}
+                    </p>
+                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5 whitespace-nowrap">
+                      {FEATURED_ACTIVITY_DEAL.promo}
+                    </span>
+                  </div>
+                  <p className="text-xs text-stone-500">
+                    {FEATURED_ACTIVITY_DEAL.location} · {FEATURED_ACTIVITY_DEAL.category}
+                  </p>
+                  <p className="text-xs text-stone-500 line-clamp-3">
+                    {FEATURED_ACTIVITY_DEAL.description}
+                  </p>
+                  <div className="mt-auto flex items-center justify-between pt-2">
+                    <span className="text-sm font-bold text-stone-800">
+                      {FEATURED_ACTIVITY_DEAL.currency} {FEATURED_ACTIVITY_DEAL.price}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <a
+                        href={FEATURED_ACTIVITY_DEAL.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-semibold text-white bg-teal-800 rounded-lg px-2.5 py-1.5 hover:bg-teal-900"
+                      >
+                        Book
+                      </a>
+                      <button
+                        onClick={() => navigator.clipboard && navigator.clipboard.writeText(FEATURED_ACTIVITY_DEAL.link)}
+                        title="Copy booking link"
+                        className="text-xs font-semibold text-stone-500 border border-stone-300 rounded-lg px-2 py-1.5 hover:bg-stone-50"
+                      >
+                        <Copy size={13} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
               <h2 className="font-semibold text-stone-900 text-sm mb-1">Activities & tours</h2>
