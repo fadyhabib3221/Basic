@@ -2655,6 +2655,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       blurb: "Travel data eSIMs — instant activation, no physical SIM needed.",
       url: "https://tp.media/r?campaign_id=224&marker=765452&p=5998&sub_id=563109&trs=563109&u=https%3A%2F%2Fyesim.tech",
     },
+    {
+      id: "kiwitaxi",
+      name: "Kiwitaxi",
+      blurb: "Airport transfers and private rides — book a car in advance worldwide.",
+      url: "https://tp.media/r?campaign_id=1&marker=765452&p=647&sub_id=563109&trs=563109&u=https%3A%2F%2Fkiwitaxi.com",
+    },
   ];
   const [activityCityQuery, setActivityCityQuery] = useState("");
   const [activityCityResults, setActivityCityResults] = useState([]);
