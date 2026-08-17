@@ -2682,6 +2682,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       title: "Search & book a car rental",
       src: "https://tpscr.com/content?trs=563109&shmarker=765452.765452&locale=en&powered_by=true&campaign_id=87&promo_id=2466",
     },
+    {
+      id: "esim-search",
+      title: "Search & buy an eSIM",
+      src: "https://tpscr.com/content?trs=563109&shmarker=765452.765452&locale=en&powered_by=true&color_button=%23f2685f&color_focused=%23f2685f&secondary=%23FFFFFF&dark=%2311100f&light=%23FFFFFF&special=%23C4C4C4&border_radius=30&plain=false&no_labels=true&promo_id=8588&campaign_id=541",
+    },
   ];
 
   const WEGOTRIP_SUB_ID = "563109";
