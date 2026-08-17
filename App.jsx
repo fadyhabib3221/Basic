@@ -2690,6 +2690,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       icon: Wifi,
       src: "https://tpscr.com/content?trs=563109&shmarker=765452.765452&locale=en&powered_by=true&color_button=%23f2685f&color_focused=%23f2685f&secondary=%23FFFFFF&dark=%2311100f&light=%23FFFFFF&special=%23C4C4C4&border_radius=30&plain=false&no_labels=true&promo_id=8588&campaign_id=541",
     },
+    {
+      id: "partner-offer-10",
+      title: "Partner offer", // placeholder — tell me which service this is (campaign_id=10) and I'll rename it
+      icon: Sparkles,
+      src: "https://tpscr.com/content?trs=563109&shmarker=765452.765452&locale=en&width=100&height=100&powered_by=true&campaign_id=10&promo_id=2082",
+    },
   ];
   const [activeActivityWidgetId, setActiveActivityWidgetId] = useState(null);
 
