@@ -3326,14 +3326,22 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const loadActivityCitiesCache = async () => {
     try {
-      const res = await fetch(`${WEGOTRIP_API}/cities/?popular=true&page=1`, {
-        headers: { "Accept-Language": "en" },
-      });
-      if (!res.ok) throw new Error("Request failed");
-      const data = await res.json();
-      const results = (data && data.data && data.data.results) || [];
-      setActivityCitiesCache(results);
-      return results;
+      let all = [];
+      let page = 1;
+      let totalPages = 1;
+      do {
+        const res = await fetch(`${WEGOTRIP_API}/cities/?popular=true&page=${page}`, {
+          headers: { "Accept-Language": "en" },
+        });
+        if (!res.ok) throw new Error("Request failed");
+        const data = await res.json();
+        const block = (data && data.data) || {};
+        all = all.concat(block.results || []);
+        totalPages = block.pages || 1;
+        page += 1;
+      } while (page <= totalPages && page <= 20); // hard cap so a bad response can't loop forever
+      setActivityCitiesCache(all);
+      return all;
     } catch (e) {
       setActivityCitiesCache([]);
       return [];
