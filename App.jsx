@@ -2677,6 +2677,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       title: "Search & book a transfer",
       src: "https://tpscr.com/content?currency=USD&trs=563109&shmarker=765452.765452&language=en&theme=6&powered_by=true&campaign_id=1&promo_id=1486",
     },
+    {
+      id: "localrent-search",
+      title: "Search & book a car rental",
+      src: "https://tpscr.com/content?trs=563109&shmarker=765452.765452&locale=en&country=153&city=68511&powered_by=true&campaign_id=87&promo_id=2466",
+    },
   ];
 
   const WEGOTRIP_SUB_ID = "563109";
