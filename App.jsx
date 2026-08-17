@@ -2643,6 +2643,19 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // value), which WeGoTrip's own docs say to send back as sub_id on every outbound
   // link so bookings get credited correctly.
   const WEGOTRIP_SUB_ID = "563109";
+
+  // Quick-link partner resources shown at the top of the Activities tab — for
+  // affiliate offers that aren't part of the WeGoTrip catalog (e.g. eSIM data
+  // plans). Each entry just needs a label, short blurb, and the ready-made
+  // affiliate URL; add more objects here to show more cards.
+  const ACTIVITY_QUICK_LINKS = [
+    {
+      id: "yesim",
+      name: "Yesim eSIM",
+      blurb: "Travel data eSIMs — instant activation, no physical SIM needed.",
+      url: "https://tp.media/r?campaign_id=224&marker=765452&p=5998&sub_id=563109&trs=563109&u=https%3A%2F%2Fyesim.tech",
+    },
+  ];
   const [activityCityQuery, setActivityCityQuery] = useState("");
   const [activityCityResults, setActivityCityResults] = useState([]);
   const [activityCitySearching, setActivityCitySearching] = useState(false);
@@ -13831,6 +13844,40 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
         {activeSection === "activities" && (
           <>
+            {ACTIVITY_QUICK_LINKS.length > 0 && (
+              <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
+                <h2 className="font-semibold text-stone-900 text-sm mb-1">Other resources</h2>
+                <p className="text-xs text-stone-500 mb-3">
+                  Ready affiliate links for partner services outside the WeGoTrip catalog.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {ACTIVITY_QUICK_LINKS.map((r) => (
+                    <div key={r.id} className="border border-stone-200 rounded-xl p-3 flex flex-col gap-1.5">
+                      <p className="text-sm font-semibold text-stone-800">{r.name}</p>
+                      <p className="text-xs text-stone-500 flex-1">{r.blurb}</p>
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <a
+                          href={r.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-semibold text-white bg-teal-800 rounded-lg px-2.5 py-1.5 hover:bg-teal-900"
+                        >
+                          Book / open link
+                        </a>
+                        <button
+                          onClick={() => navigator.clipboard && navigator.clipboard.writeText(r.url)}
+                          title="Copy affiliate link"
+                          className="text-xs font-semibold text-stone-500 border border-stone-300 rounded-lg px-2 py-1.5 hover:bg-stone-50"
+                        >
+                          <Copy size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
               <h2 className="font-semibold text-stone-900 text-sm mb-1">Activities & tours</h2>
               <p className="text-xs text-stone-500 mb-3">
