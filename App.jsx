@@ -2661,6 +2661,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       blurb: "Airport transfers and private rides — book a car in advance worldwide.",
       url: "https://tp.media/r?campaign_id=1&marker=765452&p=647&sub_id=563109&trs=563109&u=https%3A%2F%2Fkiwitaxi.com",
     },
+    {
+      id: "localrent",
+      name: "Localrent",
+      blurb: "Car rentals worldwide — compare and book self-drive cars in advance.",
+      url: "https://tp.media/r?campaign_id=87&marker=765452&p=2043&sub_id=563109&trs=563109&u=https%3A%2F%2Flocalrent.com%2Fen",
+    },
   ];
   const [activityCityQuery, setActivityCityQuery] = useState("");
   const [activityCityResults, setActivityCityResults] = useState([]);
