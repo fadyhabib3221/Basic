@@ -3335,9 +3335,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         });
         if (!res.ok) throw new Error("Request failed");
         const data = await res.json();
-        const block = (data && data.data) || {};
-        all = all.concat(block.results || []);
-        totalPages = block.pages || 1;
+        // Response shape isn't fully pinned down in WeGoTrip's docs for this endpoint, so
+        // accept a few plausible nestings rather than assuming just one.
+        const block = (data && data.data) || data || {};
+        const pageResults = block.results || (Array.isArray(block) ? block : []) || (Array.isArray(data) ? data : []);
+        all = all.concat(pageResults);
+        totalPages = block.pages || block.total_pages || 1;
         page += 1;
       } while (page <= totalPages && page <= 20); // hard cap so a bad response can't loop forever
       setActivityCitiesCache(all);
@@ -3359,9 +3362,13 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setActivityCityError("");
     try {
       const list = activityCitiesCache === null ? await loadActivityCitiesCache() : activityCitiesCache;
-      const matches = list.filter((c) => (c.name || "").toLowerCase().includes(q.toLowerCase()));
+      const matches = list.filter((c) => ((c && (c.name || c.title)) || "").toLowerCase().includes(q.toLowerCase()));
       setActivityCityResults(matches);
-      if (!matches.length) setActivityCityError("No match in the popular-cities list — try another spelling");
+      if (!matches.length) {
+        setActivityCityError(
+          `No match (${list.length} cities loaded from WeGoTrip) — try another spelling`
+        );
+      }
     } catch (e) {
       setActivityCityError("Couldn't reach WeGoTrip — try again");
       setActivityCityResults([]);
