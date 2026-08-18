@@ -9687,14 +9687,14 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 {(suggestions.flightSuppliers || []).length === 0 ? (
                   <p className="text-xs text-stone-400">No suppliers saved yet</p>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 max-w-xs overflow-hidden">
                     {(suggestions.flightSuppliers || []).map((s) => (
-                      <span key={s} className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700">
+                      <div key={s} className="flex items-center justify-between px-3 py-2 text-sm text-stone-700 bg-white">
                         {s}
                         <button onClick={() => handleDeleteFlightSupplierName(s)} className="text-red-500 hover:text-red-700">
-                          <Trash2 size={12} />
+                          <Trash2 size={14} />
                         </button>
-                      </span>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -9721,14 +9721,14 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 {suggestions.suppliers.length === 0 ? (
                   <p className="text-xs text-stone-400">No suppliers saved yet</p>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 max-w-xs overflow-hidden">
                     {suggestions.suppliers.map((s) => (
-                      <span key={s} className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700">
+                      <div key={s} className="flex items-center justify-between px-3 py-2 text-sm text-stone-700 bg-white">
                         {s}
                         <button onClick={() => handleDeleteSupplierName(s)} className="text-red-500 hover:text-red-700">
-                          <Trash2 size={12} />
+                          <Trash2 size={14} />
                         </button>
-                      </span>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -9755,14 +9755,14 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 {suggestions.visaSuppliers.length === 0 ? (
                   <p className="text-xs text-stone-400">No suppliers saved yet</p>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 max-w-xs overflow-hidden">
                     {suggestions.visaSuppliers.map((s) => (
-                      <span key={s} className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700">
+                      <div key={s} className="flex items-center justify-between px-3 py-2 text-sm text-stone-700 bg-white">
                         {s}
                         <button onClick={() => handleDeleteVisaSupplierName(s)} className="text-red-500 hover:text-red-700">
-                          <Trash2 size={12} />
+                          <Trash2 size={14} />
                         </button>
-                      </span>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -9789,14 +9789,14 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 {suggestions.carSuppliers.length === 0 ? (
                   <p className="text-xs text-stone-400">No suppliers saved yet</p>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 max-w-xs overflow-hidden">
                     {suggestions.carSuppliers.map((s) => (
-                      <span key={s} className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700">
+                      <div key={s} className="flex items-center justify-between px-3 py-2 text-sm text-stone-700 bg-white">
                         {s}
                         <button onClick={() => handleDeleteCarSupplierName(s)} className="text-red-500 hover:text-red-700">
-                          <Trash2 size={12} />
+                          <Trash2 size={14} />
                         </button>
-                      </span>
+                      </div>
                     ))}
                   </div>
                 )}
