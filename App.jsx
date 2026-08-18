@@ -6529,7 +6529,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     new Set(visibleHotelBookings.map((h) => (h.employee || "").trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
   const hotelSuppliersAvailable = Array.from(
-    new Set(visibleHotelBookings.map((h) => (h.supplier || "").trim()).filter(Boolean))
+    new Set([
+      ...(suggestions.suppliers || []),
+      ...visibleHotelBookings.map((h) => (h.supplier || "").trim()),
+    ].filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
   const hotelNamesAvailable = Array.from(
     new Set(visibleHotelBookings.map((h) => (h.hotel || "").trim()).filter(Boolean))
@@ -6589,7 +6592,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     new Set(visibleVisaBookings.map((v) => (v.employee || "").trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
   const visaSuppliersAvailable = Array.from(
-    new Set(visibleVisaBookings.map((v) => (v.supplier || "").trim()).filter(Boolean))
+    new Set([
+      ...(suggestions.visaSuppliers || []),
+      ...visibleVisaBookings.map((v) => (v.supplier || "").trim()),
+    ].filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
   const hasActiveVisaFilter = !!(visaSelectedYear.length || visaSelectedMonth.length || visaSelectedEmployee.length || visaSelectedSupplier.length || visaQuery.trim());
@@ -6636,7 +6642,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     new Set(visibleCarBookings.map((c) => (c.bookingDate ? c.bookingDate.slice(0, 4) : "")).filter(Boolean))
   ).sort((a, b) => b.localeCompare(a));
   const carSuppliersAvailable = Array.from(
-    new Set(visibleCarBookings.map((c) => (c.supplier || "").trim()).filter(Boolean))
+    new Set([
+      ...(suggestions.carSuppliers || []),
+      ...visibleCarBookings.map((c) => (c.supplier || "").trim()),
+    ].filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
   const hasActiveCarFilter = !!(carSelectedYear.length || carSelectedMonth.length || carSelectedSupplier.length || carQuery.trim());
@@ -7485,7 +7494,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   ).sort((a, b) => a.localeCompare(b));
 
   const suppliersAvailable = Array.from(
-    new Set(visibleTickets.map((t) => (t.supplier || "").trim()).filter(Boolean))
+    new Set([
+      ...(suggestions.flightSuppliers || []),
+      ...visibleTickets.map((t) => (t.supplier || "").trim()),
+    ].filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
   // Filter by the raw stored airline value, but show its IATA code (matching what
