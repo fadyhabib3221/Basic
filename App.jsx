@@ -2690,7 +2690,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     },
     {
       id: "partner-offer-10",
-      title: "Partner offer", // placeholder — tell me which service this is (campaign_id=10) and I'll rename it
+      title: "ايكونومى كار رينتال",
       icon: Sparkles,
       src: "https://tpscr.com/content?trs=563109&shmarker=765452.765452&locale=en&width=100&height=100&powered_by=true&campaign_id=10&promo_id=2082",
     },
