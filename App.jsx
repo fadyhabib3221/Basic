@@ -2364,6 +2364,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   const [showManageCompanies, setShowManageCompanies] = useState(false);
   const [showCompaniesList, setShowCompaniesList] = useState(false);
+  const [showFlightSuppliersList, setShowFlightSuppliersList] = useState(false);
+  const [showHotelSuppliersList, setShowHotelSuppliersList] = useState(false);
+  const [showVisaSuppliersList, setShowVisaSuppliersList] = useState(false);
+  const [showCarSuppliersList, setShowCarSuppliersList] = useState(false);
   // Global "Manage suppliers" panel — lets an admin/owner add or remove supplier names
   // for each department from one place, instead of only inline on each section's ticket
   // form. Flights, Hotels, Visa, and Transportation each keep their own supplier pool.
@@ -9684,19 +9688,46 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     Add
                   </button>
                 </div>
-                {(suggestions.flightSuppliers || []).length === 0 ? (
-                  <p className="text-xs text-stone-400">No suppliers saved yet</p>
-                ) : (
-                  <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 max-w-xs overflow-hidden">
-                    {(suggestions.flightSuppliers || []).map((s) => (
-                      <div key={s} className="flex items-center justify-between px-3 py-2 text-sm text-stone-700 bg-white">
-                        {s}
-                        <button onClick={() => handleDeleteFlightSupplierName(s)} className="text-red-500 hover:text-red-700">
-                          <Trash2 size={14} />
-                        </button>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-stone-400">
+                    {(suggestions.flightSuppliers || []).length} supplier{(suggestions.flightSuppliers || []).length === 1 ? "" : "s"} saved
+                  </p>
+                  <button
+                    onClick={() => setShowFlightSuppliersList(!showFlightSuppliersList)}
+                    className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
+                  >
+                    <List size={14} /> {showFlightSuppliersList ? "Hide suppliers list" : "View all suppliers"}
+                  </button>
+                </div>
+                {showFlightSuppliersList && (
+                  (suggestions.flightSuppliers || []).length === 0 ? (
+                    <p className="text-sm text-stone-400">No suppliers saved yet</p>
+                  ) : (
+                    <div className="border border-stone-200 rounded-xl overflow-hidden">
+                      <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}>
+                        <table className="w-full min-w-max text-xs">
+                          <thead>
+                            <tr className="bg-stone-50 text-stone-500 text-[11px] uppercase tracking-wide">
+                              <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Supplier</th>
+                              <th className="text-right px-3 py-2 font-semibold whitespace-nowrap"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...(suggestions.flightSuppliers || [])].sort((a, b) => a.localeCompare(b)).map((s) => (
+                              <tr key={s} className="border-t border-stone-100 hover:bg-stone-50">
+                                <td className="px-3 py-2 font-medium text-stone-800 whitespace-nowrap">{s}</td>
+                                <td className="px-3 py-2 text-right whitespace-nowrap">
+                                  <button onClick={() => handleDeleteFlightSupplierName(s)} className="text-stone-400 hover:text-red-600 p-0.5">
+                                    <Trash2 size={13} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )
                 )}
               </div>
             )}
@@ -9718,19 +9749,46 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     Add
                   </button>
                 </div>
-                {suggestions.suppliers.length === 0 ? (
-                  <p className="text-xs text-stone-400">No suppliers saved yet</p>
-                ) : (
-                  <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 max-w-xs overflow-hidden">
-                    {suggestions.suppliers.map((s) => (
-                      <div key={s} className="flex items-center justify-between px-3 py-2 text-sm text-stone-700 bg-white">
-                        {s}
-                        <button onClick={() => handleDeleteSupplierName(s)} className="text-red-500 hover:text-red-700">
-                          <Trash2 size={14} />
-                        </button>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-stone-400">
+                    {suggestions.suppliers.length} supplier{suggestions.suppliers.length === 1 ? "" : "s"} saved
+                  </p>
+                  <button
+                    onClick={() => setShowHotelSuppliersList(!showHotelSuppliersList)}
+                    className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
+                  >
+                    <List size={14} /> {showHotelSuppliersList ? "Hide suppliers list" : "View all suppliers"}
+                  </button>
+                </div>
+                {showHotelSuppliersList && (
+                  suggestions.suppliers.length === 0 ? (
+                    <p className="text-sm text-stone-400">No suppliers saved yet</p>
+                  ) : (
+                    <div className="border border-stone-200 rounded-xl overflow-hidden">
+                      <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}>
+                        <table className="w-full min-w-max text-xs">
+                          <thead>
+                            <tr className="bg-stone-50 text-stone-500 text-[11px] uppercase tracking-wide">
+                              <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Supplier</th>
+                              <th className="text-right px-3 py-2 font-semibold whitespace-nowrap"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...suggestions.suppliers].sort((a, b) => a.localeCompare(b)).map((s) => (
+                              <tr key={s} className="border-t border-stone-100 hover:bg-stone-50">
+                                <td className="px-3 py-2 font-medium text-stone-800 whitespace-nowrap">{s}</td>
+                                <td className="px-3 py-2 text-right whitespace-nowrap">
+                                  <button onClick={() => handleDeleteSupplierName(s)} className="text-stone-400 hover:text-red-600 p-0.5">
+                                    <Trash2 size={13} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )
                 )}
               </div>
             )}
@@ -9752,19 +9810,46 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     Add
                   </button>
                 </div>
-                {suggestions.visaSuppliers.length === 0 ? (
-                  <p className="text-xs text-stone-400">No suppliers saved yet</p>
-                ) : (
-                  <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 max-w-xs overflow-hidden">
-                    {suggestions.visaSuppliers.map((s) => (
-                      <div key={s} className="flex items-center justify-between px-3 py-2 text-sm text-stone-700 bg-white">
-                        {s}
-                        <button onClick={() => handleDeleteVisaSupplierName(s)} className="text-red-500 hover:text-red-700">
-                          <Trash2 size={14} />
-                        </button>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-stone-400">
+                    {suggestions.visaSuppliers.length} supplier{suggestions.visaSuppliers.length === 1 ? "" : "s"} saved
+                  </p>
+                  <button
+                    onClick={() => setShowVisaSuppliersList(!showVisaSuppliersList)}
+                    className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
+                  >
+                    <List size={14} /> {showVisaSuppliersList ? "Hide suppliers list" : "View all suppliers"}
+                  </button>
+                </div>
+                {showVisaSuppliersList && (
+                  suggestions.visaSuppliers.length === 0 ? (
+                    <p className="text-sm text-stone-400">No suppliers saved yet</p>
+                  ) : (
+                    <div className="border border-stone-200 rounded-xl overflow-hidden">
+                      <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}>
+                        <table className="w-full min-w-max text-xs">
+                          <thead>
+                            <tr className="bg-stone-50 text-stone-500 text-[11px] uppercase tracking-wide">
+                              <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Supplier</th>
+                              <th className="text-right px-3 py-2 font-semibold whitespace-nowrap"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...suggestions.visaSuppliers].sort((a, b) => a.localeCompare(b)).map((s) => (
+                              <tr key={s} className="border-t border-stone-100 hover:bg-stone-50">
+                                <td className="px-3 py-2 font-medium text-stone-800 whitespace-nowrap">{s}</td>
+                                <td className="px-3 py-2 text-right whitespace-nowrap">
+                                  <button onClick={() => handleDeleteVisaSupplierName(s)} className="text-stone-400 hover:text-red-600 p-0.5">
+                                    <Trash2 size={13} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )
                 )}
               </div>
             )}
@@ -9786,19 +9871,46 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     Add
                   </button>
                 </div>
-                {suggestions.carSuppliers.length === 0 ? (
-                  <p className="text-xs text-stone-400">No suppliers saved yet</p>
-                ) : (
-                  <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 max-w-xs overflow-hidden">
-                    {suggestions.carSuppliers.map((s) => (
-                      <div key={s} className="flex items-center justify-between px-3 py-2 text-sm text-stone-700 bg-white">
-                        {s}
-                        <button onClick={() => handleDeleteCarSupplierName(s)} className="text-red-500 hover:text-red-700">
-                          <Trash2 size={14} />
-                        </button>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-stone-400">
+                    {suggestions.carSuppliers.length} supplier{suggestions.carSuppliers.length === 1 ? "" : "s"} saved
+                  </p>
+                  <button
+                    onClick={() => setShowCarSuppliersList(!showCarSuppliersList)}
+                    className="text-teal-800 border border-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl px-3 py-1.5 flex items-center gap-1.5"
+                  >
+                    <List size={14} /> {showCarSuppliersList ? "Hide suppliers list" : "View all suppliers"}
+                  </button>
+                </div>
+                {showCarSuppliersList && (
+                  suggestions.carSuppliers.length === 0 ? (
+                    <p className="text-sm text-stone-400">No suppliers saved yet</p>
+                  ) : (
+                    <div className="border border-stone-200 rounded-xl overflow-hidden">
+                      <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}>
+                        <table className="w-full min-w-max text-xs">
+                          <thead>
+                            <tr className="bg-stone-50 text-stone-500 text-[11px] uppercase tracking-wide">
+                              <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Supplier</th>
+                              <th className="text-right px-3 py-2 font-semibold whitespace-nowrap"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...suggestions.carSuppliers].sort((a, b) => a.localeCompare(b)).map((s) => (
+                              <tr key={s} className="border-t border-stone-100 hover:bg-stone-50">
+                                <td className="px-3 py-2 font-medium text-stone-800 whitespace-nowrap">{s}</td>
+                                <td className="px-3 py-2 text-right whitespace-nowrap">
+                                  <button onClick={() => handleDeleteCarSupplierName(s)} className="text-stone-400 hover:text-red-600 p-0.5">
+                                    <Trash2 size={13} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )
                 )}
               </div>
             )}
