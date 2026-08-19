@@ -10838,9 +10838,9 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 )}
                               </span>
                               {deals.length > 0 && (
-                                <span className="block mt-0.5 space-y-0.5">
+                                <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
                                   {deals.map((d, i) => (
-                                    <span key={i} className="block text-[11px] leading-snug text-teal-700">
+                                    <span key={i} className="inline-flex items-center text-[11px] leading-snug text-teal-700 whitespace-nowrap">
                                       {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
                                       {d.details}
                                     </span>
