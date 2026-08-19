@@ -10758,7 +10758,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             title="Upload a screenshot/photo of the ticket, or just paste one (Ctrl/Cmd+V) anywhere on this tab"
             className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-xl px-3 py-2 hover:bg-teal-50 disabled:opacity-40 flex items-center gap-1.5"
           >
-            <Upload size={14} /> {ticketScanLoading ? "Reading..." : "Scan ticket"}
+            <Upload size={14} /> {ticketScanLoading ? "Reading..." : "Upload Ticket Mask"}
           </button>
           {ticketScanError && (
             <p className="text-[10px] text-red-600 basis-full">{ticketScanError}</p>
