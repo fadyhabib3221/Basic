@@ -5298,63 +5298,139 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       tripType: "",
     };
 
+    const months = { JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06", JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12" };
+    const monthNames = "JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC";
+
+    // --- GDS / PNR-printout format (Amadeus/Galileo-style itinerary dump,
+    // e.g. "TKT-077...", "LOC-7ZDV8F", "OD-CAICAI", numbered passenger rows,
+    // "1 OCAI SM 651 ..." segment lines). This is a completely different
+    // layout from the labeled retail-receipt style below, so it's tried
+    // first with its own tighter patterns before falling back.
+
+    // PNR: "LOC-7ZDV8F" (booking locator).
+    const locMatch = flat.match(/\bLOC-\s*([A-Z0-9]{5,7})\b/i);
+    if (locMatch) result.pnrReference = locMatch[1].toUpperCase();
+
+    // Ticket number: "TKT-3814830484393" — label makes this more reliable
+    // than the generic 13-digit fallback below, so it's tried first.
+    const tktMatch = flat.match(/\bTKT-\s*(\d{10,13})\b/i);
+    if (tktMatch) result.ticketNumber = tktMatch[1];
+
+    // Passenger name: numbered row "1.LASTNAME/FIRST MIDDLE MADT" — the
+    // trailing token is a title+passenger-type code (M/F + ADT/CHD/INF,
+    // sometimes MSTR/MISS) glued on with no space, not part of the name.
+    const gdsNameMatch = flat.match(/\d+\.\s*([A-Z]+\/[A-Z][A-Z\s]*?)\s+[MF]?(?:ADT|CHD|INF|STR|ISS)\b/i);
+    if (gdsNameMatch) result.passengerName = gdsNameMatch[1].replace(/\s+/g, " ").trim().toUpperCase();
+
+    // Route + airline: each flight segment line looks like
+    // "1 OCAI SM 651  X 20AUG1905 OK XEGRT ...", where "O" + 3 letters is
+    // that segment's *origin* airport and the 2 letters after it are the
+    // airline code. Walking the segment origins in order gives the route
+    // (e.g. OCAI, OATH -> CAI then ATH for a CAI-ATH-CAI round trip).
+    const segMatches = [...flat.matchAll(/\bO([A-Z]{3})\s+([A-Z]{2})\s+\d{2,4}\b/g)];
+    if (segMatches.length) {
+      const originCodes = segMatches.map((m) => m[1]);
+      result.fromIata = originCodes[0];
+      const nextDistinct = originCodes.find((c) => c !== originCodes[0]);
+      if (nextDistinct) result.toIata = nextDistinct;
+      result.airlineIata = segMatches[0][2];
+    } else {
+      // Fall back to the "OD-CAICAI" origin/destination summary line.
+      const odMatch = flat.match(/\bOD-([A-Z]{3})([A-Z]{3})\b/);
+      if (odMatch) {
+        result.fromIata = odMatch[1];
+        if (odMatch[2] !== odMatch[1]) result.toIata = odMatch[2];
+      }
+    }
+
+    // Date: prefer the actual flight date off a segment line ("20AUG1905" —
+    // day + month + 4-digit time, no year) over the "DOI-19AUG26" date of
+    // issue. The issue date (2-digit year) is only used to fill in the year,
+    // since segment lines don't print one.
+    const doiMatch = flat.match(/\bDOI-(\d{1,2})([A-Z]{3})(\d{2})\b/i);
+    const segDateMatch = flat.match(new RegExp(`\\b(\\d{1,2})(${monthNames})\\d{4}\\b`, "i"));
+    if (segDateMatch) {
+      const mon = months[segDateMatch[2].toUpperCase()];
+      const year = doiMatch ? "20" + doiMatch[3] : String(new Date().getFullYear());
+      result.date = `${year}-${mon}-${String(segDateMatch[1]).padStart(2, "0")}`;
+    }
+
+    // Round trip: "OD-CAICAI" style summary where the trip starts and ends
+    // at the same airport, or 2+ distinct segment origins that loop back.
+    const odRoundTrip = flat.match(/\bOD-([A-Z]{3})\1\b/);
+    if (odRoundTrip || (segMatches.length >= 2 && segMatches[0][1] !== segMatches[segMatches.length - 1][1])) {
+      result.tripType = "roundTrip";
+    }
+
+    // --- Labeled retail-receipt format (e.g. "Passenger: NAME",
+    // "Ticket Number: ...", "PNR: ..."). Only fills in fields the GDS
+    // patterns above missed.
+
     // PNR / booking reference: usually a labeled 5-7 char alphanumeric code.
-    const pnrMatch =
-      flat.match(/\b(?:PNR|BOOKING REF(?:ERENCE)?|RESERVATION (?:CODE|REF))\D{0,5}([A-Z0-9]{5,7})\b/i) ||
-      flat.match(/\bREF\D{0,5}([A-Z0-9]{5,7})\b/i);
-    if (pnrMatch) result.pnrReference = pnrMatch[1].toUpperCase();
+    if (!result.pnrReference) {
+      const pnrMatch =
+        flat.match(/\b(?:PNR|BOOKING REF(?:ERENCE)?|RESERVATION (?:CODE|REF))\D{0,5}([A-Z0-9]{5,7})\b/i) ||
+        flat.match(/\bREF\D{0,5}([A-Z0-9]{5,7})\b/i);
+      if (pnrMatch) result.pnrReference = pnrMatch[1].toUpperCase();
+    }
 
     // E-ticket number: airlines print these as 13 digits, often with a dash
     // after the 3-digit airline prefix (e.g. 077-1234567890).
-    const ticketMatch =
-      flat.match(/\b(?:TICKET(?:\s*NO|\s*NUMBER)?)\D{0,5}(\d{3}-?\d{10})\b/i) ||
-      flat.match(/\b(\d{3}-\d{10})\b/) ||
-      flat.match(/\b(\d{13})\b/);
-    if (ticketMatch) result.ticketNumber = ticketMatch[1];
+    if (!result.ticketNumber) {
+      const ticketMatch =
+        flat.match(/\b(?:TICKET(?:\s*NO|\s*NUMBER)?)\D{0,5}(\d{3}-?\d{10})\b/i) ||
+        flat.match(/\b(\d{3}-\d{10})\b/) ||
+        flat.match(/\b(\d{13})\b/);
+      if (ticketMatch) result.ticketNumber = ticketMatch[1];
+    }
 
     // Airport/route codes: three consecutive uppercase letters. We grab the
     // first two distinct 3-letter codes found as a best-effort from/to guess
     // (OCR often also misreads other words as 3 letters, so this is rough).
-    const codeMatches = [...flat.matchAll(/\b[A-Z]{3}\b/g)].map((m) => m[0]);
-    const commonNonAirportWords = new Set(["THE", "AND", "FOR", "PNR", "REF", "ETK", "ADT", "CHD", "INF"]);
-    const codes = codeMatches.filter((c) => !commonNonAirportWords.has(c));
-    if (codes[0]) result.fromIata = codes[0];
-    if (codes[1] && codes[1] !== codes[0]) result.toIata = codes[1];
+    if (!result.fromIata) {
+      const codeMatches = [...flat.matchAll(/\b[A-Z]{3}\b/g)].map((m) => m[0]);
+      const commonNonAirportWords = new Set(["THE", "AND", "FOR", "PNR", "REF", "ETK", "ADT", "CHD", "INF"]);
+      const codes = codeMatches.filter((c) => !commonNonAirportWords.has(c));
+      if (codes[0]) result.fromIata = codes[0];
+      if (codes[1] && codes[1] !== codes[0]) result.toIata = codes[1];
+    }
 
     // Date: look for common printed formats (DD MMM YYYY, DD/MM/YYYY, YYYY-MM-DD).
-    const monthNames = "JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC";
-    const dateMatch =
-      flat.match(new RegExp(`\\b(\\d{1,2})\\s*(${monthNames})[A-Z]*\\s*(\\d{2,4})\\b`, "i")) ||
-      flat.match(/\b(\d{4})-(\d{2})-(\d{2})\b/) ||
-      flat.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/);
-    if (dateMatch) {
-      if (dateMatch[0].match(new RegExp(monthNames, "i"))) {
-        const months = { JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06", JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12" };
-        const mon = months[dateMatch[2].toUpperCase()];
-        let year = dateMatch[3];
-        if (year.length === 2) year = "20" + year;
-        result.date = `${year}-${mon}-${String(dateMatch[1]).padStart(2, "0")}`;
-      } else if (/^\d{4}-/.test(dateMatch[0])) {
-        result.date = dateMatch[0];
-      } else {
-        let [, d, m, y] = dateMatch;
-        if (y.length === 2) y = "20" + y;
-        result.date = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    if (!result.date) {
+      const dateMatch =
+        flat.match(new RegExp(`\\b(\\d{1,2})\\s*(${monthNames})[A-Z]*\\s*(\\d{2,4})\\b`, "i")) ||
+        flat.match(/\b(\d{4})-(\d{2})-(\d{2})\b/) ||
+        flat.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/);
+      if (dateMatch) {
+        if (dateMatch[0].match(new RegExp(monthNames, "i"))) {
+          const mon = months[dateMatch[2].toUpperCase()];
+          let year = dateMatch[3];
+          if (year.length === 2) year = "20" + year;
+          result.date = `${year}-${mon}-${String(dateMatch[1]).padStart(2, "0")}`;
+        } else if (/^\d{4}-/.test(dateMatch[0])) {
+          result.date = dateMatch[0];
+        } else {
+          let [, d, m, y] = dateMatch;
+          if (y.length === 2) y = "20" + y;
+          result.date = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        }
       }
     }
 
     // Passenger name: look for a line right after a "NAME"/"PASSENGER" label,
     // since free-floating name detection from plain OCR text isn't reliable.
-    const nameLineIdx = lines.findIndex((l) => /\b(PASSENGER|NAME)\b/i.test(l));
-    if (nameLineIdx !== -1) {
-      const sameLine = lines[nameLineIdx].replace(/.*\b(PASSENGER|NAME)\b[:\s]*/i, "").trim();
-      const candidate = sameLine && /^[A-Z\s\/.'-]{3,}$/i.test(sameLine) ? sameLine : lines[nameLineIdx + 1];
-      if (candidate && /^[A-Z\s\/.'-]{3,}$/i.test(candidate)) {
-        result.passengerName = candidate.replace(/\s+/g, " ").trim();
+    if (!result.passengerName) {
+      const nameLineIdx = lines.findIndex((l) => /\b(PASSENGER|NAME)\b/i.test(l));
+      if (nameLineIdx !== -1) {
+        const sameLine = lines[nameLineIdx].replace(/.*\b(PASSENGER|NAME)\b[:\s]*/i, "").trim();
+        const candidate = sameLine && /^[A-Z\s\/.'-]{3,}$/i.test(sameLine) ? sameLine : lines[nameLineIdx + 1];
+        if (candidate && /^[A-Z\s\/.'-]{3,}$/i.test(candidate)) {
+          result.passengerName = candidate.replace(/\s+/g, " ").trim();
+        }
       }
     }
 
-    if (/ROUND\s*TRIP|RETURN/i.test(flat)) result.tripType = "roundTrip";
+    if (!result.tripType && /ROUND\s*TRIP|RETURN/i.test(flat)) result.tripType = "roundTrip";
 
     return result;
   };
