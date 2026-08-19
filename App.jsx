@@ -10848,9 +10848,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                   <span className="flex items-center gap-1.5 shrink-0">
                                     <span className={selected ? "text-teal-800 font-semibold" : "text-stone-800"}>{name}</span>
                                     {deals.length > 0 && (
-                                      <span className="shrink-0 bg-teal-100 text-teal-800 border border-teal-200 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide">
-                                        Deals
-                                      </span>
+                                      <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-teal-500" />
                                     )}
                                   </span>
                                   {deals.map((d, i) => (
