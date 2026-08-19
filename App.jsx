@@ -728,7 +728,17 @@ const companyName = (c) => (typeof c === "string" ? c : (c && c.name) || "");
 
 
 
-const emptyCompanyDraft = { name: "", taxNumber: "", commercialReg: "", phones: "", deal: "" };
+const emptyCompanyDraft = { name: "", taxNumber: "", commercialReg: "", phones: "", deals: [] };
+const emptyDealDraft = { airline: "", details: "" };
+// Saved deals were briefly a single free-text string on the company record; this reads
+// them as a list either way, wrapping a legacy string into a single airline-less entry
+// so old saved companies keep working after the switch to multiple per-airline deals.
+const companyDeals = (c) => {
+  if (typeof c !== "object" || !c) return [];
+  if (Array.isArray(c.deals)) return c.deals;
+  if (c.deal) return [{ airline: "", details: c.deal }];
+  return [];
+};
 
 // Local YYYY-MM-DD for today, matching the native <input type="date"> format.
 const todayDateStr = () => {
@@ -2420,6 +2430,9 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [newCompanyDraft, setNewCompanyDraft] = useState(emptyCompanyDraft);
   const [editingCompanyName, setEditingCompanyName] = useState(null);
   const [companyError, setCompanyError] = useState("");
+  // The airline + details row currently being typed, before it's added to
+  // newCompanyDraft.deals as one of the company's (possibly several) per-airline deals.
+  const [newDealDraft, setNewDealDraft] = useState(emptyDealDraft);
 
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [currentPasswordInput, setCurrentPasswordInput] = useState("");
@@ -3967,7 +3980,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         .split(/[,\n]/)
         .map((p) => p.trim())
         .filter(Boolean),
-      deal: newCompanyDraft.deal.trim(),
+      deals: newCompanyDraft.deals,
     };
     const companies = editingCompanyName
       ? suggestions.companies.map((c) => (companyName(c) === editingCompanyName ? record : c))
@@ -3975,8 +3988,29 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     persistSuggestions({ ...suggestions, companies });
     recordActivity("Companies", editingCompanyName ? "edited" : "created", `${editingCompanyName ? "Edited" : "Created"} company: ${name}`);
     setNewCompanyDraft(emptyCompanyDraft);
+    setNewDealDraft(emptyDealDraft);
     setEditingCompanyName(null);
     setCompanyError("");
+  };
+
+  // Adds the currently-typed airline + details row to the company draft's deals list
+  // (not saved yet — only committed when the company itself is saved). A company can
+  // have several deals, each tied to a different airline.
+  const handleAddDealToDraft = () => {
+    const details = newDealDraft.details.trim();
+    if (!details) return;
+    setNewCompanyDraft({
+      ...newCompanyDraft,
+      deals: [...newCompanyDraft.deals, { airline: newDealDraft.airline.trim(), details }],
+    });
+    setNewDealDraft(emptyDealDraft);
+  };
+
+  const handleRemoveDealFromDraft = (index) => {
+    setNewCompanyDraft({
+      ...newCompanyDraft,
+      deals: newCompanyDraft.deals.filter((_, i) => i !== index),
+    });
   };
 
   // Loads an existing company's saved details back into the form so they can be edited.
@@ -3987,13 +4021,15 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       taxNumber: typeof c === "object" ? c.taxNumber || "" : "",
       commercialReg: typeof c === "object" ? c.commercialReg || "" : "",
       phones: typeof c === "object" && Array.isArray(c.phones) ? c.phones.join(", ") : "",
-      deal: typeof c === "object" ? c.deal || "" : "",
+      deals: companyDeals(c),
     });
+    setNewDealDraft(emptyDealDraft);
   };
 
   const cancelEditCompany = () => {
     setEditingCompanyName(null);
     setNewCompanyDraft(emptyCompanyDraft);
+    setNewDealDraft(emptyDealDraft);
   };
 
   // Removes a company from the saved suggestions list. Existing tickets already
@@ -9645,12 +9681,47 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 value={newCompanyDraft.phones}
                 onChange={(e) => setNewCompanyDraft({ ...newCompanyDraft, phones: e.target.value })}
               />
-              <input
-                className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 md:col-span-2"
-                placeholder="Deal (e.g. discount / agreement terms)"
-                value={newCompanyDraft.deal}
-                onChange={(e) => setNewCompanyDraft({ ...newCompanyDraft, deal: e.target.value })}
-              />
+            </div>
+
+            <div className="max-w-2xl mb-3">
+              <p className="text-xs font-semibold text-stone-500 mb-2">Deals (per airline)</p>
+              {newCompanyDraft.deals.length > 0 && (
+                <div className="space-y-1.5 mb-2">
+                  {newCompanyDraft.deals.map((d, i) => (
+                    <div key={i} className="flex items-center justify-between bg-stone-100 rounded-xl px-3 py-1.5 text-sm">
+                      <span>
+                        {d.airline && <span className="font-semibold text-stone-700">{d.airline.toUpperCase()}{" — "}</span>}
+                        <span className="text-stone-600">{d.details}</span>
+                      </span>
+                      <button onClick={() => handleRemoveDealFromDraft(i)} className="text-stone-400 hover:text-red-600 p-0.5">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-2">
+                <input
+                  className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  placeholder="Airline (optional)"
+                  list="airline-suggestions"
+                  value={newDealDraft.airline}
+                  onChange={(e) => setNewDealDraft({ ...newDealDraft, airline: e.target.value })}
+                />
+                <input
+                  className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  placeholder="Deal details (e.g. discount / agreement terms)"
+                  value={newDealDraft.details}
+                  onChange={(e) => setNewDealDraft({ ...newDealDraft, details: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddDealToDraft(); } }}
+                />
+                <button
+                  onClick={handleAddDealToDraft}
+                  className="border border-teal-800 text-teal-800 hover:bg-teal-50 text-sm font-semibold rounded-xl px-3 py-2 flex items-center justify-center gap-1.5 whitespace-nowrap"
+                >
+                  <Plus size={14} /> Add deal
+                </button>
+              </div>
             </div>
             <div className="flex gap-2 mb-5">
               <button
@@ -9707,7 +9778,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             const taxNumber = typeof c === "object" ? c.taxNumber : "";
                             const commercialReg = typeof c === "object" ? c.commercialReg : "";
                             const phones = typeof c === "object" && Array.isArray(c.phones) ? c.phones : [];
-                            const deal = typeof c === "object" ? c.deal : "";
+                            const deals = companyDeals(c);
                             return (
                               <tr
                                 key={name}
@@ -9717,7 +9788,15 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{taxNumber || "-"}</td>
                                 <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{commercialReg || "-"}</td>
                                 <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{phones.length > 0 ? phones.join(", ") : "-"}</td>
-                                <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{deal || "-"}</td>
+                                <td className="px-3 py-2 text-stone-600">
+                                  {deals.length > 0
+                                    ? deals.map((d, i) => (
+                                        <span key={i} className="block whitespace-nowrap">
+                                          {d.airline ? `${d.airline.toUpperCase()} — ${d.details}` : d.details}
+                                        </span>
+                                      ))
+                                    : "-"}
+                                </td>
                                 <td className="px-3 py-2 text-right whitespace-nowrap">
                                   <div className="flex gap-1 justify-end">
                                     <button onClick={() => handleEditCompanyClick(c)} className="text-stone-400 hover:text-teal-800 p-0.5">
