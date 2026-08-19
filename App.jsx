@@ -5296,6 +5296,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       toIata: "",
       date: "",
       tripType: "",
+      totalAmount: "",
+      totalCurrency: "",
     };
 
     const months = { JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06", JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12" };
@@ -5343,16 +5345,16 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
     }
 
-    // Date: prefer the actual flight date off a segment line ("20AUG1905" —
-    // day + month + 4-digit time, no year) over the "DOI-19AUG26" date of
-    // issue. The issue date (2-digit year) is only used to fill in the year,
-    // since segment lines don't print one.
+    // Date: the app's "date" field on a ticket is the *issue* date (see
+    // "Ticket issue date" in the ticket summary), so "DOI-19AUG26" is the
+    // right source, not the flight's own departure date — those are two
+    // different dates (a ticket for a trip a week out is still issued
+    // today). Flight segment lines don't carry a year at all, so DOI is
+    // used only as a last-resort fallback for the year, never for the day/month.
     const doiMatch = flat.match(/\bDOI-(\d{1,2})([A-Z]{3})(\d{2})\b/i);
-    const segDateMatch = flat.match(new RegExp(`\\b(\\d{1,2})(${monthNames})\\d{4}\\b`, "i"));
-    if (segDateMatch) {
-      const mon = months[segDateMatch[2].toUpperCase()];
-      const year = doiMatch ? "20" + doiMatch[3] : String(new Date().getFullYear());
-      result.date = `${year}-${mon}-${String(segDateMatch[1]).padStart(2, "0")}`;
+    if (doiMatch) {
+      const mon = months[doiMatch[2].toUpperCase()];
+      result.date = `20${doiMatch[3]}-${mon}-${String(doiMatch[1]).padStart(2, "0")}`;
     }
 
     // Round trip: "OD-CAICAI" style summary where the trip starts and ends
@@ -5360,6 +5362,16 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const odRoundTrip = flat.match(/\bOD-([A-Z]{3})\1\b/);
     if (odRoundTrip || (segMatches.length >= 2 && segMatches[0][1] !== segMatches[segMatches.length - 1][1])) {
       result.tripType = "roundTrip";
+    }
+
+    // Total price: "TOTAL   EGP      12322.80" — this is the full price the
+    // agency was charged (fare + tax), i.e. the ticket's net cost, so it
+    // maps to the net price field rather than the sold price (which the
+    // agency sets itself and never appears on the airline's own ticket).
+    const totalMatch = flat.match(/\bTOTAL\s+([A-Z]{3})\s+([\d,]+\.\d{2})\b/i);
+    if (totalMatch) {
+      result.totalCurrency = totalMatch[1].toUpperCase();
+      result.totalAmount = totalMatch[2].replace(/,/g, "");
     }
 
     // --- Labeled retail-receipt format (e.g. "Passenger: NAME",
@@ -5456,6 +5468,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           airline: extracted.airlineIata ? extracted.airlineIata.toUpperCase() : prev.airline,
           date: extracted.date || prev.date,
           tripType: extracted.tripType === "roundTrip" ? "roundTrip" : prev.tripType,
+          netPrice: extracted.totalAmount || prev.netPrice,
+          netCurrency: extracted.totalCurrency || prev.netCurrency,
         };
         if (Array.isArray(next.destinations) && next.destinations.length >= 2) {
           const dests = [...next.destinations];
