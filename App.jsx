@@ -10829,24 +10829,22 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               onClick={() => { setForm({ ...form, company: name }); setCorporateDropdownOpen(false); }}
                               className={`w-full text-left px-3 py-1.5 text-sm hover:bg-teal-50 ${selected ? "bg-teal-50" : ""}`}
                             >
-                              <span className="flex items-center gap-1.5">
-                                <span className={selected ? "text-teal-800 font-semibold" : "text-stone-800"}>{name}</span>
-                                {deals.length > 0 && (
-                                  <span className="shrink-0 bg-teal-100 text-teal-800 border border-teal-200 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide">
-                                    Deal
-                                  </span>
-                                )}
-                              </span>
-                              {deals.length > 0 && (
-                                <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
-                                  {deals.map((d, i) => (
-                                    <span key={i} className="inline-flex items-center text-[11px] leading-snug text-teal-700 whitespace-nowrap">
-                                      {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
-                                      {d.details}
+                              <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span className="flex items-center gap-1.5 shrink-0">
+                                  <span className={selected ? "text-teal-800 font-semibold" : "text-stone-800"}>{name}</span>
+                                  {deals.length > 0 && (
+                                    <span className="shrink-0 bg-teal-100 text-teal-800 border border-teal-200 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide">
+                                      Deals
                                     </span>
-                                  ))}
+                                  )}
                                 </span>
-                              )}
+                                {deals.map((d, i) => (
+                                  <span key={i} className="inline-flex items-center text-[11px] leading-snug text-teal-700 whitespace-nowrap">
+                                    {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
+                                    {d.details}
+                                  </span>
+                                ))}
+                              </span>
                             </button>
                           );
                         })}
