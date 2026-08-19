@@ -2493,6 +2493,14 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [flightLookupError, setFlightLookupError] = useState("");
   const [flightLookupResult, setFlightLookupResult] = useState(null);
 
+  // Ticket-screenshot auto-fill: the user uploads a photo/screenshot of a flight
+  // ticket and Claude's vision API reads it, returning structured fields that get
+  // merged straight into `form` (and the first customer row) the same way the
+  // AviationStack flight lookup above does. No API key needed — this calls the
+  // Anthropic API endpoint that's already proxied for artifacts.
+  const [ticketScanLoading, setTicketScanLoading] = useState(false);
+  const [ticketScanError, setTicketScanError] = useState("");
+
   // ---------- Hotels ----------
   const [hotelBookings, setHotelBookings] = useState([]);
   const [hotelForm, setHotelForm] = useState(getEmptyHotelForm);
@@ -5251,6 +5259,100 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       to: flightData.arrival?.iata ? flightData.arrival.iata.toUpperCase() : prev.to,
       airline: flightData.airline?.iata ? flightData.airline.iata.toUpperCase() : prev.airline,
     }));
+  };
+
+  // Reads a File into a base64 string (no data: prefix) for the vision API.
+  const fileToBase64 = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+      reader.onerror = () => reject(new Error("Could not read the image file"));
+      reader.readAsDataURL(file);
+    });
+
+  // Takes an uploaded ticket screenshot/photo, sends it to Claude's vision API with
+  // instructions to return strict JSON, then merges whatever fields it recognized
+  // into the ticket form — same merge pattern as handleFormFlightLookup (only
+  // overwrite a field when the scan actually found a value; never blank one out).
+  const handleTicketScreenshot = async (file) => {
+    if (!file) return;
+    setTicketScanLoading(true);
+    setTicketScanError("");
+    try {
+      const mediaType = file.type && file.type.startsWith("image/") ? file.type : "image/png";
+      const base64 = await fileToBase64(file);
+      const prompt = `You are reading a flight ticket / e-ticket / boarding pass screenshot. Extract the fields below and respond with ONLY a raw JSON object, no markdown fences, no commentary. Use "" for any field you cannot find with confidence — never guess.
+{
+  "passengerName": "",
+  "ticketNumber": "",
+  "pnrReference": "",
+  "airlineIata": "",
+  "fromIata": "",
+  "toIata": "",
+  "date": "YYYY-MM-DD",
+  "tripType": "oneWay or roundTrip"
+}
+Use IATA 3-letter airport codes and 2-letter airline codes where possible. If a code isn't printed on the ticket but the city/airline name is, convert it to the correct IATA code yourself.`;
+
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1000,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+                { type: "text", text: prompt },
+              ],
+            },
+          ],
+        }),
+      });
+      if (!response.ok) throw new Error(`Request failed (${response.status})`);
+      const data = await response.json();
+      const text = (data.content || []).map((b) => b.text || "").join("").trim();
+      const cleaned = text.replace(/^```json\s*|^```\s*|```$/g, "").trim();
+      let extracted;
+      try {
+        extracted = JSON.parse(cleaned);
+      } catch (e) {
+        throw new Error("Couldn't read the ticket clearly — try a clearer screenshot or enter it manually.");
+      }
+
+      setForm((prev) => {
+        const next = {
+          ...prev,
+          from: extracted.fromIata ? extracted.fromIata.toUpperCase() : prev.from,
+          to: extracted.toIata ? extracted.toIata.toUpperCase() : prev.to,
+          airline: extracted.airlineIata ? extracted.airlineIata.toUpperCase() : prev.airline,
+          date: extracted.date || prev.date,
+          tripType: extracted.tripType === "roundTrip" ? "roundTrip" : prev.tripType,
+        };
+        if (Array.isArray(next.destinations) && next.destinations.length >= 2) {
+          const dests = [...next.destinations];
+          if (next.from) dests[0] = next.from;
+          if (next.to) dests[dests.length - 1] = next.to;
+          next.destinations = dests;
+        }
+        const customers = (prev.customers && prev.customers.length ? prev.customers : [emptyCustomerRow()]).map((c) => ({ ...c }));
+        if (extracted.passengerName) customers[0].name = extracted.passengerName;
+        if (extracted.ticketNumber) customers[0].ticketNumber = extracted.ticketNumber;
+        if (extracted.pnrReference) customers[0].pnrReference = extracted.pnrReference;
+        next.customers = customers;
+        return next;
+      });
+
+      if (!extracted.passengerName && !extracted.ticketNumber && !extracted.fromIata && !extracted.toIata) {
+        setTicketScanError("Couldn't recognize ticket details in that image — please check the fields and fill in anything missing.");
+      }
+    } catch (err) {
+      setTicketScanError(err.message || "Couldn't scan that image. Please try again or enter details manually.");
+    } finally {
+      setTicketScanLoading(false);
+    }
   };
 
   // Only the password of the account that's currently signed in can dismiss the
@@ -11218,6 +11320,32 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
               {flightLookupError && (
                 <p className="text-[10px] text-red-600 mt-1 max-w-[9rem]">{flightLookupError}</p>
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-stone-500 mb-1 block">Scan ticket</label>
+              <input
+                type="file"
+                accept="image/*"
+                id="ticket-screenshot-input"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files && e.target.files[0];
+                  handleTicketScreenshot(file);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => document.getElementById("ticket-screenshot-input").click()}
+                disabled={ticketScanLoading}
+                title="Upload a screenshot or photo of the ticket to auto-fill the fields"
+                className="shrink-0 border border-teal-300 bg-teal-50 rounded-lg px-2 py-1.5 text-teal-700 hover:bg-teal-100 disabled:opacity-40 flex items-center gap-1 text-xs font-medium"
+              >
+                <Upload size={14} /> {ticketScanLoading ? "Reading..." : "Upload"}
+              </button>
+              {ticketScanError && (
+                <p className="text-[10px] text-red-600 mt-1 max-w-[9rem]">{ticketScanError}</p>
               )}
             </div>
           </div>
