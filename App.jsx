@@ -5327,16 +5327,41 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     if (tktMatch) result.ticketNumber = tktMatch[1];
 
     // Passenger name: numbered row "1.LASTNAME/FIRST MIDDLE MADT" — the
-    // trailing token is a title+passenger-type code (M/F + ADT/CHD/INF,
-    // sometimes MSTR/MISS) glued on with no space, not part of the name.
-    // That same code tells us the passenger type — an infant ticket prints
-    // "INF" here with no name suffix otherwise distinguishing it — so it
-    // also drives which price field (adult/child/infant) the total goes into.
-    const gdsNameMatch = flat.match(/\d+\.\s*([A-Z]+\/[A-Z][A-Z\s]*?)\s+([MF]?(ADT|CHD|INF|STR|ISS))\b/i);
+    // trailing token is a title+passenger-type code (M/F + ADT/CHD/INF)
+    // glued on with no space, not part of the name. That same code tells
+    // us the passenger type — an infant ticket prints "INF" here with no
+    // name suffix otherwise distinguishing it — so it also drives which
+    // price field (adult/child/infant) the total goes into.
+    //
+    // Some GDS layouts instead print the title (MISS/MSTR/MR/...) and the
+    // ADT/CHD/INF code as two separate columns further apart on the same
+    // line, e.g. "1.BOTROS/MARIA MISS          CHD          ST". The code
+    // alternation deliberately does NOT include STR/ISS as stand-ins for
+    // MSTR/MISS: "MISS" itself would then satisfy the match as "M" + "ISS"
+    // before the regex ever reached the real CHD further down the line,
+    // silently mis-detecting a child ticket as an adult one. Leaving them
+    // out lets the (lazy) name group keep expanding through the title word
+    // until it reaches the actual type code — the title is then stripped
+    // back off the captured name below.
+    const gdsNameMatch = flat.match(/\d+\.\s*([A-Z]+\/[A-Z][A-Z\s]*?)\s+([MF]?(ADT|CHD|INF))\b/i);
     if (gdsNameMatch) {
-      result.passengerName = gdsNameMatch[1].replace(/\s+/g, " ").trim().toUpperCase();
+      result.passengerName = gdsNameMatch[1]
+        .replace(/\s+/g, " ")
+        .trim()
+        // Drop a title word that got pulled into the name while the lazy
+        // match expanded past it looking for the real type code (see above).
+        .replace(/\s+(MR|MRS|MS|MSTR|MISS|DR)$/i, "")
+        .toUpperCase();
       const typeCode = gdsNameMatch[3].toUpperCase();
       result.passengerType = typeCode === "INF" ? "infant" : typeCode === "CHD" ? "child" : "adult";
+    } else {
+      // No explicit ADT/CHD/INF code found anywhere on the row (rare, but
+      // some layouts may omit it) — still try to recover at least the name,
+      // stopping before a trailing title word instead of swallowing it.
+      const nameOnlyMatch = flat.match(/\d+\.\s*([A-Z]+\/[A-Z][A-Z\s]*?)(?=\s+(?:MR|MRS|MS|MSTR|MISS|DR)\b|\s{2,}|\s*$)/i);
+      if (nameOnlyMatch) {
+        result.passengerName = nameOnlyMatch[1].replace(/\s+/g, " ").trim().toUpperCase();
+      }
     }
 
     // Route + airline: each flight segment line looks like
