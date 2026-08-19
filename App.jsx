@@ -4,6 +4,10 @@ import React, { useState, useEffect, useRef, useReducer } from "react";
 // alternating row shading and the highlighted totals row. Plain "xlsx" silently
 // drops any style info on write.
 import * as XLSX from "xlsx-js-style";
+// مجاني بالكامل ومحلي في المتصفح — بديل عن استدعاء Claude Vision API لقراءة صور التذاكر.
+// الدقة أضعف من الـ AI vision لأنه OCR تقليدي (بيقرا الحروف بس، مش بيفهم شكل التذكرة)،
+// فمحتاج بعده regex عشان نحاول نلقط الحقول (اسم الراكب، رقم التذكرة، PNR، المطارات، التاريخ).
+import { createWorker } from "tesseract.js";
 
 // Every read/write in this file goes through window.storage (the artifact persistent-storage
 // API). That API is only injected when the artifact is rendered inside claude.ai's artifact
@@ -5261,66 +5265,112 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }));
   };
 
-  // Reads a File into a base64 string (no data: prefix) for the vision API.
-  const fileToBase64 = (file) =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
-      reader.onerror = () => reject(new Error("Could not read the image file"));
-      reader.readAsDataURL(file);
-    });
+  // Runs local OCR (Tesseract.js) on the image and tries to pull ticket fields
+  // out of the raw recognized text using regex heuristics. This is a free,
+  // fully client-side replacement for the old Claude-Vision-based scan — no
+  // server, no API key, no per-request cost. Trade-off: it's plain text
+  // recognition, not an AI that understands the ticket's layout, so it's
+  // noticeably less accurate, especially on stylized tickets, low-resolution
+  // photos, or unusual fonts. It can only find a code that's already printed
+  // as text on the ticket (e.g. "CAI") — unlike the AI version, it cannot
+  // convert a city or airline *name* into its IATA code.
+  let ocrWorkerPromise = null;
+  const getOcrWorker = () => {
+    if (!ocrWorkerPromise) {
+      ocrWorkerPromise = createWorker("eng");
+    }
+    return ocrWorkerPromise;
+  };
 
-  // Takes an uploaded ticket screenshot/photo, sends it to Claude's vision API with
-  // instructions to return strict JSON, then merges whatever fields it recognized
-  // into the ticket form — same merge pattern as handleFormFlightLookup (only
-  // overwrite a field when the scan actually found a value; never blank one out).
+  const extractTicketFieldsFromText = (raw) => {
+    const text = raw.replace(/\r/g, "");
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    const flat = text.replace(/\n/g, " ");
+
+    const result = {
+      passengerName: "",
+      ticketNumber: "",
+      pnrReference: "",
+      airlineIata: "",
+      fromIata: "",
+      toIata: "",
+      date: "",
+      tripType: "",
+    };
+
+    // PNR / booking reference: usually a labeled 5-7 char alphanumeric code.
+    const pnrMatch =
+      flat.match(/\b(?:PNR|BOOKING REF(?:ERENCE)?|RESERVATION (?:CODE|REF))\D{0,5}([A-Z0-9]{5,7})\b/i) ||
+      flat.match(/\bREF\D{0,5}([A-Z0-9]{5,7})\b/i);
+    if (pnrMatch) result.pnrReference = pnrMatch[1].toUpperCase();
+
+    // E-ticket number: airlines print these as 13 digits, often with a dash
+    // after the 3-digit airline prefix (e.g. 077-1234567890).
+    const ticketMatch =
+      flat.match(/\b(?:TICKET(?:\s*NO|\s*NUMBER)?)\D{0,5}(\d{3}-?\d{10})\b/i) ||
+      flat.match(/\b(\d{3}-\d{10})\b/) ||
+      flat.match(/\b(\d{13})\b/);
+    if (ticketMatch) result.ticketNumber = ticketMatch[1];
+
+    // Airport/route codes: three consecutive uppercase letters. We grab the
+    // first two distinct 3-letter codes found as a best-effort from/to guess
+    // (OCR often also misreads other words as 3 letters, so this is rough).
+    const codeMatches = [...flat.matchAll(/\b[A-Z]{3}\b/g)].map((m) => m[0]);
+    const commonNonAirportWords = new Set(["THE", "AND", "FOR", "PNR", "REF", "ETK", "ADT", "CHD", "INF"]);
+    const codes = codeMatches.filter((c) => !commonNonAirportWords.has(c));
+    if (codes[0]) result.fromIata = codes[0];
+    if (codes[1] && codes[1] !== codes[0]) result.toIata = codes[1];
+
+    // Date: look for common printed formats (DD MMM YYYY, DD/MM/YYYY, YYYY-MM-DD).
+    const monthNames = "JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC";
+    const dateMatch =
+      flat.match(new RegExp(`\\b(\\d{1,2})\\s*(${monthNames})[A-Z]*\\s*(\\d{2,4})\\b`, "i")) ||
+      flat.match(/\b(\d{4})-(\d{2})-(\d{2})\b/) ||
+      flat.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/);
+    if (dateMatch) {
+      if (dateMatch[0].match(new RegExp(monthNames, "i"))) {
+        const months = { JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06", JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12" };
+        const mon = months[dateMatch[2].toUpperCase()];
+        let year = dateMatch[3];
+        if (year.length === 2) year = "20" + year;
+        result.date = `${year}-${mon}-${String(dateMatch[1]).padStart(2, "0")}`;
+      } else if (/^\d{4}-/.test(dateMatch[0])) {
+        result.date = dateMatch[0];
+      } else {
+        let [, d, m, y] = dateMatch;
+        if (y.length === 2) y = "20" + y;
+        result.date = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      }
+    }
+
+    // Passenger name: look for a line right after a "NAME"/"PASSENGER" label,
+    // since free-floating name detection from plain OCR text isn't reliable.
+    const nameLineIdx = lines.findIndex((l) => /\b(PASSENGER|NAME)\b/i.test(l));
+    if (nameLineIdx !== -1) {
+      const sameLine = lines[nameLineIdx].replace(/.*\b(PASSENGER|NAME)\b[:\s]*/i, "").trim();
+      const candidate = sameLine && /^[A-Z\s\/.'-]{3,}$/i.test(sameLine) ? sameLine : lines[nameLineIdx + 1];
+      if (candidate && /^[A-Z\s\/.'-]{3,}$/i.test(candidate)) {
+        result.passengerName = candidate.replace(/\s+/g, " ").trim();
+      }
+    }
+
+    if (/ROUND\s*TRIP|RETURN/i.test(flat)) result.tripType = "roundTrip";
+
+    return result;
+  };
+
+  // Takes an uploaded ticket screenshot/photo, runs it through local OCR, then
+  // merges whatever fields the regex heuristics recognized into the ticket
+  // form — same merge pattern as handleFormFlightLookup (only overwrite a
+  // field when the scan actually found a value; never blank one out).
   const handleTicketScreenshot = async (file) => {
     if (!file) return;
     setTicketScanLoading(true);
     setTicketScanError("");
     try {
-      const mediaType = file.type && file.type.startsWith("image/") ? file.type : "image/png";
-      const base64 = await fileToBase64(file);
-      const prompt = `You are reading a flight ticket / e-ticket / boarding pass screenshot. Extract the fields below and respond with ONLY a raw JSON object, no markdown fences, no commentary. Use "" for any field you cannot find with confidence — never guess.
-{
-  "passengerName": "",
-  "ticketNumber": "",
-  "pnrReference": "",
-  "airlineIata": "",
-  "fromIata": "",
-  "toIata": "",
-  "date": "YYYY-MM-DD",
-  "tripType": "oneWay or roundTrip"
-}
-Use IATA 3-letter airport codes and 2-letter airline codes where possible. If a code isn't printed on the ticket but the city/airline name is, convert it to the correct IATA code yourself.`;
-
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 1000,
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-                { type: "text", text: prompt },
-              ],
-            },
-          ],
-        }),
-      });
-      if (!response.ok) throw new Error(`Request failed (${response.status})`);
-      const data = await response.json();
-      const text = (data.content || []).map((b) => b.text || "").join("").trim();
-      const cleaned = text.replace(/^```json\s*|^```\s*|```$/g, "").trim();
-      let extracted;
-      try {
-        extracted = JSON.parse(cleaned);
-      } catch (e) {
-        throw new Error("Couldn't read the ticket clearly — try a clearer screenshot or enter it manually.");
-      }
+      const worker = await getOcrWorker();
+      const { data } = await worker.recognize(file);
+      const extracted = extractTicketFieldsFromText(data.text || "");
 
       setForm((prev) => {
         const next = {
