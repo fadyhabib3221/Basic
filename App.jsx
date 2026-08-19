@@ -2450,9 +2450,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // corporate's deals inline underneath its name.
   const [corporateDropdownOpen, setCorporateDropdownOpen] = useState(false);
   const corporateDropdownRef = useRef(null);
-  // Shows a brief "Copied" confirmation on the selected-corporate's deals box after the
-  // copy button is clicked; reset whenever the corporate selection changes.
-  const [dealsCopied, setDealsCopied] = useState(false);
+  // Shows a brief "Copied" confirmation next to whichever single deal was just copied
+  // (tracked by index within the selected corporate's deals list); reset after copying
+  // a different deal or changing the corporate selection.
+  const [copiedDealIndex, setCopiedDealIndex] = useState(null);
   useEffect(() => {
     if (!corporateDropdownOpen) return;
     const handleClickOutside = (e) => {
@@ -10762,124 +10763,126 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
 
           <div className="flex flex-wrap items-start gap-2 mt-4">
-            <div className="flex-1 min-w-[160px]">
-              <label className="text-xs text-stone-500 block mb-1">Corporates (optional)</label>
-              {(() => {
-                const selectedCompanyRecord = suggestions.companies.find((c) => companyName(c) === form.company);
-                const selectedDeals = selectedCompanyRecord ? companyDeals(selectedCompanyRecord) : [];
-                const unregisteredCurrent =
-                  form.company && !suggestions.companies.some((c) => companyName(c) === form.company);
-                const sortedCompanies = [...suggestions.companies].sort((a, b) =>
-                  companyName(a).localeCompare(companyName(b))
-                );
-                return (
-                  <div className="relative" ref={corporateDropdownRef}>
-                    <button
-                      type="button"
-                      onClick={() => setCorporateDropdownOpen((o) => !o)}
-                      className={`w-full border rounded-xl px-3 py-2 text-sm bg-white flex items-center justify-between gap-2 text-left focus:outline-none focus:ring-2 focus:ring-teal-700 ${selectedDeals.length ? "border-teal-300" : "border-stone-300"}`}
-                    >
-                      <span className={form.company ? "text-stone-800" : "text-stone-400"}>
-                        {form.company || "— No corporate —"}
-                      </span>
-                      <ChevronDown size={14} className={`shrink-0 text-stone-400 transition-transform ${corporateDropdownOpen ? "rotate-180" : ""}`} />
-                    </button>
+            {(() => {
+              const selectedCompanyRecord = suggestions.companies.find((c) => companyName(c) === form.company);
+              const selectedDeals = selectedCompanyRecord ? companyDeals(selectedCompanyRecord) : [];
+              const unregisteredCurrent =
+                form.company && !suggestions.companies.some((c) => companyName(c) === form.company);
+              const sortedCompanies = [...suggestions.companies].sort((a, b) =>
+                companyName(a).localeCompare(companyName(b))
+              );
+              const copyDeal = (d, i) => {
+                const text = d.airline ? `${d.airline.toUpperCase()} — ${d.details}` : d.details;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  navigator.clipboard.writeText(text).then(() => {
+                    setCopiedDealIndex(i);
+                    setTimeout(() => setCopiedDealIndex((cur) => (cur === i ? null : cur)), 1500);
+                  });
+                }
+              };
+              return (
+                <>
+                  <div className="flex-1 min-w-[160px]">
+                    <label className="text-xs text-stone-500 block mb-1">Corporates (optional)</label>
+                    <div className="relative" ref={corporateDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => setCorporateDropdownOpen((o) => !o)}
+                        className={`w-full border rounded-xl px-3 py-2 text-sm bg-white flex items-center justify-between gap-2 text-left focus:outline-none focus:ring-2 focus:ring-teal-700 ${selectedDeals.length ? "border-teal-300" : "border-stone-300"}`}
+                      >
+                        <span className={form.company ? "text-stone-800" : "text-stone-400"}>
+                          {form.company || "— No corporate —"}
+                        </span>
+                        <ChevronDown size={14} className={`shrink-0 text-stone-400 transition-transform ${corporateDropdownOpen ? "rotate-180" : ""}`} />
+                      </button>
 
-                    {selectedDeals.length > 0 && (
-                      <div className="mt-1 bg-teal-50 border border-teal-200 rounded-lg px-2.5 py-1.5">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                            {selectedDeals.map((d, i) => {
-                              const matchesAirline = form.airline && d.airline && d.airline.toUpperCase() === form.airline.trim().toUpperCase();
-                              return (
-                                <span key={i} className={`text-[11px] leading-snug whitespace-nowrap ${matchesAirline ? "text-teal-900 font-semibold" : "text-teal-700"}`}>
-                                  {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
-                                  {d.details}
-                                </span>
-                              );
-                            })}
-                          </div>
+                      {corporateDropdownOpen && (
+                        <div className="absolute z-20 mt-1 w-full max-h-80 overflow-y-auto bg-white border border-stone-200 rounded-xl shadow-lg py-1">
                           <button
                             type="button"
-                            onClick={() => {
-                              const text = selectedDeals
-                                .map((d) => (d.airline ? `${d.airline.toUpperCase()} — ${d.details}` : d.details))
-                                .join("\n");
-                              if (navigator.clipboard && navigator.clipboard.writeText) {
-                                navigator.clipboard.writeText(text).then(() => {
-                                  setDealsCopied(true);
-                                  setTimeout(() => setDealsCopied(false), 1500);
-                                });
-                              }
-                            }}
-                            className="shrink-0 flex items-center gap-1 text-[10px] font-semibold text-teal-700 hover:text-teal-900"
-                            title="Copy deals"
+                            onClick={() => { setForm({ ...form, company: "" }); setCorporateDropdownOpen(false); }}
+                            className={`w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 ${!form.company ? "text-teal-800 font-semibold" : "text-stone-500"}`}
                           >
-                            <Copy size={11} />
-                            {dealsCopied ? "Copied" : "Copy"}
+                            — No corporate —
                           </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {corporateDropdownOpen && (
-                      <div className="absolute z-20 mt-1 w-full max-h-80 overflow-y-auto bg-white border border-stone-200 rounded-xl shadow-lg py-1">
-                        <button
-                          type="button"
-                          onClick={() => { setForm({ ...form, company: "" }); setCorporateDropdownOpen(false); }}
-                          className={`w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 ${!form.company ? "text-teal-800 font-semibold" : "text-stone-500"}`}
-                        >
-                          — No corporate —
-                        </button>
-                        {unregisteredCurrent && (
-                          // The ticket already has a company value that isn't (or is no longer) a
-                          // registered corporate — e.g. saved before Corporate Management existed,
-                          // or the corporate was later renamed/deleted. Keep it selectable/visible
-                          // instead of silently blanking the field.
-                          <button
-                            type="button"
-                            onClick={() => setCorporateDropdownOpen(false)}
-                            className="w-full text-left px-3 py-1.5 text-sm text-teal-800 font-semibold bg-teal-50"
-                          >
-                            {form.company} (not registered)
-                          </button>
-                        )}
-                        {sortedCompanies.map((c) => {
-                          const name = companyName(c);
-                          const deals = companyDeals(c);
-                          const selected = name === form.company;
-                          return (
+                          {unregisteredCurrent && (
+                            // The ticket already has a company value that isn't (or is no longer) a
+                            // registered corporate — e.g. saved before Corporate Management existed,
+                            // or the corporate was later renamed/deleted. Keep it selectable/visible
+                            // instead of silently blanking the field.
                             <button
-                              key={name}
                               type="button"
-                              onClick={() => { setForm({ ...form, company: name }); setCorporateDropdownOpen(false); }}
-                              className={`w-full text-left px-3 py-1.5 text-sm hover:bg-teal-50 ${selected ? "bg-teal-50" : ""}`}
+                              onClick={() => setCorporateDropdownOpen(false)}
+                              className="w-full text-left px-3 py-1.5 text-sm text-teal-800 font-semibold bg-teal-50"
                             >
-                              <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                                <span className="flex items-center gap-1.5 shrink-0">
-                                  <span className={selected ? "text-teal-800 font-semibold" : "text-stone-800"}>{name}</span>
-                                  {deals.length > 0 && (
-                                    <span className="shrink-0 bg-teal-100 text-teal-800 border border-teal-200 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide">
-                                      Deals
-                                    </span>
-                                  )}
-                                </span>
-                                {deals.map((d, i) => (
-                                  <span key={i} className="inline-flex items-center text-[11px] leading-snug text-teal-700 whitespace-nowrap">
-                                    {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
-                                    {d.details}
-                                  </span>
-                                ))}
-                              </span>
+                              {form.company} (not registered)
                             </button>
+                          )}
+                          {sortedCompanies.map((c) => {
+                            const name = companyName(c);
+                            const deals = companyDeals(c);
+                            const selected = name === form.company;
+                            return (
+                              <button
+                                key={name}
+                                type="button"
+                                onClick={() => { setForm({ ...form, company: name }); setCorporateDropdownOpen(false); setCopiedDealIndex(null); }}
+                                className={`w-full text-left px-3 py-1.5 text-sm hover:bg-teal-50 ${selected ? "bg-teal-50" : ""}`}
+                              >
+                                <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                  <span className="flex items-center gap-1.5 shrink-0">
+                                    <span className={selected ? "text-teal-800 font-semibold" : "text-stone-800"}>{name}</span>
+                                    {deals.length > 0 && (
+                                      <span className="shrink-0 bg-teal-100 text-teal-800 border border-teal-200 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide">
+                                        Deals
+                                      </span>
+                                    )}
+                                  </span>
+                                  {deals.map((d, i) => (
+                                    <span key={i} className="inline-flex items-center text-[11px] leading-snug text-teal-700 whitespace-nowrap">
+                                      {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
+                                      {d.details}
+                                    </span>
+                                  ))}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {selectedDeals.length > 0 && (
+                    <div className="w-56 shrink-0">
+                      <label className="text-xs text-stone-500 block mb-1">Deals</label>
+                      <div className="bg-teal-50 border border-teal-200 rounded-xl px-2.5 py-2 space-y-1 max-h-[74px] overflow-y-auto">
+                        {selectedDeals.map((d, i) => {
+                          const matchesAirline = form.airline && d.airline && d.airline.toUpperCase() === form.airline.trim().toUpperCase();
+                          return (
+                            <div key={i} className="flex items-center justify-between gap-2">
+                              <span className={`text-[11px] leading-snug truncate ${matchesAirline ? "text-teal-900 font-semibold" : "text-teal-700"}`}>
+                                {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
+                                {d.details}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => copyDeal(d, i)}
+                                className="shrink-0 flex items-center gap-1 text-[10px] font-semibold text-teal-700 hover:text-teal-900"
+                                title="Copy this deal"
+                              >
+                                <Copy size={11} />
+                                {copiedDealIndex === i ? "Copied" : ""}
+                              </button>
+                            </div>
                           );
                         })}
                       </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             <div className="w-40 shrink-0">
               <label className="text-xs text-stone-500 block mb-1">Supplier</label>
               {supplierOther ? (
