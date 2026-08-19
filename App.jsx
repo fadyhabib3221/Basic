@@ -2450,6 +2450,9 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // corporate's deals inline underneath its name.
   const [corporateDropdownOpen, setCorporateDropdownOpen] = useState(false);
   const corporateDropdownRef = useRef(null);
+  // Shows a brief "Copied" confirmation on the selected-corporate's deals box after the
+  // copy button is clicked; reset whenever the corporate selection changes.
+  const [dealsCopied, setDealsCopied] = useState(false);
   useEffect(() => {
     if (!corporateDropdownOpen) return;
     const handleClickOutside = (e) => {
@@ -10783,16 +10786,39 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     </button>
 
                     {selectedDeals.length > 0 && (
-                      <div className="mt-1 space-y-0.5">
-                        {selectedDeals.map((d, i) => {
-                          const matchesAirline = form.airline && d.airline && d.airline.toUpperCase() === form.airline.trim().toUpperCase();
-                          return (
-                            <p key={i} className={`text-[11px] leading-snug ${matchesAirline ? "text-teal-900 font-semibold" : "text-teal-700"}`}>
-                              {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
-                              {d.details}
-                            </p>
-                          );
-                        })}
+                      <div className="mt-1 bg-teal-50 border border-teal-200 rounded-lg px-2.5 py-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            {selectedDeals.map((d, i) => {
+                              const matchesAirline = form.airline && d.airline && d.airline.toUpperCase() === form.airline.trim().toUpperCase();
+                              return (
+                                <span key={i} className={`text-[11px] leading-snug whitespace-nowrap ${matchesAirline ? "text-teal-900 font-semibold" : "text-teal-700"}`}>
+                                  {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
+                                  {d.details}
+                                </span>
+                              );
+                            })}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const text = selectedDeals
+                                .map((d) => (d.airline ? `${d.airline.toUpperCase()} — ${d.details}` : d.details))
+                                .join("\n");
+                              if (navigator.clipboard && navigator.clipboard.writeText) {
+                                navigator.clipboard.writeText(text).then(() => {
+                                  setDealsCopied(true);
+                                  setTimeout(() => setDealsCopied(false), 1500);
+                                });
+                              }
+                            }}
+                            className="shrink-0 flex items-center gap-1 text-[10px] font-semibold text-teal-700 hover:text-teal-900"
+                            title="Copy deals"
+                          >
+                            <Copy size={11} />
+                            {dealsCopied ? "Copied" : "Copy"}
+                          </button>
+                        </div>
                       </div>
                     )}
 
