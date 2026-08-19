@@ -3998,12 +3998,18 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // have several deals, each tied to a different airline.
   const handleAddDealToDraft = () => {
     const details = newDealDraft.details.trim();
+    const airline = newDealDraft.airline.trim().toUpperCase();
+    if (!airline) {
+      setCompanyError("Airline is required for each deal");
+      return;
+    }
     if (!details) return;
     setNewCompanyDraft({
       ...newCompanyDraft,
-      deals: [...newCompanyDraft.deals, { airline: newDealDraft.airline.trim(), details }],
+      deals: [...newCompanyDraft.deals, { airline, details }],
     });
     setNewDealDraft(emptyDealDraft);
+    setCompanyError("");
   };
 
   const handleRemoveDealFromDraft = (index) => {
@@ -9702,11 +9708,13 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
               <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-2">
                 <input
-                  className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                  placeholder="Airline (optional)"
+                  className="border border-stone-300 rounded-xl px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  placeholder="Airline *"
                   list="airline-suggestions"
                   value={newDealDraft.airline}
-                  onChange={(e) => setNewDealDraft({ ...newDealDraft, airline: e.target.value })}
+                  onChange={(e) => setNewDealDraft({ ...newDealDraft, airline: e.target.value.toUpperCase() })}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddDealToDraft(); } }}
+                  required
                 />
                 <input
                   className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
@@ -10759,6 +10767,24 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     );
                   })}
               </select>
+              {form.company && (() => {
+                const selectedCompanyRecord = suggestions.companies.find((c) => companyName(c) === form.company);
+                const deals = selectedCompanyRecord ? companyDeals(selectedCompanyRecord) : [];
+                if (!deals.length) return null;
+                return (
+                  <div className="mt-1.5 border border-teal-200 bg-teal-50 rounded-xl px-2.5 py-1.5 space-y-1">
+                    {deals.map((d, i) => {
+                      const matchesAirline = form.airline && d.airline && d.airline.toUpperCase() === form.airline.trim().toUpperCase();
+                      return (
+                        <p key={i} className={`text-[11px] leading-snug ${matchesAirline ? "text-teal-900 font-semibold" : "text-teal-700"}`}>
+                          {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
+                          {d.details}
+                        </p>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
             <div className="w-40 shrink-0">
               <label className="text-xs text-stone-500 block mb-1">Supplier</label>
