@@ -5298,6 +5298,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       tripType: "",
       totalAmount: "",
       totalCurrency: "",
+      supplier: "",
     };
 
     const months = { JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06", JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12" };
@@ -5308,6 +5309,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // "1 OCAI SM 651 ..." segment lines). This is a completely different
     // layout from the labeled retail-receipt style below, so it's tried
     // first with its own tighter patterns before falling back.
+
+    // This exact combination of field labels (TKT-/LOC-/OD-/IOI-) is
+    // Amadeus's own PNR-print layout, so seeing it is a reliable signal for
+    // which GDS the ticket came from — sets the Supplier field automatically.
+    const isAmadeusFormat = /\bLOC-[A-Z0-9]{5,7}\b/i.test(flat) && /\bIOI-\d+\b/i.test(flat);
+    if (isAmadeusFormat) result.supplier = "Amadeus";
 
     // PNR: "LOC-7ZDV8F" (booking locator).
     const locMatch = flat.match(/\bLOC-\s*([A-Z0-9]{5,7})\b/i);
@@ -5470,6 +5477,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           tripType: extracted.tripType === "roundTrip" ? "roundTrip" : prev.tripType,
           netPrice: extracted.totalAmount || prev.netPrice,
           netCurrency: extracted.totalCurrency || prev.netCurrency,
+          supplier: extracted.supplier || prev.supplier,
         };
         if (Array.isArray(next.destinations) && next.destinations.length >= 2) {
           const dests = [...next.destinations];
@@ -5477,11 +5485,22 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           if (next.to) dests[dests.length - 1] = next.to;
           next.destinations = dests;
         }
+        // Multiple customers can share one booking, and each one's ticket is scanned
+        // separately (upload customer 1's screenshot, then customer 2's, etc.) — so
+        // this should land on the next customer row that doesn't have a name yet,
+        // not always overwrite the first one. If every existing row already has a
+        // name, a fresh row is added for this scan instead of dropping the data.
         const customers = (prev.customers && prev.customers.length ? prev.customers : [emptyCustomerRow()]).map((c) => ({ ...c }));
-        if (extracted.passengerName) customers[0].name = extracted.passengerName;
-        if (extracted.ticketNumber) customers[0].ticketNumber = extracted.ticketNumber;
-        if (extracted.pnrReference) customers[0].pnrReference = extracted.pnrReference;
+        let targetIndex = customers.findIndex((c) => !(c.name || "").trim());
+        if (targetIndex === -1) {
+          customers.push(emptyCustomerRow());
+          targetIndex = customers.length - 1;
+        }
+        if (extracted.passengerName) customers[targetIndex].name = extracted.passengerName;
+        if (extracted.ticketNumber) customers[targetIndex].ticketNumber = extracted.ticketNumber;
+        if (extracted.pnrReference) customers[targetIndex].pnrReference = extracted.pnrReference;
         next.customers = customers;
+        next.customersCount = customers.length;
         return next;
       });
 
