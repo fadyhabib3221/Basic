@@ -728,7 +728,7 @@ const companyName = (c) => (typeof c === "string" ? c : (c && c.name) || "");
 
 
 
-const emptyCompanyDraft = { name: "", taxNumber: "", commercialReg: "", phones: "" };
+const emptyCompanyDraft = { name: "", taxNumber: "", commercialReg: "", phones: "", deal: "" };
 
 // Local YYYY-MM-DD for today, matching the native <input type="date"> format.
 const todayDateStr = () => {
@@ -3941,10 +3941,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
 
   // Lets an admin (or an employee granted the Manage companies permission) register a
-  // company's full details — name, tax number, commercial registration number, and phone
-  // numbers — so they're always available to pick from the Company field and filter, even
-  // before any ticket has been entered for them. If editingCompanyName is set, this saves
-  // changes to that existing record instead of adding a new one.
+  // company's full details — name, tax number, commercial registration number, phone
+  // numbers, and any special deal/agreement terms — so they're always available to pick
+  // from the Company field and filter, even before any ticket has been entered for them.
+  // If editingCompanyName is set, this saves changes to that existing record instead of
+  // adding a new one.
   const handleAddCompany = () => {
     if (!canManageCompanies) return;
     const name = newCompanyDraft.name.trim();
@@ -3966,6 +3967,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         .split(/[,\n]/)
         .map((p) => p.trim())
         .filter(Boolean),
+      deal: newCompanyDraft.deal.trim(),
     };
     const companies = editingCompanyName
       ? suggestions.companies.map((c) => (companyName(c) === editingCompanyName ? record : c))
@@ -3985,6 +3987,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       taxNumber: typeof c === "object" ? c.taxNumber || "" : "",
       commercialReg: typeof c === "object" ? c.commercialReg || "" : "",
       phones: typeof c === "object" && Array.isArray(c.phones) ? c.phones.join(", ") : "",
+      deal: typeof c === "object" ? c.deal || "" : "",
     });
   };
 
@@ -9642,6 +9645,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 value={newCompanyDraft.phones}
                 onChange={(e) => setNewCompanyDraft({ ...newCompanyDraft, phones: e.target.value })}
               />
+              <input
+                className="border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 md:col-span-2"
+                placeholder="Deal (e.g. discount / agreement terms)"
+                value={newCompanyDraft.deal}
+                onChange={(e) => setNewCompanyDraft({ ...newCompanyDraft, deal: e.target.value })}
+              />
             </div>
             <div className="flex gap-2 mb-5">
               <button
@@ -9686,6 +9695,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Tax number</th>
                           <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Commercial reg.</th>
                           <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Phone</th>
+                          <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Deal</th>
                           <th className="text-right px-3 py-2 font-semibold whitespace-nowrap"></th>
                         </tr>
                       </thead>
@@ -9697,6 +9707,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             const taxNumber = typeof c === "object" ? c.taxNumber : "";
                             const commercialReg = typeof c === "object" ? c.commercialReg : "";
                             const phones = typeof c === "object" && Array.isArray(c.phones) ? c.phones : [];
+                            const deal = typeof c === "object" ? c.deal : "";
                             return (
                               <tr
                                 key={name}
@@ -9706,6 +9717,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{taxNumber || "-"}</td>
                                 <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{commercialReg || "-"}</td>
                                 <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{phones.length > 0 ? phones.join(", ") : "-"}</td>
+                                <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{deal || "-"}</td>
                                 <td className="px-3 py-2 text-right whitespace-nowrap">
                                   <div className="flex gap-1 justify-end">
                                     <button onClick={() => handleEditCompanyClick(c)} className="text-stone-400 hover:text-teal-800 p-0.5">
