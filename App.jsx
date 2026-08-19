@@ -5299,6 +5299,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       totalAmount: "",
       totalCurrency: "",
       supplier: "",
+      passengerType: "",
     };
 
     const months = { JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06", JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12" };
@@ -5328,15 +5329,22 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // Passenger name: numbered row "1.LASTNAME/FIRST MIDDLE MADT" — the
     // trailing token is a title+passenger-type code (M/F + ADT/CHD/INF,
     // sometimes MSTR/MISS) glued on with no space, not part of the name.
-    const gdsNameMatch = flat.match(/\d+\.\s*([A-Z]+\/[A-Z][A-Z\s]*?)\s+[MF]?(?:ADT|CHD|INF|STR|ISS)\b/i);
-    if (gdsNameMatch) result.passengerName = gdsNameMatch[1].replace(/\s+/g, " ").trim().toUpperCase();
+    // That same code tells us the passenger type — an infant ticket prints
+    // "INF" here with no name suffix otherwise distinguishing it — so it
+    // also drives which price field (adult/child/infant) the total goes into.
+    const gdsNameMatch = flat.match(/\d+\.\s*([A-Z]+\/[A-Z][A-Z\s]*?)\s+([MF]?(ADT|CHD|INF|STR|ISS))\b/i);
+    if (gdsNameMatch) {
+      result.passengerName = gdsNameMatch[1].replace(/\s+/g, " ").trim().toUpperCase();
+      const typeCode = gdsNameMatch[3].toUpperCase();
+      result.passengerType = typeCode === "INF" ? "infant" : typeCode === "CHD" ? "child" : "adult";
+    }
 
     // Route + airline: each flight segment line looks like
     // "1 OCAI SM 651  X 20AUG1905 OK XEGRT ...", where "O" + 3 letters is
     // that segment's *origin* airport and the 2 letters after it are the
     // airline code. Walking the segment origins in order gives the route
     // (e.g. OCAI, OATH -> CAI then ATH for a CAI-ATH-CAI round trip).
-    const segMatches = [...flat.matchAll(/\bO([A-Z]{3})\s+([A-Z]{2})\s+\d{2,4}\b/g)];
+    const segMatches = [...flat.matchAll(/\bO([A-Z]{3})\s+([A-Z]{2})\s+\d{1,4}\b/g)];
     if (segMatches.length) {
       const originCodes = segMatches.map((m) => m[1]);
       result.fromIata = originCodes[0];
@@ -5468,6 +5476,13 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       const extracted = extractTicketFieldsFromText(data.text || "");
 
       setForm((prev) => {
+        // The scanned total goes to the price field matching this ticket's
+        // passenger type — an infant or child ticket has its own fare tier
+        // (see childNetPrice/infantNetPrice), so dropping an infant's total
+        // into the adult netPrice would silently misprice the whole booking.
+        const priceField =
+          extracted.passengerType === "infant" ? "infantNetPrice" : extracted.passengerType === "child" ? "childNetPrice" : "netPrice";
+
         const next = {
           ...prev,
           from: extracted.fromIata ? extracted.fromIata.toUpperCase() : prev.from,
@@ -5475,10 +5490,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           airline: extracted.airlineIata ? extracted.airlineIata.toUpperCase() : prev.airline,
           date: extracted.date || prev.date,
           tripType: extracted.tripType === "roundTrip" ? "roundTrip" : prev.tripType,
-          netPrice: extracted.totalAmount || prev.netPrice,
           netCurrency: extracted.totalCurrency || prev.netCurrency,
           supplier: extracted.supplier || prev.supplier,
         };
+        if (extracted.totalAmount) next[priceField] = extracted.totalAmount;
         if (Array.isArray(next.destinations) && next.destinations.length >= 2) {
           const dests = [...next.destinations];
           if (next.from) dests[0] = next.from;
@@ -5499,6 +5514,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         if (extracted.passengerName) customers[targetIndex].name = extracted.passengerName;
         if (extracted.ticketNumber) customers[targetIndex].ticketNumber = extracted.ticketNumber;
         if (extracted.pnrReference) customers[targetIndex].pnrReference = extracted.pnrReference;
+        if (extracted.passengerType) customers[targetIndex].type = extracted.passengerType;
         next.customers = customers;
         next.customersCount = customers.length;
         return next;
