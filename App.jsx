@@ -10787,7 +10787,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 companyName(a).localeCompare(companyName(b))
               );
               const copyDeal = (d, i) => {
-                const text = d.airline ? `${d.airline.toUpperCase()} — ${d.details}` : d.details;
+                const text = d.details;
                 if (navigator.clipboard && navigator.clipboard.writeText) {
                   navigator.clipboard.writeText(text).then(() => {
                     setCopiedDealIndex(i);
@@ -10880,7 +10880,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         }`}
                       >
                         <span className="truncate">
-                          {selectedDeals.length > 0 ? `${selectedDeals.length} deal${selectedDeals.length > 1 ? "s" : ""}` : "No deals"}
+                          {selectedDeals.length > 0 ? `${selectedDeals.length} Deal${selectedDeals.length > 1 ? "s" : ""}` : "No deals"}
                         </span>
                         <ChevronDown size={14} className={`shrink-0 transition-transform ${selectedDeals.length > 0 ? "text-teal-600" : "text-stone-300"} ${dealsDropdownOpen ? "rotate-180" : ""}`} />
                       </button>
