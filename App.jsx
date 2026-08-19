@@ -8280,7 +8280,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <img src={LOGO_DATA_URL} alt="Travel Agency Management" className="w-full h-auto object-contain" />
               </div>
               <h1 className="relative text-white font-semibold text-lg tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>Travel Agency Management</h1>
-              <p className="relative text-teal-200/70 text-[11px] mt-0.5">By Fady Habib</p>
+              <p className="relative text-teal-200/70 text-[11px] mt-0.5">Powered by Fady Habib</p>
               <p className="relative text-teal-50/90 text-xs mt-1">Sign in to manage tickets, sales &amp; bookings</p>
 
               {/* Route code, like a boarding pass stub */}
@@ -8831,7 +8831,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
               <div>
                 <h1 className="text-base sm:text-lg md:text-2xl font-semibold text-white" style={{ fontFamily: "'Fraunces', serif" }}>
-                  Travel Agency Management <span className="text-teal-200/60 font-medium text-[10px] sm:text-xs md:text-base" style={{ fontFamily: "'Inter', sans-serif" }}>By Fady Habib</span>
+                  Travel Agency Management <span className="text-teal-200/60 font-medium text-[10px] sm:text-xs md:text-base" style={{ fontFamily: "'Inter', sans-serif" }}>Powered by Fady Habib</span>
                 </h1>
                 <p className="text-teal-100/80 text-xs sm:text-sm flex items-center gap-1.5 flex-wrap mt-0.5">
                   Signed in as {currentUser.name}
