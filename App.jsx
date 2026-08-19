@@ -2445,6 +2445,22 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // Whether the Supplier field is in "type your own name" mode (chosen via the Other option).
   const [supplierOther, setSupplierOther] = useState(false);
 
+  // Whether the custom "Corporates" dropdown on the ticket form is open. It's a custom
+  // (non-native) dropdown — rather than a plain <select> — so each option can show that
+  // corporate's deals inline underneath its name.
+  const [corporateDropdownOpen, setCorporateDropdownOpen] = useState(false);
+  const corporateDropdownRef = useRef(null);
+  useEffect(() => {
+    if (!corporateDropdownOpen) return;
+    const handleClickOutside = (e) => {
+      if (corporateDropdownRef.current && !corporateDropdownRef.current.contains(e.target)) {
+        setCorporateDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [corporateDropdownOpen]);
+
   // Flight lookup — looks up a flight number via the AviationStack API to
   // auto-fill From/To/Airline on the ticket form and show live flight status.
   // The API key is saved once (by any manager) into the same encrypted shared
@@ -10747,40 +10763,91 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <label className="text-xs text-stone-500 block mb-1">Corporates (optional)</label>
               {(() => {
                 const selectedCompanyRecord = suggestions.companies.find((c) => companyName(c) === form.company);
-                const deals = selectedCompanyRecord ? companyDeals(selectedCompanyRecord) : [];
+                const selectedDeals = selectedCompanyRecord ? companyDeals(selectedCompanyRecord) : [];
+                const unregisteredCurrent =
+                  form.company && !suggestions.companies.some((c) => companyName(c) === form.company);
+                const sortedCompanies = [...suggestions.companies].sort((a, b) =>
+                  companyName(a).localeCompare(companyName(b))
+                );
                 return (
-                  <div className={`w-full border rounded-xl bg-white focus-within:ring-2 focus-within:ring-teal-700 ${deals.length ? "border-teal-300" : "border-stone-300"}`}>
-                    <select
-                      className="w-full bg-transparent px-3 py-2 text-sm focus:outline-none"
-                      value={form.company}
-                      onChange={(e) => setForm({ ...form, company: e.target.value })}
+                  <div className="relative" ref={corporateDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setCorporateDropdownOpen((o) => !o)}
+                      className={`w-full border rounded-xl px-3 py-2 text-sm bg-white flex items-center justify-between gap-2 text-left focus:outline-none focus:ring-2 focus:ring-teal-700 ${selectedDeals.length ? "border-teal-300" : "border-stone-300"}`}
                     >
-                      <option value="">— No corporate —</option>
-                      {form.company && !suggestions.companies.some((c) => companyName(c) === form.company) && (
-                        // The ticket already has a company value that isn't (or is no longer) a
-                        // registered corporate — e.g. saved before Corporate Management existed,
-                        // or the corporate was later renamed/deleted. Keep it selectable/visible
-                        // instead of silently blanking the field.
-                        <option value={form.company}>{form.company} (not registered)</option>
-                      )}
-                      {[...suggestions.companies]
-                        .sort((a, b) => companyName(a).localeCompare(companyName(b)))
-                        .map((c) => {
-                          const name = companyName(c);
-                          return (
-                            <option key={name} value={name}>{name}</option>
-                          );
-                        })}
-                    </select>
-                    {deals.length > 0 && (
-                      <div className="border-t border-teal-200 bg-teal-50 rounded-b-xl px-3 py-1.5 space-y-1">
-                        {deals.map((d, i) => {
+                      <span className={form.company ? "text-stone-800" : "text-stone-400"}>
+                        {form.company || "— No corporate —"}
+                      </span>
+                      <ChevronDown size={14} className={`shrink-0 text-stone-400 transition-transform ${corporateDropdownOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {selectedDeals.length > 0 && (
+                      <div className="mt-1 space-y-0.5">
+                        {selectedDeals.map((d, i) => {
                           const matchesAirline = form.airline && d.airline && d.airline.toUpperCase() === form.airline.trim().toUpperCase();
                           return (
                             <p key={i} className={`text-[11px] leading-snug ${matchesAirline ? "text-teal-900 font-semibold" : "text-teal-700"}`}>
                               {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
                               {d.details}
                             </p>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {corporateDropdownOpen && (
+                      <div className="absolute z-20 mt-1 w-full max-h-80 overflow-y-auto bg-white border border-stone-200 rounded-xl shadow-lg py-1">
+                        <button
+                          type="button"
+                          onClick={() => { setForm({ ...form, company: "" }); setCorporateDropdownOpen(false); }}
+                          className={`w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 ${!form.company ? "text-teal-800 font-semibold" : "text-stone-500"}`}
+                        >
+                          — No corporate —
+                        </button>
+                        {unregisteredCurrent && (
+                          // The ticket already has a company value that isn't (or is no longer) a
+                          // registered corporate — e.g. saved before Corporate Management existed,
+                          // or the corporate was later renamed/deleted. Keep it selectable/visible
+                          // instead of silently blanking the field.
+                          <button
+                            type="button"
+                            onClick={() => setCorporateDropdownOpen(false)}
+                            className="w-full text-left px-3 py-1.5 text-sm text-teal-800 font-semibold bg-teal-50"
+                          >
+                            {form.company} (not registered)
+                          </button>
+                        )}
+                        {sortedCompanies.map((c) => {
+                          const name = companyName(c);
+                          const deals = companyDeals(c);
+                          const selected = name === form.company;
+                          return (
+                            <button
+                              key={name}
+                              type="button"
+                              onClick={() => { setForm({ ...form, company: name }); setCorporateDropdownOpen(false); }}
+                              className={`w-full text-left px-3 py-1.5 text-sm hover:bg-teal-50 ${selected ? "bg-teal-50" : ""}`}
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <span className={selected ? "text-teal-800 font-semibold" : "text-stone-800"}>{name}</span>
+                                {deals.length > 0 && (
+                                  <span className="shrink-0 bg-teal-100 text-teal-800 border border-teal-200 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide">
+                                    Deal
+                                  </span>
+                                )}
+                              </span>
+                              {deals.length > 0 && (
+                                <span className="block mt-0.5 space-y-0.5">
+                                  {deals.map((d, i) => (
+                                    <span key={i} className="block text-[11px] leading-snug text-teal-700">
+                                      {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
+                                      {d.details}
+                                    </span>
+                                  ))}
+                                </span>
+                              )}
+                            </button>
                           );
                         })}
                       </div>
