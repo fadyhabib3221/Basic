@@ -2454,6 +2454,21 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // (tracked by index within the selected corporate's deals list); reset after copying
   // a different deal or changing the corporate selection.
   const [copiedDealIndex, setCopiedDealIndex] = useState(null);
+  // Whether the "Deals" dropdown (a separate, always-present control next to Corporates)
+  // is open. It's its own dropdown rather than an inline list so the layout stays fixed
+  // whether or not the selected corporate has deals.
+  const [dealsDropdownOpen, setDealsDropdownOpen] = useState(false);
+  const dealsDropdownRef = useRef(null);
+  useEffect(() => {
+    if (!dealsDropdownOpen) return;
+    const handleClickOutside = (e) => {
+      if (dealsDropdownRef.current && !dealsDropdownRef.current.contains(e.target)) {
+        setDealsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [dealsDropdownOpen]);
   useEffect(() => {
     if (!corporateDropdownOpen) return;
     const handleClickOutside = (e) => {
@@ -10826,7 +10841,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <button
                                 key={name}
                                 type="button"
-                                onClick={() => { setForm({ ...form, company: name }); setCorporateDropdownOpen(false); setCopiedDealIndex(null); }}
+                                onClick={() => { setForm({ ...form, company: name }); setCorporateDropdownOpen(false); setCopiedDealIndex(null); setDealsDropdownOpen(false); }}
                                 className={`w-full text-left px-3 py-1.5 text-sm hover:bg-teal-50 ${selected ? "bg-teal-50" : ""}`}
                               >
                                 <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -10853,33 +10868,54 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     </div>
                   </div>
 
-                  {selectedDeals.length > 0 && (
-                    <div className="w-56 shrink-0">
-                      <label className="text-xs text-stone-500 block mb-1">Deals</label>
-                      <div className="bg-teal-50 border border-teal-200 rounded-xl px-2.5 py-2 space-y-1 max-h-[74px] overflow-y-auto">
-                        {selectedDeals.map((d, i) => {
-                          const matchesAirline = form.airline && d.airline && d.airline.toUpperCase() === form.airline.trim().toUpperCase();
-                          return (
-                            <div key={i} className="flex items-center justify-between gap-2">
-                              <span className={`text-[11px] leading-snug truncate ${matchesAirline ? "text-teal-900 font-semibold" : "text-teal-700"}`}>
-                                {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
-                                {d.details}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => copyDeal(d, i)}
-                                className="shrink-0 flex items-center gap-1 text-[10px] font-semibold text-teal-700 hover:text-teal-900"
-                                title="Copy this deal"
+                  <div className="w-56 shrink-0">
+                    <label className="text-xs text-stone-500 block mb-1">Deals</label>
+                    <div className="relative" ref={dealsDropdownRef}>
+                      <button
+                        type="button"
+                        disabled={selectedDeals.length === 0}
+                        onClick={() => setDealsDropdownOpen((o) => !o)}
+                        className={`w-full border rounded-xl px-3 py-2 text-sm flex items-center justify-between gap-2 text-left focus:outline-none focus:ring-2 focus:ring-teal-700 ${
+                          selectedDeals.length > 0
+                            ? "bg-white border-teal-300 text-stone-800"
+                            : "bg-stone-50 border-stone-200 text-stone-400 cursor-not-allowed"
+                        }`}
+                      >
+                        <span className="truncate">
+                          {selectedDeals.length > 0 ? `${selectedDeals.length} deal${selectedDeals.length > 1 ? "s" : ""}` : "No deals"}
+                        </span>
+                        <ChevronDown size={14} className={`shrink-0 transition-transform ${selectedDeals.length > 0 ? "text-teal-600" : "text-stone-300"} ${dealsDropdownOpen ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {dealsDropdownOpen && selectedDeals.length > 0 && (
+                        <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white border border-stone-200 rounded-xl shadow-lg py-1">
+                          {selectedDeals.map((d, i) => {
+                            const matchesAirline = form.airline && d.airline && d.airline.toUpperCase() === form.airline.trim().toUpperCase();
+                            return (
+                              <div
+                                key={i}
+                                className={`flex items-center justify-between gap-2 px-3 py-1.5 ${matchesAirline ? "bg-teal-50" : ""}`}
                               >
-                                <Copy size={11} />
-                                {copiedDealIndex === i ? "Copied" : ""}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
+                                <span className={`text-[11px] leading-snug ${matchesAirline ? "text-teal-900 font-semibold" : "text-teal-700"}`}>
+                                  {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
+                                  {d.details}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => copyDeal(d, i)}
+                                  className="shrink-0 flex items-center gap-1 text-[10px] font-semibold text-teal-700 hover:text-teal-900"
+                                  title="Copy this deal"
+                                >
+                                  <Copy size={11} />
+                                  {copiedDealIndex === i ? "Copied" : ""}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </>
               );
             })()}
