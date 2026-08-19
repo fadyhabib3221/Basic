@@ -10745,43 +10745,46 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="flex flex-wrap items-start gap-2 mt-4">
             <div className="flex-1 min-w-[160px]">
               <label className="text-xs text-stone-500 block mb-1">Corporates (optional)</label>
-              <select
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
-                value={form.company}
-                onChange={(e) => setForm({ ...form, company: e.target.value })}
-              >
-                <option value="">— No corporate —</option>
-                {form.company && !suggestions.companies.some((c) => companyName(c) === form.company) && (
-                  // The ticket already has a company value that isn't (or is no longer) a
-                  // registered corporate — e.g. saved before Corporate Management existed,
-                  // or the corporate was later renamed/deleted. Keep it selectable/visible
-                  // instead of silently blanking the field.
-                  <option value={form.company}>{form.company} (not registered)</option>
-                )}
-                {[...suggestions.companies]
-                  .sort((a, b) => companyName(a).localeCompare(companyName(b)))
-                  .map((c) => {
-                    const name = companyName(c);
-                    return (
-                      <option key={name} value={name}>{name}</option>
-                    );
-                  })}
-              </select>
-              {form.company && (() => {
+              {(() => {
                 const selectedCompanyRecord = suggestions.companies.find((c) => companyName(c) === form.company);
                 const deals = selectedCompanyRecord ? companyDeals(selectedCompanyRecord) : [];
-                if (!deals.length) return null;
                 return (
-                  <div className="mt-1.5 border border-teal-200 bg-teal-50 rounded-xl px-2.5 py-1.5 space-y-1">
-                    {deals.map((d, i) => {
-                      const matchesAirline = form.airline && d.airline && d.airline.toUpperCase() === form.airline.trim().toUpperCase();
-                      return (
-                        <p key={i} className={`text-[11px] leading-snug ${matchesAirline ? "text-teal-900 font-semibold" : "text-teal-700"}`}>
-                          {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
-                          {d.details}
-                        </p>
-                      );
-                    })}
+                  <div className={`w-full border rounded-xl bg-white focus-within:ring-2 focus-within:ring-teal-700 ${deals.length ? "border-teal-300" : "border-stone-300"}`}>
+                    <select
+                      className="w-full bg-transparent px-3 py-2 text-sm focus:outline-none"
+                      value={form.company}
+                      onChange={(e) => setForm({ ...form, company: e.target.value })}
+                    >
+                      <option value="">— No corporate —</option>
+                      {form.company && !suggestions.companies.some((c) => companyName(c) === form.company) && (
+                        // The ticket already has a company value that isn't (or is no longer) a
+                        // registered corporate — e.g. saved before Corporate Management existed,
+                        // or the corporate was later renamed/deleted. Keep it selectable/visible
+                        // instead of silently blanking the field.
+                        <option value={form.company}>{form.company} (not registered)</option>
+                      )}
+                      {[...suggestions.companies]
+                        .sort((a, b) => companyName(a).localeCompare(companyName(b)))
+                        .map((c) => {
+                          const name = companyName(c);
+                          return (
+                            <option key={name} value={name}>{name}</option>
+                          );
+                        })}
+                    </select>
+                    {deals.length > 0 && (
+                      <div className="border-t border-teal-200 bg-teal-50 rounded-b-xl px-3 py-1.5 space-y-1">
+                        {deals.map((d, i) => {
+                          const matchesAirline = form.airline && d.airline && d.airline.toUpperCase() === form.airline.trim().toUpperCase();
+                          return (
+                            <p key={i} className={`text-[11px] leading-snug ${matchesAirline ? "text-teal-900 font-semibold" : "text-teal-700"}`}>
+                              {d.airline && <span className="font-semibold">{d.airline.toUpperCase()}{" — "}</span>}
+                              {d.details}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
