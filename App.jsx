@@ -394,7 +394,7 @@ class AppErrorBoundary extends React.Component {
     return { hasError: true, error };
   }
   componentDidCatch(error, info) {
-    console.error("Travel Agency Manager render error", error, info);
+    console.error("Travel Agency Management render error", error, info);
   }
   render() {
     if (!this.state.hasError) return this.props.children;
@@ -8114,7 +8114,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <div className="relative w-full mx-auto rounded-2xl bg-white shadow-lg flex items-center justify-center mb-3 p-4">
                 <img src={LOGO_DATA_URL} alt="Travel Agency Management" className="w-full h-auto object-contain" />
               </div>
-              <h1 className="relative text-white font-semibold text-lg tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>Travel Agency Manager</h1>
+              <h1 className="relative text-white font-semibold text-lg tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>Travel Agency Management</h1>
               <p className="relative text-teal-200/70 text-[11px] mt-0.5">By Fady Habib</p>
               <p className="relative text-teal-50/90 text-xs mt-1">Sign in to manage tickets, sales &amp; bookings</p>
 
@@ -8654,11 +8654,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </div>
             <div className="flex items-center gap-2 sm:gap-3 order-1">
               <div className="bg-white rounded-2xl px-2 py-1 sm:px-2.5 sm:py-1.5 md:px-3 md:py-2 shadow-sm shrink-0">
-                <img src={LOGO_DATA_URL} alt="TANIS International Travel" className="w-[110px] h-[34px] sm:w-[150px] sm:h-[46px] md:w-[260px] md:h-[80px] lg:w-[320px] lg:h-[98px] object-contain" />
+                <img src={LOGO_DATA_URL} alt="Travel Agency Management" className="w-[110px] h-[34px] sm:w-[150px] sm:h-[46px] md:w-[260px] md:h-[80px] lg:w-[320px] lg:h-[98px] object-contain" />
               </div>
               <div>
                 <h1 className="text-base sm:text-lg md:text-2xl font-semibold text-white" style={{ fontFamily: "'Fraunces', serif" }}>
-                  Travel Agency Manager <span className="text-teal-200/60 font-medium text-[10px] sm:text-xs md:text-base" style={{ fontFamily: "'Inter', sans-serif" }}>By Fady Habib</span>
+                  Travel Agency Management <span className="text-teal-200/60 font-medium text-[10px] sm:text-xs md:text-base" style={{ fontFamily: "'Inter', sans-serif" }}>By Fady Habib</span>
                 </h1>
                 <p className="text-teal-100/80 text-xs sm:text-sm flex items-center gap-1.5 flex-wrap mt-0.5">
                   Signed in as {currentUser.name}
