@@ -5355,6 +5355,28 @@ Use IATA 3-letter airport codes and 2-letter airline codes where possible. If a 
     }
   };
 
+  // Lets the user paste a copied screenshot (Ctrl/Cmd+V) straight into the ticket
+  // form instead of having to save it as a file first. Only active while on the
+  // Flights tab, and only intercepts the paste when the clipboard actually contains
+  // an image — pasting text into a normal field is untouched. A ref holds the
+  // latest handler so the listener itself doesn't need to be re-attached on every
+  // render (only when the tab changes).
+  const handleTicketScreenshotRef = useRef(handleTicketScreenshot);
+  handleTicketScreenshotRef.current = handleTicketScreenshot;
+  useEffect(() => {
+    if (activeSection !== "flights") return;
+    const onPaste = (e) => {
+      const items = (e.clipboardData && e.clipboardData.items) || [];
+      const imageItem = Array.from(items).find((it) => it.type && it.type.startsWith("image/"));
+      if (!imageItem) return;
+      e.preventDefault();
+      const file = imageItem.getAsFile();
+      if (file) handleTicketScreenshotRef.current(file);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [activeSection]);
+
   // Only the password of the account that's currently signed in can dismiss the
   // lock screen — checked the same way as a normal login, against that employee's
   // stored password hash. A few failed guesses throttle further attempts, same
@@ -10518,6 +10540,29 @@ Use IATA 3-letter airport codes and 2-letter airline codes where possible. If a 
           >
             <Plane size={14} className="rotate-45" /> Check flight status
           </button>
+          <input
+            type="file"
+            accept="image/*"
+            id="ticket-screenshot-input"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files && e.target.files[0];
+              handleTicketScreenshot(file);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => document.getElementById("ticket-screenshot-input").click()}
+            disabled={ticketScanLoading}
+            title="Upload a screenshot/photo of the ticket, or just paste one (Ctrl/Cmd+V) anywhere on this tab"
+            className="text-xs font-semibold text-teal-800 border border-teal-700 rounded-xl px-3 py-2 hover:bg-teal-50 disabled:opacity-40 flex items-center gap-1.5"
+          >
+            <Upload size={14} /> {ticketScanLoading ? "Reading..." : "Scan ticket"}
+          </button>
+          {ticketScanError && (
+            <p className="text-[10px] text-red-600 basis-full">{ticketScanError}</p>
+          )}
         </div>
 
         {showFlightLookup && (
@@ -11320,32 +11365,6 @@ Use IATA 3-letter airport codes and 2-letter airline codes where possible. If a 
               </div>
               {flightLookupError && (
                 <p className="text-[10px] text-red-600 mt-1 max-w-[9rem]">{flightLookupError}</p>
-              )}
-            </div>
-            <div>
-              <label className="text-xs text-stone-500 mb-1 block">Scan ticket</label>
-              <input
-                type="file"
-                accept="image/*"
-                id="ticket-screenshot-input"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files && e.target.files[0];
-                  handleTicketScreenshot(file);
-                  e.target.value = "";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => document.getElementById("ticket-screenshot-input").click()}
-                disabled={ticketScanLoading}
-                title="Upload a screenshot or photo of the ticket to auto-fill the fields"
-                className="shrink-0 border border-teal-300 bg-teal-50 rounded-lg px-2 py-1.5 text-teal-700 hover:bg-teal-100 disabled:opacity-40 flex items-center gap-1 text-xs font-medium"
-              >
-                <Upload size={14} /> {ticketScanLoading ? "Reading..." : "Upload"}
-              </button>
-              {ticketScanError && (
-                <p className="text-[10px] text-red-600 mt-1 max-w-[9rem]">{ticketScanError}</p>
               )}
             </div>
           </div>
