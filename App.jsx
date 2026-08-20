@@ -963,6 +963,8 @@ const getEmptyForm = () => ({
   // USD -> EGP rate in the header.
   netCurrency: "EGP",
   soldCurrency: "EGP",
+  // How the Net price is being paid/settled — Cash, Client CC, or Office CC.
+  netPaymentMethod: "cash",
   // Per-passenger rates for Child/Infant customers (see ticketPaxCounts/ticketNetTotal
   // above) — same currency as netCurrency/soldCurrency, only used/shown once at least
   // one customer row is marked Child or Infant.
@@ -1061,6 +1063,14 @@ const guestsForCapacity = (guests, capacity) => {
 const HOTEL_CURRENCIES = [
   { value: "EGP", label: "EGP" },
   { value: "USD", label: "USD" },
+];
+
+// How the Net price (what's owed/paid to the supplier/airline) was or will be settled —
+// shown as a dropdown right next to the ticket's Net price field.
+const NET_PAYMENT_METHODS = [
+  { value: "cash", label: "Cash" },
+  { value: "clientCC", label: "Client CC" },
+  { value: "officeCC", label: "Office CC" },
 ];
 
 // A single room line within a hotel booking: a room type + meal plan combination, its own
@@ -11741,6 +11751,18 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 )}
               </div>
             </div>
+            <div className="col-span-2">
+              <label className="text-xs text-stone-500 block mb-1">Net paid via</label>
+              <select
+                className="w-full border border-stone-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                value={form.netPaymentMethod || "cash"}
+                onChange={(e) => setForm({ ...form, netPaymentMethod: e.target.value })}
+              >
+                {NET_PAYMENT_METHODS.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="sm:hidden grid grid-cols-2 gap-2 mt-2">
             <div>
@@ -11797,7 +11819,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               }}
             />
           </div>
-          <div className="hidden sm:grid sm:grid-cols-5 sm:gap-3 sm:mt-3">
+          <div className="hidden sm:grid sm:grid-cols-6 sm:gap-3 sm:mt-3">
             <div>
               <label className="text-xs text-stone-500 block mb-1">Net currency</label>
               <select
@@ -11827,6 +11849,18 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   </span>
                 )}
               </div>
+            </div>
+            <div>
+              <label className="text-xs text-stone-500 block mb-1">Net paid via</label>
+              <select
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 bg-white"
+                value={form.netPaymentMethod || "cash"}
+                onChange={(e) => setForm({ ...form, netPaymentMethod: e.target.value })}
+              >
+                {NET_PAYMENT_METHODS.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Sold currency</label>
