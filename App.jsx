@@ -5585,6 +5585,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           // date are deliberately NOT auto-filled here — those stay manual entry only.
           isReissued: extracted.isReissued ? true : prev.isReissued,
         };
+        // The scanned "TOTAL" amount always goes to the price field, reissue or not.
+        // On a reissue, the EMD amount is entered separately (from its own screenshot/
+        // manual entry) via the emdAmount field below — it is never inferred from this
+        // ticket's TOTAL line.
         if (extracted.totalAmount) next[priceField] = extracted.totalAmount;
         if (Array.isArray(next.destinations) && next.destinations.length >= 2) {
           const dests = [...next.destinations];
