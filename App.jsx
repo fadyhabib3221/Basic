@@ -5313,6 +5313,9 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       totalCurrency: "",
       supplier: "",
       passengerType: "",
+      isReissued: false,
+      oldTicketNumber: "",
+      oldTicketIssueDate: "",
     };
 
     const months = { JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06", JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12" };
@@ -5417,11 +5420,30 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       result.tripType = "roundTrip";
     }
 
+    // Reissue/exchange: on a reissued ticket the "FO" line carries the ORIGINAL
+    // ticket's data — e.g. "FO 077-6907998436ALY30APR26/90218376/077-6907998566"
+    // reads as: old ticket number, then (no space) the 3-letter place-of-issue
+    // code, then the old issue date, then "/IOI number/..." which we don't need.
+    // Seeing this line at all is a reliable signal that this is a reissue, even
+    // though the "RCI-" field near the top is often left blank on the printout.
+    const foMatch = flat.match(/\bFO\s+(\d{3}-?\d{10})[A-Z]{3}(\d{1,2})([A-Z]{3})(\d{2})\b/i);
+    if (foMatch) {
+      result.isReissued = true;
+      const oldDigits = foMatch[1].replace(/[^0-9]/g, "");
+      result.oldTicketNumber = `${oldDigits.slice(0, 3)}-${oldDigits.slice(3)}`;
+      const mon = months[foMatch[3].toUpperCase()];
+      if (mon) result.oldTicketIssueDate = `20${foMatch[4]}-${mon}-${String(foMatch[2]).padStart(2, "0")}`;
+    }
+
     // Total price: "TOTAL   EGP      12322.80" — this is the full price the
     // agency was charged (fare + tax), i.e. the ticket's net cost, so it
     // maps to the net price field rather than the sold price (which the
     // agency sets itself and never appears on the airline's own ticket).
-    const totalMatch = flat.match(/\bTOTAL\s+([A-Z]{3})\s+([\d,]+\.\d{2})\b/i);
+    // Trailing single letter (e.g. "114.00A") is an IATA suffix code (commonly
+    // "additional collection" on a reissue) glued directly onto the amount with
+    // no space — tolerated here so it doesn't break the \b word boundary and
+    // silently fail the whole match, but not treated as part of the number.
+    const totalMatch = flat.match(/\bTOTAL\s+([A-Z]{3})\s+([\d,]+\.\d{2})[A-Z]?\b/i);
     if (totalMatch) {
       result.totalCurrency = totalMatch[1].toUpperCase();
       result.totalAmount = totalMatch[2].replace(/,/g, "");
@@ -5544,6 +5566,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           tripType: extracted.tripType === "roundTrip" ? "roundTrip" : prev.tripType,
           netCurrency: extracted.totalCurrency || prev.netCurrency,
           supplier: extracted.supplier || prev.supplier,
+          // Only ever turns reissue ON from a scan, never off — if the person already
+          // ticked it (or typed an old ticket number) by hand, a later screenshot that
+          // happens not to match the FO pattern shouldn't silently clear that.
+          isReissued: extracted.isReissued ? true : prev.isReissued,
+          oldTicketNumber: extracted.oldTicketNumber || prev.oldTicketNumber,
+          oldTicketIssueDate: extracted.oldTicketIssueDate || prev.oldTicketIssueDate,
         };
         if (extracted.totalAmount) next[priceField] = extracted.totalAmount;
         if (Array.isArray(next.destinations) && next.destinations.length >= 2) {
