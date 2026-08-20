@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useReducer } from "react";
+import React, { useState, useEffect, useRef, useReducer, useMemo } from "react";
 // xlsx-js-style is a drop-in replacement for "xlsx" (same API) that additionally
 // writes cell styles (fills/fonts) into the .xlsx file — needed for the export's
 // alternating row shading and the highlighted totals row. Plain "xlsx" silently
@@ -7869,40 +7869,68 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
   // Date-range predicate for the Reports tab: "today" | "month" (current calendar
   // month) | "custom" (reportsFrom/reportsTo, either end optional).
-  const inReportsRange = (dateStr) => {
-    if (!dateStr) return false;
-    if (reportsRange === "today") return dateStr === todayDateStr();
-    if (reportsRange === "month") return dateStr.slice(0, 7) === todayDateStr().slice(0, 7);
-    if (reportsFrom && dateStr < reportsFrom) return false;
-    if (reportsTo && dateStr > reportsTo) return false;
-    return true;
-  };
-  const reportRevenueBySection = {
-    flights: tickets.filter((t) => inReportsRange(t.date)).reduce((s, t) => s + profitAfterRefund(t), 0),
-    hotels: hotelBookings.filter((h) => inReportsRange(h.bookingDate)).reduce((s, h) => s + hotelProfitTotal(h), 0),
-    visa: visaBookings
-      .filter((v) => inReportsRange(v.bookingDate))
-      .reduce((s, v) => s + visaProfitTotal(v), 0),
-    cars: carBookings
-      .filter((c) => inReportsRange(c.bookingDate))
-      .reduce((s, c) => s + carProfitTotal(c), 0),
-  };
-  const reportTotalRevenue = Object.values(reportRevenueBySection).reduce((a, b) => a + b, 0);
-  const reportExpensesByCategory = {};
-  expenses
-    .filter((e) => inReportsRange(e.date))
-    .forEach((e) => {
-      const cat = e.category || "أخرى";
-      reportExpensesByCategory[cat] = (reportExpensesByCategory[cat] || 0) + (parseFloat(e.amount) || 0);
-    });
-  const reportTotalExpenses = Object.values(reportExpensesByCategory).reduce((a, b) => a + b, 0);
-  const reportNetProfit = reportTotalRevenue - reportTotalExpenses;
-  const reportBookingsCount = {
-    flights: tickets.filter((t) => inReportsRange(t.date)).length,
-    hotels: hotelBookings.filter((h) => inReportsRange(h.bookingDate)).length,
-    visa: visaBookings.filter((v) => inReportsRange(v.bookingDate)).length,
-    cars: carBookings.filter((c) => inReportsRange(c.bookingDate)).length,
-  };
+  // Reports tab totals. Overview cards, the Reports tab, and the Excel/PDF export all read
+  // from these, and every one of them used to refilter tickets/hotelBookings/visaBookings/
+  // carBookings/expenses from scratch on every render of this component — including renders
+  // triggered by something unrelated (typing in a different tab's form, etc.), since it's
+  // all one component. useMemo keeps the exact same values/shape, it just skips recomputing
+  // when none of the underlying record arrays or the selected date range changed.
+  // inReportsRange is only used here, so it now lives inside the memo instead of being
+  // recreated on every render for no reason. profitAfterRefund/hotelProfitTotal/
+  // visaProfitTotal/carProfitTotal are pure per-record functions (see their definitions
+  // above) — they're safe to call in here without being listed as deps, since their only
+  // inputs (t/h/v/c) already come from the arrays that are in the dependency list below.
+  const {
+    reportRevenueBySection,
+    reportTotalRevenue,
+    reportExpensesByCategory,
+    reportTotalExpenses,
+    reportNetProfit,
+    reportBookingsCount,
+  } = useMemo(() => {
+    const inReportsRange = (dateStr) => {
+      if (!dateStr) return false;
+      if (reportsRange === "today") return dateStr === todayDateStr();
+      if (reportsRange === "month") return dateStr.slice(0, 7) === todayDateStr().slice(0, 7);
+      if (reportsFrom && dateStr < reportsFrom) return false;
+      if (reportsTo && dateStr > reportsTo) return false;
+      return true;
+    };
+    const revenueBySection = {
+      flights: tickets.filter((t) => inReportsRange(t.date)).reduce((s, t) => s + profitAfterRefund(t), 0),
+      hotels: hotelBookings.filter((h) => inReportsRange(h.bookingDate)).reduce((s, h) => s + hotelProfitTotal(h), 0),
+      visa: visaBookings
+        .filter((v) => inReportsRange(v.bookingDate))
+        .reduce((s, v) => s + visaProfitTotal(v), 0),
+      cars: carBookings
+        .filter((c) => inReportsRange(c.bookingDate))
+        .reduce((s, c) => s + carProfitTotal(c), 0),
+    };
+    const totalRevenue = Object.values(revenueBySection).reduce((a, b) => a + b, 0);
+    const expensesByCategory = {};
+    expenses
+      .filter((e) => inReportsRange(e.date))
+      .forEach((e) => {
+        const cat = e.category || "أخرى";
+        expensesByCategory[cat] = (expensesByCategory[cat] || 0) + (parseFloat(e.amount) || 0);
+      });
+    const totalExpenses = Object.values(expensesByCategory).reduce((a, b) => a + b, 0);
+    const netProfit = totalRevenue - totalExpenses;
+    const bookingsCount = {
+      flights: tickets.filter((t) => inReportsRange(t.date)).length,
+      hotels: hotelBookings.filter((h) => inReportsRange(h.bookingDate)).length,
+      visa: visaBookings.filter((v) => inReportsRange(v.bookingDate)).length,
+      cars: carBookings.filter((c) => inReportsRange(c.bookingDate)).length,
+    };
+    return {
+      reportRevenueBySection: revenueBySection,
+      reportTotalRevenue: totalRevenue,
+      reportExpensesByCategory: expensesByCategory,
+      reportTotalExpenses: totalExpenses,
+      reportNetProfit: netProfit,
+      reportBookingsCount: bookingsCount,
+    };
+  }, [tickets, hotelBookings, visaBookings, carBookings, expenses, reportsRange, reportsFrom, reportsTo]);
 
   // This month's totals, used on the Overview cards regardless of whatever range is
   // currently selected on the Reports tab.
