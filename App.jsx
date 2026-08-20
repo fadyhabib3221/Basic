@@ -1522,7 +1522,7 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
       >
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-stone-900">Permissions</h3>
-          <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1">
+          <button title="Close" onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1">
             <X size={16} />
           </button>
         </div>
@@ -9501,6 +9501,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <Key size={16} className="text-teal-800" /> App license
                 </h2>
                 <button
+                  title="Close"
                   onClick={() => dispatchLicense({ showPanel: false, error: "", input: "" })}
                   className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
                 >
@@ -9576,6 +9577,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <Lock size={20} className="text-teal-800" /> Closed years
                   </h2>
                   <button
+                    title="Close"
                     onClick={() => setShowClosedYearsPanel(false)}
                     className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
                   >
@@ -9754,6 +9756,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <History size={16} className="text-teal-800" /> Login History
                   </h2>
                   <button
+                    title="Close"
                     onClick={() => setShowLoginHistory(false)}
                     className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
                   >
@@ -9851,6 +9854,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <ClipboardList size={16} className="text-teal-800" /> Activity Log
                   </h2>
                   <button
+                    title="Close"
                     onClick={() => setShowActivityLog(false)}
                     className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
                   >
@@ -10014,10 +10018,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex gap-1 justify-end">
-                              <button onClick={saveEditEmployee} className="text-emerald-600 hover:text-emerald-800 p-1">
+                              <button title="Save" onClick={saveEditEmployee} className="text-emerald-600 hover:text-emerald-800 p-1">
                                 <Check size={15} />
                               </button>
-                              <button onClick={cancelEditEmployee} className="text-stone-400 hover:text-red-600 p-1">
+                              <button title="Cancel" onClick={cancelEditEmployee} className="text-stone-400 hover:text-red-600 p-1">
                                 <X size={15} />
                               </button>
                             </div>
@@ -10317,7 +10321,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         {d.airline && <span className="font-semibold text-stone-700">{d.airline.toUpperCase()}{" — "}</span>}
                         <span className="text-stone-600">{d.details}</span>
                       </span>
-                      <button onClick={() => handleRemoveDealFromDraft(i)} className="text-stone-400 hover:text-red-600 p-0.5">
+                      <button title="Remove deal" onClick={() => handleRemoveDealFromDraft(i)} className="text-stone-400 hover:text-red-600 p-0.5">
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -10428,7 +10432,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                     <button onClick={() => handleEditCompanyClick(c)} className="text-stone-400 hover:text-teal-800 p-0.5">
                                       <Pencil size={13} />
                                     </button>
-                                    <button onClick={() => handleDeleteCompany(name)} className="text-stone-400 hover:text-red-600 p-0.5">
+                                    <button title="Delete company" onClick={() => handleDeleteCompany(name)} className="text-stone-400 hover:text-red-600 p-0.5">
                                       <Trash2 size={13} />
                                     </button>
                                   </div>
@@ -10527,7 +10531,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <tr key={s} className="border-t border-stone-100 hover:bg-stone-50">
                                 <td className="px-3 py-2 font-medium text-stone-800 whitespace-nowrap">{s}</td>
                                 <td className="px-3 py-2 text-right whitespace-nowrap">
-                                  <button onClick={() => handleDeleteFlightSupplierName(s)} className="text-stone-400 hover:text-red-600 p-0.5">
+                                  <button title="Delete supplier" onClick={() => handleDeleteFlightSupplierName(s)} className="text-stone-400 hover:text-red-600 p-0.5">
                                     <Trash2 size={13} />
                                   </button>
                                 </td>
@@ -10588,7 +10592,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <tr key={s} className="border-t border-stone-100 hover:bg-stone-50">
                                 <td className="px-3 py-2 font-medium text-stone-800 whitespace-nowrap">{s}</td>
                                 <td className="px-3 py-2 text-right whitespace-nowrap">
-                                  <button onClick={() => handleDeleteSupplierName(s)} className="text-stone-400 hover:text-red-600 p-0.5">
+                                  <button title="Delete supplier" onClick={() => handleDeleteSupplierName(s)} className="text-stone-400 hover:text-red-600 p-0.5">
                                     <Trash2 size={13} />
                                   </button>
                                 </td>
@@ -10649,7 +10653,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <tr key={s} className="border-t border-stone-100 hover:bg-stone-50">
                                 <td className="px-3 py-2 font-medium text-stone-800 whitespace-nowrap">{s}</td>
                                 <td className="px-3 py-2 text-right whitespace-nowrap">
-                                  <button onClick={() => handleDeleteVisaSupplierName(s)} className="text-stone-400 hover:text-red-600 p-0.5">
+                                  <button title="Delete supplier" onClick={() => handleDeleteVisaSupplierName(s)} className="text-stone-400 hover:text-red-600 p-0.5">
                                     <Trash2 size={13} />
                                   </button>
                                 </td>
@@ -10710,7 +10714,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                               <tr key={s} className="border-t border-stone-100 hover:bg-stone-50">
                                 <td className="px-3 py-2 font-medium text-stone-800 whitespace-nowrap">{s}</td>
                                 <td className="px-3 py-2 text-right whitespace-nowrap">
-                                  <button onClick={() => handleDeleteCarSupplierName(s)} className="text-stone-400 hover:text-red-600 p-0.5">
+                                  <button title="Delete supplier" onClick={() => handleDeleteCarSupplierName(s)} className="text-stone-400 hover:text-red-600 p-0.5">
                                     <Trash2 size={13} />
                                   </button>
                                 </td>
@@ -11035,6 +11039,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <Plane size={16} className="text-teal-800 rotate-45" /> Flight status checker
                 </h2>
                 <button
+                  title="Close"
                   onClick={() => setShowFlightLookup(false)}
                   className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
                 >
@@ -12622,7 +12627,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700"
                   >
                     {s}
-                    <button onClick={() => handleDeleteSupplierName(s)} className="text-red-500 hover:text-red-700">
+                    <button title="Delete supplier" onClick={() => handleDeleteSupplierName(s)} className="text-red-500 hover:text-red-700">
                       <Trash2 size={12} />
                     </button>
                   </span>
@@ -12660,7 +12665,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700"
                   >
                     {hn}
-                    <button onClick={() => handleDeleteHotelName(hn)} className="text-red-500 hover:text-red-700">
+                    <button title="Delete hotel name" onClick={() => handleDeleteHotelName(hn)} className="text-red-500 hover:text-red-700">
                       <Trash2 size={12} />
                     </button>
                   </span>
@@ -13478,6 +13483,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <Globe size={16} className="text-teal-800" /> Visa requirement checker
                 </h2>
                 <button
+                  title="Close"
                   onClick={() => setShowVisaChecker(false)}
                   className="text-stone-400 hover:text-stone-600 p-1 -m-1 rounded-lg hover:bg-stone-100"
                 >
@@ -13653,7 +13659,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700"
                   >
                     {s}
-                    <button onClick={() => handleDeleteVisaSupplierName(s)} className="text-red-500 hover:text-red-700">
+                    <button title="Delete supplier" onClick={() => handleDeleteVisaSupplierName(s)} className="text-red-500 hover:text-red-700">
                       <Trash2 size={12} />
                     </button>
                   </span>
@@ -14281,7 +14287,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     className="inline-flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-700"
                   >
                     {s}
-                    <button onClick={() => handleDeleteCarSupplierName(s)} className="text-red-500 hover:text-red-700">
+                    <button title="Delete supplier" onClick={() => handleDeleteCarSupplierName(s)} className="text-red-500 hover:text-red-700">
                       <Trash2 size={12} />
                     </button>
                   </span>
@@ -15391,6 +15397,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           </button>
                           {filesPerm.canDelete && (
                           <button
+                            title="Delete file"
                             onClick={() =>
                               requestConfirm(`Delete file ${f.serial}? This cannot be undone.`, async () => {
                                 await deleteFile(f.id);
@@ -15525,6 +15532,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <p className="text-xs text-emerald-700">net {fmt(r.netPrice)} {r.netCurrency}</p>
                           </button>
                           <button
+                            title="Remove item"
                             onClick={() => removeDraftItem(it.id)}
                             className="text-red-500 hover:text-red-700 p-1"
                           >
@@ -15684,6 +15692,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           </button>
                           {editingFileServices && filesPerm.canEdit && (
                             <button
+                              title="Remove item from file"
                               onClick={() => removeItemFromFile(openFile.id, it.id)}
                               className="text-red-500 hover:text-red-700 p-1"
                             >
@@ -15713,7 +15722,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <h3 className="font-semibold text-stone-900">
                       {draftFile ? "Add services" : `Add a copy to ${openFile.serial}`}
                     </h3>
-                    <button onClick={() => setShowFilePicker(false)} className="text-stone-400 hover:text-stone-700 p-1">
+                    <button title="Close" onClick={() => setShowFilePicker(false)} className="text-stone-400 hover:text-stone-700 p-1">
                       <X size={16} />
                     </button>
                   </div>
@@ -16380,7 +16389,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     </div>
                     <div className="flex items-center gap-1">
                       <button onClick={() => handleEditTreasuryAccountClick(a)} className="text-stone-400 hover:text-teal-700"><Pencil size={14} /></button>
-                      <button onClick={() => handleDeleteTreasuryAccount(a.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                      <button title="Delete account" onClick={() => handleDeleteTreasuryAccount(a.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
                     </div>
                   </div>
                   <p className="text-xs text-stone-400 mb-2">{treasuryAccountTypeLabel(a.type)}</p>
@@ -16442,16 +16451,16 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           </td>
                           <td className="px-3 py-2">
                             {prefix === "te" && (
-                              <button onClick={() => handleDeleteTreasuryEntry(rawId)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                              <button title="Delete entry" onClick={() => handleDeleteTreasuryEntry(rawId)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
                             )}
                             {prefix === "sp" && (
-                              <button onClick={() => handleDeleteSupplierPayment(rawId)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                              <button title="Delete payment" onClick={() => handleDeleteSupplierPayment(rawId)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
                             )}
                             {prefix === "cp" && (
-                              <button onClick={() => handleDeleteCustomerPayment(rawId)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                              <button title="Delete payment" onClick={() => handleDeleteCustomerPayment(rawId)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
                             )}
                             {prefix === "ex" && (
-                              <button onClick={() => handleDeleteExpense(rawId)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                              <button title="Delete expense" onClick={() => handleDeleteExpense(rawId)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
                             )}
                           </td>
                         </tr>
@@ -16511,7 +16520,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1.5 justify-end">
                             <button onClick={() => handleEditExpenseClick(e)} className="text-stone-400 hover:text-teal-700"><Pencil size={14} /></button>
-                            <button onClick={() => handleDeleteExpense(e.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                            <button title="Delete expense" onClick={() => handleDeleteExpense(e.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
                           </div>
                         </td>
                       </tr>
@@ -16638,7 +16647,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="sticky top-4 flex flex-col max-h-[calc(100vh-2rem)] bg-white border border-stone-200 rounded-2xl p-2 shadow-lg shadow-stone-900/5 overflow-y-auto z-30 anim-slide-up">
             <div className="flex items-center justify-between px-1 pb-1 mb-1 border-b border-stone-100">
               <p className="text-xs font-semibold text-stone-600">{visibleOnlineUsernames.length} online now</p>
-              <button onClick={() => setShowOnlineList(false)} className="text-stone-400 hover:text-stone-700 p-0.5">
+              <button title="Close" onClick={() => setShowOnlineList(false)} className="text-stone-400 hover:text-stone-700 p-0.5">
                 <X size={14} />
               </button>
             </div>
@@ -17086,7 +17095,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <h3 className="font-semibold text-stone-900 flex items-center gap-1.5">
                 <Bell size={16} className="text-teal-800" /> Requests
               </h3>
-              <button onClick={() => setShowRequestsPanel(false)} className="text-stone-400 hover:text-stone-700 p-1">
+              <button title="Close" onClick={() => setShowRequestsPanel(false)} className="text-stone-400 hover:text-stone-700 p-1">
                 <X size={16} />
               </button>
             </div>
@@ -17205,7 +17214,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <p className="text-sm font-semibold text-stone-900 flex items-center gap-1.5">
               <Bell size={14} className="text-teal-800" /> New request
             </p>
-            <button onClick={() => setIncomingRequestPopup(null)} className="text-stone-400 hover:text-stone-700 p-0.5">
+            <button title="Close" onClick={() => setIncomingRequestPopup(null)} className="text-stone-400 hover:text-stone-700 p-0.5">
               <X size={14} />
             </button>
           </div>
@@ -17274,7 +17283,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               <h2 className="font-semibold text-stone-900 flex items-center gap-2">
                 <Lock size={16} className="text-teal-800" /> Change your password
               </h2>
-              <button onClick={() => setShowChangePassword(false)} className="text-stone-400 hover:text-stone-700 p-1">
+              <button title="Close" onClick={() => setShowChangePassword(false)} className="text-stone-400 hover:text-stone-700 p-1">
                 <X size={16} />
               </button>
             </div>
@@ -17319,7 +17328,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           >
             <div className="flex items-center justify-between mb-1">
               <h3 className="font-semibold text-stone-900">IATA deduction history</h3>
-              <button onClick={() => setShowIataHistory(false)} className="text-stone-400 hover:text-stone-700 p-1">
+              <button title="Close" onClick={() => setShowIataHistory(false)} className="text-stone-400 hover:text-stone-700 p-1">
                 <X size={16} />
               </button>
             </div>
@@ -17366,7 +17375,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           >
             <div className="flex items-center justify-between mb-1">
               <h3 className="font-semibold text-stone-900">Link to which file?</h3>
-              <button onClick={() => { setCopyPickerSource(null); setCopyPickerSearch(""); }} className="text-stone-400 hover:text-stone-700 p-1">
+              <button title="Close" onClick={() => { setCopyPickerSource(null); setCopyPickerSearch(""); }} className="text-stone-400 hover:text-stone-700 p-1">
                 <X size={16} />
               </button>
             </div>
@@ -17473,7 +17482,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="bg-white rounded-2xl w-full max-w-md p-5" onClick={(ev) => ev.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-stone-800">{expenseEditingId ? at("editExpense") : at("addExpense")}</h3>
-              <button onClick={() => setShowExpenseForm(false)} className="text-stone-400 hover:text-stone-700"><X size={18} /></button>
+              <button title="Close" onClick={() => setShowExpenseForm(false)} className="text-stone-400 hover:text-stone-700"><X size={18} /></button>
             </div>
             <div className="space-y-3">
               <div>
@@ -17519,7 +17528,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="bg-white rounded-2xl w-full max-w-md p-5" onClick={(ev) => ev.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-stone-800">{treasuryAccountEditingId ? at("editAccount") : at("addAccountTreasury")}</h3>
-              <button onClick={() => setShowTreasuryAccountForm(false)} className="text-stone-400 hover:text-stone-700"><X size={18} /></button>
+              <button title="Close" onClick={() => setShowTreasuryAccountForm(false)} className="text-stone-400 hover:text-stone-700"><X size={18} /></button>
             </div>
             <div className="space-y-3">
               <div>
@@ -17550,7 +17559,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="bg-white rounded-2xl w-full max-w-md p-5" onClick={(ev) => ev.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-stone-800">{at("manualEntryTitle")}</h3>
-              <button onClick={() => setShowTreasuryEntryForm(false)} className="text-stone-400 hover:text-stone-700"><X size={18} /></button>
+              <button title="Close" onClick={() => setShowTreasuryEntryForm(false)} className="text-stone-400 hover:text-stone-700"><X size={18} /></button>
             </div>
             <div className="space-y-3">
               <div className="flex gap-2">
@@ -17608,7 +17617,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="max-w-2xl mx-auto p-4 md:p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-lg md:text-xl font-bold text-stone-900" style={{ fontFamily: "'Fraunces', serif" }}>{viewingSupplier}</h1>
-              <button onClick={() => setViewingSupplier(null)} className="text-stone-400 hover:text-stone-700 p-1.5"><X size={18} /></button>
+              <button title="Close" onClick={() => setViewingSupplier(null)} className="text-stone-400 hover:text-stone-700 p-1.5"><X size={18} /></button>
             </div>
             {(() => {
               const s = supplierLedger.find((x) => x.supplier === viewingSupplier) || { totalOwed: 0, paid: 0, balance: 0 };
@@ -17656,7 +17665,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <p className="font-semibold text-stone-800">{fmt(parseFloat(p.amount) || 0)} {acctCurrency}</p>
                             <p className="text-[11px] text-stone-400">{p.date ? formatDisplayDate(p.date) : "-"} · {treasuryAccounts.find((a) => a.id === p.accountId)?.name || "-"}{p.note ? ` · ${p.note}` : ""}</p>
                           </div>
-                          <button onClick={() => handleDeleteSupplierPayment(p.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                          <button title="Delete payment" onClick={() => handleDeleteSupplierPayment(p.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
                         </div>
                       ))
                     )}
@@ -17691,7 +17700,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="max-w-2xl mx-auto p-4 md:p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-lg md:text-xl font-bold text-stone-900" style={{ fontFamily: "'Fraunces', serif" }}>{viewingCustomer}</h1>
-              <button onClick={() => setViewingCustomer(null)} className="text-stone-400 hover:text-stone-700 p-1.5"><X size={18} /></button>
+              <button title="Close" onClick={() => setViewingCustomer(null)} className="text-stone-400 hover:text-stone-700 p-1.5"><X size={18} /></button>
             </div>
             {(() => {
               const c = customerLedger.find((x) => x.customer === viewingCustomer) || { totalDue: 0, paid: 0, balance: 0 };
@@ -17739,7 +17748,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <p className="font-semibold text-stone-800">{fmt(parseFloat(p.amount) || 0)} {acctCurrency}</p>
                             <p className="text-[11px] text-stone-400">{p.date ? formatDisplayDate(p.date) : "-"} · {treasuryAccounts.find((a) => a.id === p.accountId)?.name || "-"}{p.note ? ` · ${p.note}` : ""}</p>
                           </div>
-                          <button onClick={() => handleDeleteCustomerPayment(p.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
+                          <button title="Delete payment" onClick={() => handleDeleteCustomerPayment(p.id)} className="text-stone-400 hover:text-red-600"><Trash2 size={14} /></button>
                         </div>
                       ))
                     )}
