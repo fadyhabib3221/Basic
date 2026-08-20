@@ -12845,7 +12845,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <div>
                       <label className="text-[11px] text-stone-500 block mb-1">Room type</label>
                       <select
-                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                         value={line.roomType}
                         onChange={(e) => {
                           const roomType = e.target.value;
@@ -12861,7 +12861,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <div>
                       <label className="text-[11px] text-stone-500 block mb-1">Meal plan</label>
                       <select
-                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                         value={line.mealPlan}
                         onChange={(e) => updateHotelRoomLine(line.id, { mealPlan: e.target.value })}
                       >
@@ -12874,7 +12874,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <label className="text-[11px] text-stone-500 block mb-1">Check-in</label>
                       <input
                         type="date"
-                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                         value={line.checkIn}
                         onChange={(e) => updateHotelRoomLine(line.id, { checkIn: e.target.value })}
                       />
@@ -12884,7 +12884,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <input
                         type="date"
                         min={line.checkIn || undefined}
-                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                         value={line.checkOut}
                         onChange={(e) => updateHotelRoomLine(line.id, { checkOut: e.target.value })}
                       />
@@ -12898,7 +12898,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <input
                         type="number"
                         min="1"
-                        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                        className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                         value={line.count}
                         onChange={(e) => updateHotelRoomLine(line.id, { count: e.target.value })}
                       />
@@ -12908,7 +12908,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <div className="relative">
                         <input
                           type="number"
-                          className="w-28 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                          className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                           value={line.netPrice}
                           onChange={(e) => updateHotelRoomLine(line.id, { netPrice: e.target.value })}
                           onBlur={(e) => updateHotelRoomLine(line.id, { netPrice: addCentsOnBlur(e.target.value) })}
@@ -12926,7 +12926,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <div className="relative">
                         <input
                           type="number"
-                          className="w-28 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
+                          className="w-28 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                           value={line.soldPrice}
                           onChange={(e) => updateHotelRoomLine(line.id, { soldPrice: e.target.value })}
                           onBlur={(e) => updateHotelRoomLine(line.id, { soldPrice: addCentsOnBlur(e.target.value) })}
@@ -12967,7 +12967,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                           )}
                         </label>
                         <input
-                          className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                          className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                           value={g.name}
                           onChange={(e) => updateRoomGuest(line.id, i, e.target.value)}
                           placeholder={i === 0 ? "Guest 1 name (required)" : `Guest ${i + 1} name`}
@@ -12995,7 +12995,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             <div className="sm:col-span-6">
                               <label className="text-[11px] text-stone-500 block mb-1">Child {i + 1} name</label>
                               <input
-                                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                                 value={c.name}
                                 onChange={(e) => updateRoomChild(line.id, c.id, { name: e.target.value })}
                                 placeholder="Child name"
@@ -13007,7 +13007,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                 type="text"
                                 inputMode="numeric"
                                 pattern="[0-9]*"
-                                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                                 value={c.age}
                                 onChange={(e) => updateRoomChild(line.id, c.id, { age: sanitizeAgeInput(e.target.value) })}
                                 placeholder="e.g. 4"
