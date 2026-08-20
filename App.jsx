@@ -5567,11 +5567,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           netCurrency: extracted.totalCurrency || prev.netCurrency,
           supplier: extracted.supplier || prev.supplier,
           // Only ever turns reissue ON from a scan, never off — if the person already
-          // ticked it (or typed an old ticket number) by hand, a later screenshot that
-          // happens not to match the FO pattern shouldn't silently clear that.
+          // ticked it by hand, a later screenshot that happens not to match the FO
+          // pattern shouldn't silently clear that. The old ticket number and its issue
+          // date are deliberately NOT auto-filled here — those stay manual entry only.
           isReissued: extracted.isReissued ? true : prev.isReissued,
-          oldTicketNumber: extracted.oldTicketNumber || prev.oldTicketNumber,
-          oldTicketIssueDate: extracted.oldTicketIssueDate || prev.oldTicketIssueDate,
         };
         if (extracted.totalAmount) next[priceField] = extracted.totalAmount;
         if (Array.isArray(next.destinations) && next.destinations.length >= 2) {
