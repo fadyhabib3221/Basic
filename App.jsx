@@ -8137,9 +8137,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const deleteFile = async (id) => {
     if (!currentUser) return;
     const deleted = files.find((f) => f.id === id);
-    await persistFiles(files.filter((f) => f.id !== id));
-    if (deleted) recordActivity("Files", "deleted", `Deleted file #${deleted.serial || deleted.id}${deleted.company ? ` for ${deleted.company}` : ""}`);
-    if (openFileId === id) setOpenFileId(null);
+    requestConfirm(`Delete file #${(deleted && (deleted.serial || deleted.id)) || id}? This cannot be undone.`, async () => {
+      await persistFiles(files.filter((f) => f.id !== id));
+      if (deleted) recordActivity("Files", "deleted", `Deleted file #${deleted.serial || deleted.id}${deleted.company ? ` for ${deleted.company}` : ""}`);
+      if (openFileId === id) setOpenFileId(null);
+    });
   };
 
   const openFile = openFileId ? files.find((f) => f.id === openFileId) : null;
