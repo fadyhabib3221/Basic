@@ -634,13 +634,17 @@ const ticketPaxCounts = (t) => {
 // adult fare; childNetPrice/childSoldPrice and infantNetPrice/infantSoldPrice are
 // per-passenger rates added on top, multiplied by however many child/infant passengers
 // are on the ticket. Tickets with only adults (the common case, and every legacy ticket)
-// total to exactly netPrice/soldPrice, unchanged.
+// total to exactly netPrice/soldPrice, unchanged. For an exchanged (reissued) ticket,
+// emdAmount (the EMD charged on the exchange) is added on top of the net side only —
+// it's a cost to the agency, not something charged to the customer, so it never touches
+// ticketSoldTotal. It's "" on every non-reissued ticket, so this is a no-op there.
 const ticketNetTotal = (t) => {
   const counts = ticketPaxCounts(t);
   return (
     (parseFloat(t.netPrice) || 0) +
     counts.child * (parseFloat(t.childNetPrice) || 0) +
-    counts.infant * (parseFloat(t.infantNetPrice) || 0)
+    counts.infant * (parseFloat(t.infantNetPrice) || 0) +
+    (t.isReissued ? parseFloat(t.emdAmount) || 0 : 0)
   );
 };
 const ticketSoldTotal = (t) => {
@@ -5492,6 +5496,20 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     }
 
     if (!result.tripType && /ROUND\s*TRIP|RETURN/i.test(flat)) result.tripType = "roundTrip";
+
+    // Normalize the ticket number to "XXX-XXXXXXXXXX" (dash after the first 3
+    // digits) regardless of which pattern above found it — the TKT- match and
+    // the bare-13-digit fallback both come back with no dash at all, so
+    // without this the scanned number wouldn't match the app's usual
+    // "077-1234567890" format used everywhere else (lookup, exchange, exports).
+    if (result.ticketNumber) {
+      const digits = result.ticketNumber.replace(/[^0-9]/g, "");
+      if (digits.length >= 4) {
+        result.ticketNumber = `${digits.slice(0, 3)}-${digits.slice(3)}`;
+      } else {
+        result.ticketNumber = digits;
+      }
+    }
 
     return result;
   };
@@ -11004,9 +11022,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   <input
                     type="number"
                     inputMode="decimal"
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 price-input"
                     value={form.emdAmount}
                     onChange={(e) => setForm({ ...form, emdAmount: e.target.value })}
+                    onBlur={(e) => setForm({ ...form, emdAmount: addCentsOnBlur(e.target.value) })}
                     placeholder="0.00"
                   />
                 </div>
