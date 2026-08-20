@@ -5452,11 +5452,15 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // agency was charged (fare + tax), i.e. the ticket's net cost, so it
     // maps to the net price field rather than the sold price (which the
     // agency sets itself and never appears on the airline's own ticket).
-    // Trailing single letter (e.g. "114.00A") is an IATA suffix code (commonly
-    // "additional collection" on a reissue) glued directly onto the amount with
-    // no space — tolerated here so it doesn't break the \b word boundary and
-    // silently fail the whole match, but not treated as part of the number.
-    const totalMatch = flat.match(/\bTOTAL\s+([A-Z]{3})\s+([\d,]+\.\d{2})[A-Z]?\b/i);
+    // Matched line-by-line (not against the whole flattened string) and with a
+    // loose separator between the currency code and the amount — OCR often drops
+    // or mangles the spacing/punctuation between them (extra dashes, missing
+    // space, a stray character from a smudge), and matching within just the
+    // "TOTAL ..." line avoids ever drifting onto the "TOTALTAX" line above it.
+    // Trailing junk after the amount (e.g. the "A" IATA suffix in "114.00A") is
+    // tolerated and ignored, not treated as part of the number.
+    const totalLine = lines.find((l) => /^TOTAL\b/i.test(l) && !/^TOTALTAX\b/i.test(l));
+    const totalMatch = totalLine && totalLine.match(/\b([A-Z]{3})\b\D{0,10}(\d[\d,]*\.\d{2})/i);
     if (totalMatch) {
       result.totalCurrency = totalMatch[1].toUpperCase();
       result.totalAmount = totalMatch[2].replace(/,/g, "");
@@ -5670,6 +5674,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
       if (!extracted.passengerName && !extracted.ticketNumber && !extracted.fromIata && !extracted.toIata) {
         setTicketScanError("Couldn't recognize ticket details in that image — please check the fields and fill in anything missing.");
+      } else if (!extracted.totalAmount) {
+        // Other fields came through fine but the price line itself didn't match —
+        // flag it specifically so a blank net price doesn't go unnoticed.
+        setTicketScanError("Couldn't read the TOTAL amount from that image — please enter the net price manually.");
       }
     } catch (err) {
       setTicketScanError(err.message || "Couldn't scan that image. Please try again or enter details manually.");
