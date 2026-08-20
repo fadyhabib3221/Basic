@@ -5466,19 +5466,24 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // miss the middle stop entirely.
     const segBlockStart = lines.findIndex((l) => /^\d+\s+O?[A-Z]{3}\b/.test(l));
     const segBlockEnd = lines.findIndex((l) => /^(FARE|EQUIV|TOTALTAX|TOTAL|\/FC|FE\s|FP\s|FOR\s+TAX)/i.test(l));
-    const stops = [];
+    // Each waypoint also remembers whether it was a *flown* segment's origin
+    // (flownMatch) or not (an ARNK gap's start, or the final lone-line
+    // arrival) — that distinction is what lets the leg-building step below
+    // tell a real flight from a surface connection between two flights.
+    const stopEntries = [];
     if (segBlockStart !== -1) {
       const endIdx = segBlockEnd !== -1 ? segBlockEnd : lines.length;
       for (let i = segBlockStart; i < endIdx; i++) {
         const line = lines[i];
         const flownMatch = line.match(/^\d+\s+O([A-Z]{3})\s+[A-Z]{2}\s+\d{1,4}\b/);
         const arnkMatch = line.match(/^\d+\s+([A-Z]{3})\s+ARNK\b/i);
-        if (flownMatch) stops.push(flownMatch[1]);
-        else if (arnkMatch) stops.push(arnkMatch[1].toUpperCase());
-        else if (/^[A-Z]{3}$/.test(line)) stops.push(line);
+        if (flownMatch) stopEntries.push({ code: flownMatch[1], flown: true });
+        else if (arnkMatch) stopEntries.push({ code: arnkMatch[1].toUpperCase(), flown: false });
+        else if (/^[A-Z]{3}$/.test(line)) stopEntries.push({ code: line, flown: false });
       }
     }
-    const dedupedStops = stops.filter((v, i) => i === 0 || v !== stops[i - 1]);
+    const dedupedEntries = stopEntries.filter((e, i) => i === 0 || e.code !== stopEntries[i - 1].code);
+    const dedupedStops = dedupedEntries.map((e) => e.code);
     // Ignore a trailing return to the very first airport when judging how
     // "multi-city" the routing is — that's what makes a plain CAI-JED-CAI
     // round trip (2 distinct cities) read as different from a genuine
@@ -5489,12 +5494,26 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         : dedupedStops;
     const distinctCore = [...new Set(core)];
 
+    // Turns the typed waypoint chain into real flight legs: a leg exists
+    // starting at waypoint i only when that waypoint was a genuinely FLOWN
+    // segment's origin — its destination is simply the next waypoint in the
+    // chain, whatever that next waypoint is (another flown origin, an ARNK
+    // gap's start, or the final arrival). A waypoint that is itself an ARNK
+    // gap (flown: false) never starts a leg of its own, so e.g. the chain
+    // CAI(flown) -> JED(ARNK) -> MED(flown) -> CAI(arrival) correctly yields
+    // just two legs, CAI-JED and MED-CAI — not a fabricated third leg
+    // JED-MED for the surface connection the passenger arranges themselves.
+    const flownLegPairs = (entries) => {
+      const pairs = [];
+      for (let i = 0; i < entries.length - 1; i++) {
+        if (entries[i].flown) pairs.push(entries[i].code, entries[i + 1].code);
+      }
+      return pairs.length ? pairs : ["", ""];
+    };
+
     if (distinctCore.length > 2) {
       result.multiDestination = true;
-      // The scanned ticket's routing is a genuine continuous chain (each leg starts
-      // where the last one ended), so convert it into the independent-legs pair
-      // layout the form/storage now use — see chainToLegPairs for the shape.
-      result.destinations = chainToLegPairs(dedupedStops);
+      result.destinations = flownLegPairs(dedupedEntries);
       result.routeFormat = "legs";
       result.fromIata = dedupedStops[0];
       result.toIata = dedupedStops[dedupedStops.length - 1];
