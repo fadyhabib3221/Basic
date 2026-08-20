@@ -11657,27 +11657,41 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
           <div className="flex flex-wrap items-end gap-2 mt-2">
             {form.multiDestination ? (
-              <>
-                {form.destinations.map((d, i) => (
+              <div className="flex flex-col gap-2 w-full">
+                {/* Each row is one flight leg: a From/To pair. The chain is still stored as a
+                    flat list of airports (form.destinations), so leg i's "From" is point i and
+                    its "To" is point i+1 — the same point that leg i+1's "From" starts from. */}
+                {form.destinations.slice(0, -1).map((_, i) => (
                   <div key={i} className="flex items-end gap-1">
+                    <span className="text-[10px] font-semibold text-stone-400 w-12 mb-1.5 shrink-0">
+                      Flight {i + 1}
+                    </span>
                     <div>
-                      <label className="text-[10px] text-stone-400 block mb-1">
-                        {i === 0 ? "From" : i === form.destinations.length - 1 ? "Final" : `Stop ${i}`}
-                      </label>
+                      <label className="text-[10px] text-stone-400 block mb-1">From</label>
                       <input
                         className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
-                        value={d}
+                        value={form.destinations[i]}
                         onChange={(e) => handleDestinationChange(i, e.target.value)}
-                        placeholder={i === 0 ? "CAI" : "DXB"}
+                        placeholder="CAI"
+                        list="city-suggestions"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-stone-400 block mb-1">To</label>
+                      <input
+                        className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
+                        value={form.destinations[i + 1]}
+                        onChange={(e) => handleDestinationChange(i + 1, e.target.value)}
+                        placeholder="DXB"
                         list="city-suggestions"
                       />
                     </div>
                     {form.destinations.length > 2 && (
                       <button
                         type="button"
-                        onClick={() => removeDestinationStop(i)}
+                        onClick={() => removeDestinationStop(i + 1)}
                         className="shrink-0 text-stone-400 hover:text-red-600 mb-1.5"
-                        title="Remove stop"
+                        title="Remove this flight"
                       >
                         <X size={14} />
                       </button>
@@ -11687,11 +11701,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <button
                   type="button"
                   onClick={addDestinationStop}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 mb-1.5"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 self-start"
                 >
                   <Plus size={14} /> Add stop
                 </button>
-              </>
+              </div>
             ) : (
               <>
                 <div>
