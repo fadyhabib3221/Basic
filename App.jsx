@@ -5342,6 +5342,19 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     const tktMatch = flat.match(/\bTKT-\s*(\d{10,13})\b/i);
     if (tktMatch) result.ticketNumber = tktMatch[1];
 
+    // OCR frequently misreads "TKT-" (e.g. the K becomes an R, giving "TRT-"),
+    // which makes the strict match above miss it entirely. When that happens,
+    // fall back to the header line's distinctive shape instead: a short
+    // 2-4 letter label, a dash, then exactly 13 digits run together with NO
+    // internal dash. That shape is unique to this header field — every other
+    // ticket reference on the printout (the FO exchange line, old ticket
+    // numbers, etc.) is a 3-digit airline code + dash + 10 digits, so this
+    // can't accidentally grab one of those instead.
+    if (!result.ticketNumber) {
+      const tktLooseMatch = flat.match(/\b[A-Z]{2,4}-\s*(\d{13})\b/i);
+      if (tktLooseMatch) result.ticketNumber = tktLooseMatch[1];
+    }
+
     // Passenger name: numbered row "1.LASTNAME/FIRST MIDDLE MADT" — the
     // trailing token is a title+passenger-type code (M/F + ADT/CHD/INF)
     // glued on with no space, not part of the name. That same code tells
