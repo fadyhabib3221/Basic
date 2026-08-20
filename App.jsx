@@ -5549,10 +5549,46 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return result;
   };
 
-  // Takes an uploaded ticket screenshot/photo, runs it through local OCR, then
-  // merges whatever fields the regex heuristics recognized into the ticket
-  // form — same merge pattern as handleFormFlightLookup (only overwrite a
-  // field when the scan actually found a value; never blank one out).
+  // Pulls just the EMD number and its total amount out of an EMD slip's OCR text.
+  // A separate, much smaller heuristic than extractTicketFieldsFromText above —
+  // the EMD document has its own layout ("EMD-0771951939649 ... TOTAL EGP 2000.00")
+  // and only ever feeds the EMD Number / EMD Amount fields, never the ticket's own
+  // netPrice.
+  const extractEmdFieldsFromText = (raw) => {
+    const flat = raw.replace(/\r/g, "").replace(/\n/g, " ");
+    const result = { emdNumber: "", totalAmount: "", totalCurrency: "" };
+
+    // "EMD-0771951939649" (sometimes "EMD 0771951939649" or with the dash misread
+    // by OCR) — 3-digit airline prefix + 10-digit number, same shape as a ticket
+    // number, so normalize it the same way ("077-1951939649").
+    const emdMatch = flat.match(/\bEMD[-\s]*(\d{3}-?\d{10})\b/i);
+    if (emdMatch) {
+      const digits = emdMatch[1].replace(/[^0-9]/g, "");
+      result.emdNumber = `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    }
+
+    // "TOTAL   EGP      2000.00" — on the EMD slip itself (unlike on a reissued
+    // ticket mask) this TOTAL really is the full EMD value, so it maps straight
+    // to the EMD amount.
+    const totalMatch = flat.match(/\bTOTAL\s+([A-Z]{3})\s+([\d,]+\.\d{2})[A-Z]?\b/i);
+    if (totalMatch) {
+      result.totalCurrency = totalMatch[1].toUpperCase();
+      result.totalAmount = totalMatch[2].replace(/,/g, "");
+    }
+
+    return result;
+  };
+
+  // Takes an uploaded screenshot/photo — either a ticket mask or an EMD slip — runs
+  // it through local OCR, and routes the result based on what the image actually
+  // looks like. An EMD slip is easy to tell apart from a ticket mask: it's always
+  // headed "EMD-0771951939649 ..." (a ticket mask is headed "TKT-..." instead), so
+  // that heading alone is enough to detect it, without needing a separate button.
+  // On an EMD slip only emdNumber/emdAmount are filled (and isReissued is turned
+  // on, since an EMD only ever exists for a reissue) — the ticket's own fields
+  // (route, price, passenger, etc.) are left untouched. Same merge pattern either
+  // way: only overwrite a field when the scan actually found a value; never blank
+  // one out.
   const handleTicketScreenshot = async (file) => {
     if (!file) return;
     setTicketScanLoading(true);
@@ -5560,7 +5596,24 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     try {
       const worker = await getOcrWorker();
       const { data } = await worker.recognize(file);
-      const extracted = extractTicketFieldsFromText(data.text || "");
+      const rawText = data.text || "";
+      const looksLikeEmd = /\bEMD[-\s]*\d{3}-?\d{10}\b/i.test(rawText) && !/\bTKT[-\s]*\d{3}-?\d{10}\b/i.test(rawText);
+
+      if (looksLikeEmd) {
+        const extracted = extractEmdFieldsFromText(rawText);
+        setForm((prev) => ({
+          ...prev,
+          isReissued: true,
+          emdNumber: extracted.emdNumber || prev.emdNumber,
+          emdAmount: extracted.totalAmount || prev.emdAmount,
+        }));
+        if (!extracted.emdNumber && !extracted.totalAmount) {
+          setTicketScanError("Couldn't recognize EMD details in that image — please check the fields and fill in anything missing.");
+        }
+        return;
+      }
+
+      const extracted = extractTicketFieldsFromText(rawText);
 
       setForm((prev) => {
         // The scanned total goes to the price field matching this ticket's
@@ -5586,9 +5639,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           isReissued: extracted.isReissued ? true : prev.isReissued,
         };
         // The scanned "TOTAL" amount always goes to the price field, reissue or not.
-        // On a reissue, the EMD amount is entered separately (from its own screenshot/
-        // manual entry) via the emdAmount field below — it is never inferred from this
-        // ticket's TOTAL line.
+        // The EMD amount only ever comes from an EMD slip scan (handled above), never
+        // inferred from the ticket's own TOTAL line.
         if (extracted.totalAmount) next[priceField] = extracted.totalAmount;
         if (Array.isArray(next.destinations) && next.destinations.length >= 2) {
           const dests = [...next.destinations];
