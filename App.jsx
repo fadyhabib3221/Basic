@@ -6633,45 +6633,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   // Once the person finishes typing the old ticket number, look it up against saved
-  // tickets and import that old ticket's data into the reissue form: issue date, company,
-  // supplier, route (including a multi-destination route), airline, prices, and any
-  // customer name not already typed. Anything the person already entered by hand is left
-  // untouched — this only fills in fields that are still empty.
+  // tickets and import only that old ticket's issue date. Everything else on the reissue
+  // form (company, route, airline, prices, customer names) is left exactly as the person
+  // entered it.
   const handleOldTicketNumberBlur = () => {
     const oldTicket = findTicketByNumber(form.oldTicketNumber);
-    if (!oldTicket) {
-      setForm({ ...form, oldTicketIssueDate: "" });
-      return;
-    }
-    const oldCustomers =
-      Array.isArray(oldTicket.customers) && oldTicket.customers.length > 0
-        ? oldTicket.customers
-        : [{ name: oldTicket.customer || "", ticketNumber: oldTicket.ticketNumber || "" }];
-    // Fill in any customer row that doesn't have a name yet with the matching old
-    // customer's name (by position); new ticket numbers are always left exactly as typed.
-    const customers = form.customers.map((c, i) =>
-      c.name.trim() ? c : { ...c, name: (oldCustomers[i] && oldCustomers[i].name) || c.name }
-    );
-    const hasOwnDestinations = (form.destinations || []).some((d) => (d || "").trim());
-    setForm({
-      ...form,
-      oldTicketIssueDate: oldTicket.date || "",
-      company: form.company || oldTicket.company || "",
-      from: form.from || oldTicket.from || "",
-      to: form.to || oldTicket.to || "",
-      multiDestination: form.multiDestination || !!oldTicket.multiDestination,
-      destinations: hasOwnDestinations
-        ? form.destinations
-        : Array.isArray(oldTicket.destinations) && oldTicket.destinations.length >= 2
-        ? oldTicket.destinations
-        : form.destinations,
-      airline: form.airline || oldTicket.airline || "",
-      netPrice: form.netPrice !== "" ? form.netPrice : oldTicket.netPrice ?? "",
-      soldPrice: form.soldPrice !== "" ? form.soldPrice : oldTicket.soldPrice ?? "",
-      netCurrency: form.netPrice !== "" ? form.netCurrency : oldTicket.netCurrency || "EGP",
-      soldCurrency: form.soldPrice !== "" ? form.soldCurrency : oldTicket.soldCurrency || "EGP",
-      customers,
-    });
+    setForm({ ...form, oldTicketIssueDate: oldTicket ? oldTicket.date || "" : "" });
   };
 
   // Cleans up a refund row's ticket number the same way regular ticket numbers and the
