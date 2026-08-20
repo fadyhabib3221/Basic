@@ -11243,6 +11243,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             )}
           </div>
 
+          {/* Route/pricing details: hidden while doing a Refund, since a refund only
+              needs the "Refunded ticket number" box above (it looks up the existing
+              ticket and its own price fields) — none of this new-ticket entry applies. */}
+          {!refundBoxOpen && (
+          <>
           <div className="flex flex-wrap items-start gap-2 mt-4">
             {(() => {
               const selectedCompanyRecord = suggestions.companies.find((c) => companyName(c) === form.company);
@@ -11860,6 +11865,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               </div>
             </div>
           </div>
+          </>
+          )}
 
           {/* Child/Infant fares — only shown once at least one customer row above is
               marked Child or Infant. Each is a per-passenger rate (same currency as the
