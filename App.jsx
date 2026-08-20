@@ -847,6 +847,11 @@ const ACCOUNTS_I18N = {
     recordCollection: "تسجيل التحصيل", collectionHistory: "سجل التحصيلات",
     noCollectionsRecorded: "لا توجد تحصيلات مسجلة",
     currency: "ج.م",
+    confirmDeleteExpense: "هل تريد حذف هذا المصروف؟",
+    confirmDeleteAccount: "هل تريد حذف هذا الحساب؟ لن يتم حذف الحركات المسجلة عليه من قبل.",
+    confirmDeleteEntry: "هل تريد حذف هذا القيد؟",
+    confirmDeletePayment: "هل تريد حذف هذه الدفعة؟",
+    confirmDeleteCollection: "هل تريد حذف هذا التحصيل؟",
   },
   en: {
     tabOverview: "Overview", tabSuppliers: "Suppliers", tabCustomers: "Customers",
@@ -886,6 +891,11 @@ const ACCOUNTS_I18N = {
     recordCollection: "Record Collection", collectionHistory: "Collection History",
     noCollectionsRecorded: "No collections recorded",
     currency: "EGP",
+    confirmDeleteExpense: "Delete this expense?",
+    confirmDeleteAccount: "Delete this account? Transactions already recorded on it won't be deleted.",
+    confirmDeleteEntry: "Delete this entry?",
+    confirmDeletePayment: "Delete this payment?",
+    confirmDeleteCollection: "Delete this collection?",
   },
 };
 
@@ -7748,7 +7758,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setShowExpenseForm(true);
   };
   const handleDeleteExpense = (id) => {
-    requestConfirm("هل تريد حذف هذا المصروف؟", () => {
+    requestConfirm(at("confirmDeleteExpense"), () => {
       const deleted = expenses.find((e) => e.id === id);
       persistExpenses(expenses.filter((e) => e.id !== id));
       if (deleted) recordActivity("Expenses", "deleted", `Deleted expense: ${deleted.category || "expense"} (${deleted.amount})`);
@@ -7777,7 +7787,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setShowTreasuryAccountForm(true);
   };
   const handleDeleteTreasuryAccount = (id) => {
-    requestConfirm("هل تريد حذف هذا الحساب؟ لن يتم حذف الحركات المسجلة عليه من قبل.", () => {
+    requestConfirm(at("confirmDeleteAccount"), () => {
       const deleted = treasuryAccounts.find((a) => a.id === id);
       persistTreasuryAccounts(treasuryAccounts.filter((a) => a.id !== id));
       if (deleted) recordActivity("Treasury", "deleted", `Deleted treasury account: ${deleted.name || "account"}`);
@@ -7797,7 +7807,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setShowTreasuryEntryForm(false);
   };
   const handleDeleteTreasuryEntry = (id) => {
-    requestConfirm("هل تريد حذف هذا القيد؟", () => {
+    requestConfirm(at("confirmDeleteEntry"), () => {
       const deleted = treasuryEntries.find((e) => e.id === id);
       persistTreasuryEntries(treasuryEntries.filter((e) => e.id !== id));
       if (deleted) recordActivity("Treasury", "deleted", `Deleted treasury entry: ${deleted.category || "entry"} (${deleted.amount})`);
@@ -7816,7 +7826,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setSupplierPaymentForm({ ...getEmptySupplierPaymentForm(), supplier: supplierPaymentForm.supplier });
   };
   const handleDeleteSupplierPayment = (id) => {
-    requestConfirm("هل تريد حذف هذه الدفعة؟", () => {
+    requestConfirm(at("confirmDeletePayment"), () => {
       const deleted = supplierPayments.find((p) => p.id === id);
       persistSupplierPayments(supplierPayments.filter((p) => p.id !== id));
       if (deleted) recordActivity("Payments", "deleted", `Deleted supplier payment: ${deleted.supplier || "supplier"} (${deleted.amount})`);
@@ -7835,7 +7845,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setCustomerPaymentForm({ ...getEmptyCustomerPaymentForm(), customer: customerPaymentForm.customer });
   };
   const handleDeleteCustomerPayment = (id) => {
-    requestConfirm("هل تريد حذف هذا التحصيل؟", () => {
+    requestConfirm(at("confirmDeleteCollection"), () => {
       const deleted = customerPayments.find((p) => p.id === id);
       persistCustomerPayments(customerPayments.filter((p) => p.id !== id));
       if (deleted) recordActivity("Payments", "deleted", `Deleted customer payment: ${deleted.customer || "customer"} (${deleted.amount})`);
@@ -11629,7 +11639,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     className="w-full md:flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                     value={c.name}
                     onChange={(e) => handleCustomerFieldChange(i, "name", e.target.value)}
-                    placeholder={`Customer ${i + 1} name`}
+                    placeholder={i === 0 ? `Customer ${i + 1} name (required)` : `Customer ${i + 1} name`}
                   />
                   <select
                     className={`w-full md:w-[9ch] md:shrink-0 border rounded-xl px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-700 bg-white ${
@@ -14341,7 +14351,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
                   value={carForm.customerName}
                   onChange={(e) => setCarForm({ ...carForm, customerName: e.target.value })}
-                  placeholder="Customer name"
+                  placeholder="Customer name (required)"
                 />
               </div>
               <div>
