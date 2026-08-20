@@ -949,6 +949,9 @@ const getEmptyForm = () => ({
   // every place that reads a plain origin/destination keeps working unchanged.
   multiDestination: false,
   destinations: ["", ""],
+  // "legs": each flight leg has its own independent From/To pair (see legsFromPairs) —
+  // adding a new flight never auto-fills its departure from the previous flight's arrival.
+  routeFormat: "legs",
   // Trip type shown next to the multi-destination toggle: "oneWay" or "roundTrip".
   tripType: "oneWay",
   airline: "",
@@ -994,11 +997,39 @@ const getEmptyForm = () => ({
   refunds: [],
 });
 
-// Renders a ticket's route as a single "A - B" (or "A - B - C - ..." for a
-// multi-destination/multi-city booking) string for lists, detail views, and exports.
+// Multi-destination routes are stored as independent flight legs, flattened into one
+// array: leg i's From is destinations[2*i], its To is destinations[2*i + 1]. Each leg
+// owns its own two cells — unlike an older "chain of points" layout, editing one leg's
+// airport never silently changes the leg next to it. routeFormat: "legs" marks a record
+// as using this layout; older records (no routeFormat) instead stored a single chain of
+// points (leg i = points[i]..points[i+1], sharing each middle point with its neighbor).
+const legsFromPairs = (pairs) => {
+  const arr = Array.isArray(pairs) ? pairs : [];
+  const legs = [];
+  for (let i = 0; i + 1 < arr.length; i += 2) legs.push([arr[i] || "", arr[i + 1] || ""]);
+  return legs;
+};
+
+// Converts an older continuous "chain of points" route (e.g. ["CAI","JED","MED"]) into
+// the current independent-legs pair layout (e.g. ["CAI","JED","JED","MED"]), so older
+// saved tickets still edit and display correctly under the new per-leg model.
+const chainToLegPairs = (points) => {
+  const pts = (Array.isArray(points) ? points : []).map((p) => (p || "").trim()).filter(Boolean);
+  if (pts.length < 2) return ["", ""];
+  const pairs = [];
+  for (let i = 0; i < pts.length - 1; i++) pairs.push(pts[i], pts[i + 1]);
+  return pairs;
+};
+
+// Renders a ticket's route as a single "A - B" (or "A - B / C - D ..." for a
+// multi-destination/multi-city booking, one flight per " / ") string for lists,
+// detail views, and exports.
 const routeLabel = (t) => {
-  const stops = Array.isArray(t.destinations) ? t.destinations.map((d) => (d || "").trim()).filter(Boolean) : [];
-  if (t.multiDestination && stops.length >= 2) return stops.join(" - ");
+  if (t.multiDestination && Array.isArray(t.destinations) && t.destinations.length >= 2) {
+    const pairs = t.routeFormat === "legs" ? t.destinations : chainToLegPairs(t.destinations);
+    const legs = legsFromPairs(pairs).filter(([a, b]) => a || b);
+    if (legs.length) return legs.map(([a, b]) => `${a || "-"} - ${b || "-"}`).join(" / ");
+  }
   const base = `${t.from || "-"} - ${t.to || "-"}`;
   // Round trip: append the return airport so the main table shows the full
   // out-and-back route (e.g. "CAI - DMM - CAI") instead of just the outbound leg.
@@ -5331,6 +5362,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       // trip leaves this false and uses fromIata/toIata as before.
       multiDestination: false,
       destinations: [],
+      routeFormat: "",
     };
 
     const months = { JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06", JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12" };
@@ -5459,7 +5491,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
     if (distinctCore.length > 2) {
       result.multiDestination = true;
-      result.destinations = dedupedStops;
+      // The scanned ticket's routing is a genuine continuous chain (each leg starts
+      // where the last one ended), so convert it into the independent-legs pair
+      // layout the form/storage now use — see chainToLegPairs for the shape.
+      result.destinations = chainToLegPairs(dedupedStops);
+      result.routeFormat = "legs";
       result.fromIata = dedupedStops[0];
       result.toIata = dedupedStops[dedupedStops.length - 1];
       if (segMatches.length) result.airlineIata = segMatches[0][2];
@@ -5730,6 +5766,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         if (extracted.totalAmount) next[priceField] = extracted.totalAmount;
         if (scannedMultiDest) {
           next.destinations = extracted.destinations.map((d) => d.toUpperCase());
+          next.routeFormat = "legs";
         } else if (Array.isArray(next.destinations) && next.destinations.length >= 2) {
           const dests = [...next.destinations];
           if (next.from) dests[0] = next.from;
@@ -6335,10 +6372,16 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       customers.every((c) => (c.name || "").trim() && ((c.ticketNumber || "").trim() || (c.pnrReference || "").trim()));
     // A multi-destination route needs at least two filled-in stops; a regular route
     // needs both From and To.
-    const cleanDestinations = (form.destinations || []).map((d) => (d || "").trim()).filter(Boolean);
+    // Each flight leg needs both its own From and To filled in — a blank cell can't be
+    // silently dropped the way an old chain-of-points route could, since dropping one
+    // cell here would misalign every leg after it. So validity checks pairs, not just
+    // "something is filled in somewhere".
+    const legPairs = legsFromPairs(form.destinations || []);
+    const filledLegPairs = legPairs.filter(([a, b]) => a || b);
     const routeValid = form.multiDestination
-      ? cleanDestinations.length >= 2
+      ? filledLegPairs.length >= 1 && filledLegPairs.every(([a, b]) => a.trim() && b.trim())
       : (form.from || "").trim() && (form.to || "").trim();
+    const cleanDestinations = filledLegPairs.flatMap(([a, b]) => [a.trim(), b.trim()]);
     const paxCounts = ticketPaxCounts({ customers });
     const childPriceValid = paxCounts.child === 0 || (form.childNetPrice !== "" && form.childSoldPrice !== "");
     const infantPriceValid = paxCounts.infant === 0 || (form.infantNetPrice !== "" && form.infantSoldPrice !== "");
@@ -6364,6 +6407,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       // every place that reads a plain origin/destination (search, exports, older code)
       // keeps working; a regular route just keeps its own from/to untouched.
       destinations: form.multiDestination ? cleanDestinations : [],
+      routeFormat: form.multiDestination ? "legs" : "",
       from: form.multiDestination ? cleanDestinations[0] || "" : form.from,
       to: form.multiDestination ? cleanDestinations[cleanDestinations.length - 1] || "" : form.to,
       // Return airport always mirrors the first (From) airport on a round trip — it's
@@ -6430,15 +6474,23 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       Array.isArray(t.customers) && t.customers.length > 0
         ? t.customers.map((c) => ({ type: "adult", ...c }))
         : [{ name: t.customer || "", ticketNumber: t.ticketNumber || "", type: "adult" }];
-    // Backward compatibility: older records have no multiDestination/destinations fields.
+    // Backward compatibility: older records have no multiDestination/destinations fields,
+    // and records saved before the independent-legs change stored destinations as one
+    // continuous chain of points rather than per-leg pairs — convert those into pairs so
+    // they load into the (now per-leg) form correctly.
     const destinations =
-      Array.isArray(t.destinations) && t.destinations.length >= 2 ? t.destinations : [t.from || "", t.to || ""];
+      Array.isArray(t.destinations) && t.destinations.length >= 2
+        ? t.routeFormat === "legs"
+          ? t.destinations
+          : chainToLegPairs(t.destinations)
+        : [t.from || "", t.to || ""];
     setForm({
       ...t,
       customers,
       customersCount: customers.length,
       multiDestination: !!t.multiDestination,
       destinations,
+      routeFormat: "legs",
       tripType: t.tripType || "oneWay",
       returnAirport: t.returnAirport || "",
       // Backward compatibility: older records have no child/infant fare fields.
@@ -6655,23 +6707,27 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setForm({ ...form, [field]: match ? match[1] : raw });
   };
 
-  // Same "CODE - City, Country" → CODE cleanup as handleCityChange, but for one stop
-  // in a multi-destination (multi-city) route.
-  const handleDestinationChange = (index, value) => {
+  // Same "CODE - City, Country" → CODE cleanup as handleCityChange, but for one cell
+  // (a single leg's From or To) in a multi-destination (multi-city) route. cellIndex is
+  // the flat index into form.destinations (leg i's From/To are cells 2*i and 2*i + 1) —
+  // each cell is independent, so editing one never changes the leg next to it.
+  const handleDestinationChange = (cellIndex, value) => {
     const raw = (value || "").toUpperCase();
     const match = raw.match(/^([A-Z]{3})\s*-\s*.+$/);
     const clean = match ? match[1] : raw;
-    const destinations = form.destinations.map((d, i) => (i === index ? clean : d));
+    const destinations = form.destinations.map((d, i) => (i === cellIndex ? clean : d));
     setForm({ ...form, destinations });
   };
 
+  // Adds a new, independent flight leg with blank From/To — it does NOT inherit the
+  // previous leg's arrival airport, so the person types both airports for the new leg.
   const addDestinationStop = () => {
-    setForm({ ...form, destinations: [...form.destinations, ""] });
+    setForm({ ...form, destinations: [...form.destinations, "", ""] });
   };
 
-  // Always keeps at least two stops (a route needs a start and an end).
-  const removeDestinationStop = (index) => {
-    const destinations = form.destinations.filter((_, i) => i !== index);
+  // Removes flight leg legIndex (its whole From/To pair). Always keeps at least one leg.
+  const removeDestinationStop = (legIndex) => {
+    const destinations = form.destinations.filter((_, i) => i < legIndex * 2 || i > legIndex * 2 + 1);
     setForm({ ...form, destinations: destinations.length >= 2 ? destinations : ["", ""] });
   };
 
@@ -11641,6 +11697,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     setForm({
                       ...form,
                       multiDestination: true,
+                      routeFormat: "legs",
                       // Seed the stop list from the current From/To the first time this is
                       // switched on, so nothing already typed gets lost.
                       destinations:
@@ -11658,10 +11715,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <div className="flex flex-wrap items-end gap-2 mt-2">
             {form.multiDestination ? (
               <div className="flex flex-col gap-2 w-full">
-                {/* Each row is one flight leg: a From/To pair. The chain is still stored as a
-                    flat list of airports (form.destinations), so leg i's "From" is point i and
-                    its "To" is point i+1 — the same point that leg i+1's "From" starts from. */}
-                {form.destinations.slice(0, -1).map((_, i) => (
+                {/* Each row is one flight leg with its OWN From/To pair — legs no longer share
+                    a point, so editing one leg's airport never changes the leg next to it.
+                    Stored flat in form.destinations: leg i's From is cell 2*i, its To is
+                    cell 2*i + 1. */}
+                {legsFromPairs(form.destinations).map((_, i) => (
                   <div key={i} className="flex items-end gap-1">
                     <span className="text-[10px] font-semibold text-stone-400 w-12 mb-1.5 shrink-0">
                       Flight {i + 1}
@@ -11670,8 +11728,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <label className="text-[10px] text-stone-400 block mb-1">From</label>
                       <input
                         className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
-                        value={form.destinations[i]}
-                        onChange={(e) => handleDestinationChange(i, e.target.value)}
+                        value={form.destinations[i * 2]}
+                        onChange={(e) => handleDestinationChange(i * 2, e.target.value)}
                         placeholder="CAI"
                         list="city-suggestions"
                       />
@@ -11680,8 +11738,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       <label className="text-[10px] text-stone-400 block mb-1">To</label>
                       <input
                         className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-700 uppercase"
-                        value={form.destinations[i + 1]}
-                        onChange={(e) => handleDestinationChange(i + 1, e.target.value)}
+                        value={form.destinations[i * 2 + 1]}
+                        onChange={(e) => handleDestinationChange(i * 2 + 1, e.target.value)}
                         placeholder="DXB"
                         list="city-suggestions"
                       />
@@ -11689,7 +11747,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     {form.destinations.length > 2 && (
                       <button
                         type="button"
-                        onClick={() => removeDestinationStop(i + 1)}
+                        onClick={() => removeDestinationStop(i)}
                         className="shrink-0 text-stone-400 hover:text-red-600 mb-1.5"
                         title="Remove this flight"
                       >
