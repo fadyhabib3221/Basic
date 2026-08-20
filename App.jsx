@@ -5326,6 +5326,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       isReissued: false,
       oldTicketNumber: "",
       oldTicketIssueDate: "",
+      // Set only when the segment block reveals a genuine multi-city/open-jaw
+      // routing (see the stops-walking logic below) — a plain A-B-A round
+      // trip leaves this false and uses fromIata/toIata as before.
+      multiDestination: false,
+      destinations: [],
     };
 
     const months = { JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06", JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12" };
@@ -5409,7 +5414,56 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     // airline code. Walking the segment origins in order gives the route
     // (e.g. OCAI, OATH -> CAI then ATH for a CAI-ATH-CAI round trip).
     const segMatches = [...flat.matchAll(/\bO([A-Z]{3})\s+([A-Z]{2})\s+\d{1,4}\b/g)];
-    if (segMatches.length) {
+
+    // Multi-destination (multi-city / open-jaw) detection: walk the segment
+    // block line-by-line to reconstruct the FULL routing, not just each
+    // segment's origin. Three line shapes appear there:
+    //   "1 OCAI XY 584 ..."   — a flown leg; "O"+3 letters is its origin
+    //   "2 JED ARNK"          — a surface/ARNK gap (no flight); the 3 letters
+    //                           are where that gap starts (passenger makes
+    //                           their own way to the next segment's origin)
+    //   "CAI"                 — a lone 3-letter line: the arrival city of the
+    //                           segment just above, printed on its own line
+    //                           only when it wrapped (this is how the FINAL
+    //                           arrival city — never itself a segment origin
+    //                           — shows up at all)
+    // Walking these in order and keeping every distinct waypoint is what
+    // tells a real multi-city routing (e.g. CAI-JED out, MED-CAI back, with
+    // a JED-MED surface gap) apart from a plain A-B-A round trip, which the
+    // old origins-only approach above would collapse to just A and B and
+    // miss the middle stop entirely.
+    const segBlockStart = lines.findIndex((l) => /^\d+\s+O?[A-Z]{3}\b/.test(l));
+    const segBlockEnd = lines.findIndex((l) => /^(FARE|EQUIV|TOTALTAX|TOTAL|\/FC|FE\s|FP\s|FOR\s+TAX)/i.test(l));
+    const stops = [];
+    if (segBlockStart !== -1) {
+      const endIdx = segBlockEnd !== -1 ? segBlockEnd : lines.length;
+      for (let i = segBlockStart; i < endIdx; i++) {
+        const line = lines[i];
+        const flownMatch = line.match(/^\d+\s+O([A-Z]{3})\s+[A-Z]{2}\s+\d{1,4}\b/);
+        const arnkMatch = line.match(/^\d+\s+([A-Z]{3})\s+ARNK\b/i);
+        if (flownMatch) stops.push(flownMatch[1]);
+        else if (arnkMatch) stops.push(arnkMatch[1].toUpperCase());
+        else if (/^[A-Z]{3}$/.test(line)) stops.push(line);
+      }
+    }
+    const dedupedStops = stops.filter((v, i) => i === 0 || v !== stops[i - 1]);
+    // Ignore a trailing return to the very first airport when judging how
+    // "multi-city" the routing is — that's what makes a plain CAI-JED-CAI
+    // round trip (2 distinct cities) read as different from a genuine
+    // multi-destination routing like CAI-JED-MED-CAI (3 distinct cities).
+    const core =
+      dedupedStops.length > 1 && dedupedStops[dedupedStops.length - 1] === dedupedStops[0]
+        ? dedupedStops.slice(0, -1)
+        : dedupedStops;
+    const distinctCore = [...new Set(core)];
+
+    if (distinctCore.length > 2) {
+      result.multiDestination = true;
+      result.destinations = dedupedStops;
+      result.fromIata = dedupedStops[0];
+      result.toIata = dedupedStops[dedupedStops.length - 1];
+      if (segMatches.length) result.airlineIata = segMatches[0][2];
+    } else if (segMatches.length) {
       const originCodes = segMatches.map((m) => m[1]);
       result.fromIata = originCodes[0];
       const nextDistinct = originCodes.find((c) => c !== originCodes[0]);
@@ -5637,6 +5691,13 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         const priceField =
           extracted.passengerType === "infant" ? "infantNetPrice" : extracted.passengerType === "child" ? "childNetPrice" : "netPrice";
 
+        // A genuine multi-city/open-jaw routing (see the stops-walking logic
+        // in extractTicketFieldsFromText) both turns the multi-destination
+        // toggle on and replaces the destinations list with the full walked
+        // route — a plain A-B(-A) ticket leaves this false and only from/to
+        // get updated, same as before.
+        const scannedMultiDest = extracted.multiDestination && extracted.destinations.length >= 2;
+
         const next = {
           ...prev,
           from: extracted.fromIata ? extracted.fromIata.toUpperCase() : prev.from,
@@ -5651,12 +5712,15 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           // pattern shouldn't silently clear that. The old ticket number and its issue
           // date are deliberately NOT auto-filled here — those stay manual entry only.
           isReissued: extracted.isReissued ? true : prev.isReissued,
+          multiDestination: scannedMultiDest ? true : prev.multiDestination,
         };
         // The scanned "TOTAL" amount always goes to the price field, reissue or not.
         // The EMD amount only ever comes from an EMD slip scan (handled above), never
         // inferred from the ticket's own TOTAL line.
         if (extracted.totalAmount) next[priceField] = extracted.totalAmount;
-        if (Array.isArray(next.destinations) && next.destinations.length >= 2) {
+        if (scannedMultiDest) {
+          next.destinations = extracted.destinations.map((d) => d.toUpperCase());
+        } else if (Array.isArray(next.destinations) && next.destinations.length >= 2) {
           const dests = [...next.destinations];
           if (next.from) dests[0] = next.from;
           if (next.to) dests[dests.length - 1] = next.to;
