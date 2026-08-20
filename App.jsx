@@ -5492,9 +5492,19 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
     // Round trip: "OD-CAICAI" style summary where the trip starts and ends
     // at the same airport, or 2+ distinct segment origins that loop back.
-    const odRoundTrip = flat.match(/\bOD-([A-Z]{3})\1\b/);
-    if (odRoundTrip || (segMatches.length >= 2 && segMatches[0][1] !== segMatches[segMatches.length - 1][1])) {
-      result.tripType = "roundTrip";
+    // Skipped entirely when the routing was already identified as multi-city
+    // above (distinctCore.length > 2) — that check already walked the same
+    // segments plus any ARNK surface gaps, so it correctly tells a genuine
+    // A-B-A round trip apart from an open-jaw/multi-city routing like
+    // CAI-JED (flown), JED-MED (surface/ARNK), MED-CAI (flown), which also
+    // has two flown segments with different origins (CAI vs MED) and would
+    // otherwise get misclassified as round trip here, clobbering the
+    // multiDestination result.
+    if (!result.multiDestination) {
+      const odRoundTrip = flat.match(/\bOD-([A-Z]{3})\1\b/);
+      if (odRoundTrip || (segMatches.length >= 2 && segMatches[0][1] !== segMatches[segMatches.length - 1][1])) {
+        result.tripType = "roundTrip";
+      }
     }
 
     // Reissue/exchange: on a reissued ticket the "FO" line carries the ORIGINAL
