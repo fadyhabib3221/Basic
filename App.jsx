@@ -321,11 +321,23 @@ const clearLocalSession = () => {
   try { sessionStorage.removeItem(LOCAL_SESSION_KEY); } catch (e) {}
 };
 
-const encryptForStorage = async (workspaceKey, value) => {
+// `updatedAt`/`updatedBy` are deliberately plaintext sibling fields on the envelope
+// (never inside the encrypted payload) so a conflict check can compare versions by
+// doing a cheap window.storage.get() + JSON.parse() — no decryption, no workspace key
+// needed — instead of paying for a full decrypt just to answer "did this change?".
+// A timestamp and a username aren't sensitive on their own the way the record contents
+// are, so leaving them unencrypted is a deliberate, low-risk trade-off for that speed.
+const encryptForStorage = async (workspaceKey, value, meta = {}) => {
   const ivBytes = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = new TextEncoder().encode(JSON.stringify(value));
   const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: ivBytes }, workspaceKey, plaintext);
-  return { __enc: ENC_MARKER, iv: b64FromBuf(ivBytes), data: b64FromBuf(ciphertext) };
+  return {
+    __enc: ENC_MARKER,
+    iv: b64FromBuf(ivBytes),
+    data: b64FromBuf(ciphertext),
+    updatedAt: meta.updatedAt || Date.now(),
+    updatedBy: meta.updatedBy || null,
+  };
 };
 
 // Returns undefined (never throws) if the workspace key isn't available or decryption
@@ -371,22 +383,28 @@ const storageDelete = (key, shared = true) => {
   return next;
 };
 
-const secureLoad = async (storageKey, workspaceKey, fallback) => {
+// `options.withMeta` returns `{ value, updatedAt, updatedBy }` instead of just the
+// decrypted value, so callers that need to track versions (see the conflict guard
+// below) don't have to duplicate the get/parse/decrypt dance themselves.
+const secureLoad = async (storageKey, workspaceKey, fallback, options = {}) => {
+  const withMeta = options.withMeta === true;
+  const asPlain = (value) => (withMeta ? { value, updatedAt: null, updatedBy: null } : value);
   const res = await window.storage.get(storageKey, true).catch(() => null);
-  if (!res || res.value === undefined || res.value === null || res.value === "") return fallback;
+  if (!res || res.value === undefined || res.value === null || res.value === "") return asPlain(fallback);
   let parsed;
-  try { parsed = JSON.parse(res.value); } catch (e) { return fallback; }
+  try { parsed = JSON.parse(res.value); } catch (e) { return asPlain(fallback); }
   if (parsed && parsed.__enc === ENC_MARKER) {
-    if (!workspaceKey) return fallback; // locked — no key available yet
+    if (!workspaceKey) return asPlain(fallback); // locked — no key available yet
     const decrypted = await decryptFromStorage(workspaceKey, parsed);
-    return decrypted === undefined ? fallback : decrypted;
+    const value = decrypted === undefined ? fallback : decrypted;
+    return withMeta ? { value, updatedAt: parsed.updatedAt || null, updatedBy: parsed.updatedBy || null } : value;
   }
   if (workspaceKey) {
     encryptForStorage(workspaceKey, parsed).then((envelope) => {
       storageSet(storageKey, JSON.stringify(envelope), true).catch(() => {});
     });
   }
-  return parsed;
+  return asPlain(parsed);
 };
 
 // Encrypts (if we have the workspace key) and writes a value to shared storage. Falls
@@ -397,10 +415,27 @@ const secureSave = async (storageKey, workspaceKey, value, options = {}) => {
     throw new Error(`Encrypted storage is locked: ${storageKey}`);
   }
   if (workspaceKey) {
-    const envelope = await encryptForStorage(workspaceKey, value);
+    const envelope = await encryptForStorage(workspaceKey, value, {
+      updatedAt: options.updatedAt,
+      updatedBy: options.updatedBy,
+    });
     return storageSet(storageKey, JSON.stringify(envelope), true);
   }
   return storageSet(storageKey, JSON.stringify(value), true);
+};
+
+// Cheap version peek for the conflict guard below: reads the envelope's plaintext
+// `updatedAt` field without decrypting the payload, so checking "did someone else
+// save since I last loaded?" doesn't cost a full decrypt on every write.
+const peekStorageVersion = async (storageKey) => {
+  try {
+    const res = await window.storage.get(storageKey, true);
+    if (!res || !res.value) return null;
+    const parsed = JSON.parse(res.value);
+    return parsed && parsed.__enc === ENC_MARKER && typeof parsed.updatedAt === "number" ? parsed.updatedAt : null;
+  } catch (e) {
+    return null;
+  }
 };
 
 // Defensive JSON parsing for shared storage. A malformed value should never take
@@ -3402,17 +3437,17 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       }
       inFlight = true;
       try {
-        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData, flightApiKeyData, visaApiKeyData, employeesRes, suggestionsRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes] = await Promise.all([
-          secureLoad("tickets:list", workspaceKey, null),
-          secureLoad("tickets:hotels", workspaceKey, null),
-          secureLoad("tickets:visas", workspaceKey, null),
-          secureLoad("tickets:cars", workspaceKey, null),
-          secureLoad("tickets:files", workspaceKey, null),
-          secureLoad("tickets:expenses", workspaceKey, null),
-          secureLoad("tickets:supplierPayments", workspaceKey, null),
-          secureLoad("tickets:customerPayments", workspaceKey, null),
-          secureLoad("tickets:treasuryAccounts", workspaceKey, null),
-          secureLoad("tickets:treasuryEntries", workspaceKey, null),
+        const [ticketsRes, hotelsRes, visasRes, carsRes, filesRes, expensesRes, supplierPaymentsRes, customerPaymentsRes, treasuryAccountsRes, treasuryEntriesRes, flightApiKeyData, visaApiKeyData, employeesRes, suggestionsRes, licenseRes, requestsRes, loginHistoryRes, activityLogRes] = await Promise.all([
+          secureLoad("tickets:list", workspaceKey, null, { withMeta: true }),
+          secureLoad("tickets:hotels", workspaceKey, null, { withMeta: true }),
+          secureLoad("tickets:visas", workspaceKey, null, { withMeta: true }),
+          secureLoad("tickets:cars", workspaceKey, null, { withMeta: true }),
+          secureLoad("tickets:files", workspaceKey, null, { withMeta: true }),
+          secureLoad("tickets:expenses", workspaceKey, null, { withMeta: true }),
+          secureLoad("tickets:supplierPayments", workspaceKey, null, { withMeta: true }),
+          secureLoad("tickets:customerPayments", workspaceKey, null, { withMeta: true }),
+          secureLoad("tickets:treasuryAccounts", workspaceKey, null, { withMeta: true }),
+          secureLoad("tickets:treasuryEntries", workspaceKey, null, { withMeta: true }),
           secureLoad("tickets:flightApiKey", workspaceKey, null),
           secureLoad("tickets:visaApiKey", workspaceKey, null),
           window.storage.get("tickets:employees", true).catch(() => null),
@@ -3429,9 +3464,22 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         if (activityLogRes && activityLogRes.value) {
           try { setActivityLog(JSON.parse(activityLogRes.value)); } catch (e) { /* ignore malformed data for this cycle */ }
         }
-        // These 10 collections are encrypted at rest — secureLoad returns null above if
-        // the workspace key isn't unlocked yet (nothing to apply this poll) rather than
-        // an error, so a plain null check is enough here.
+        // These 10 collections are encrypted at rest — secureLoad returns { value: null }
+        // above if the workspace key isn't unlocked yet (nothing to apply this poll)
+        // rather than an error, so a plain null check on .value is enough here. Each one
+        // also records its updatedAt in remoteVersionsRef so the next save through
+        // guardedCollectionSave (see persistTickets and friends, above) knows the version
+        // this browser actually saw — that's what lets it detect another employee's save
+        // landing in between instead of silently overwriting it.
+        const [ticketsData, hotelsData, visasData, carsData, filesData, expensesData, supplierPaymentsData, customerPaymentsData, treasuryAccountsData, treasuryEntriesData] = [
+          ticketsRes, hotelsRes, visasRes, carsRes, filesRes, expensesRes, supplierPaymentsRes, customerPaymentsRes, treasuryAccountsRes, treasuryEntriesRes,
+        ].map((res, i) => {
+          const key = ["tickets:list", "tickets:hotels", "tickets:visas", "tickets:cars", "tickets:files", "tickets:expenses", "tickets:supplierPayments", "tickets:customerPayments", "tickets:treasuryAccounts", "tickets:treasuryEntries"][i];
+          if (res && res.value !== null && res.updatedAt !== null) {
+            remoteVersionsRef.current[key] = res.updatedAt;
+          }
+          return res ? res.value : null;
+        });
         if (expensesData) setExpenses(expensesData);
         if (supplierPaymentsData) setSupplierPayments(supplierPaymentsData);
         if (customerPaymentsData) setCustomerPayments(customerPaymentsData);
@@ -3793,12 +3841,47 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     };
   }, [currentUser]);
 
+  // Optimistic-concurrency guard for the 10 shared collections (tickets, hotels, visas,
+  // cars, files, expenses, supplier/customer payments, treasury accounts/entries). Two
+  // employees can have the app open at once, and every write here replaces the whole
+  // array under one storage key — so without this check, whoever saves second would
+  // silently overwrite whatever the first person just saved, even to records the second
+  // person never touched. remoteVersionsRef tracks, per storage key, the `updatedAt` this
+  // browser last actually saw (from the live-refresh poll or its own last successful
+  // save). Before writing, we peek the current stored version (cheap — no decrypt, see
+  // peekStorageVersion) and compare; a mismatch means someone else saved in between, so
+  // we abort instead of clobbering it. A key with no known version yet (nothing loaded
+  // for it this session) is allowed through rather than blocked, since there's nothing to
+  // compare against.
+  const remoteVersionsRef = useRef({});
+
+  const guardedCollectionSave = async (storageKey, next) => {
+    const knownVersion = remoteVersionsRef.current[storageKey];
+    if (knownVersion !== undefined && knownVersion !== null) {
+      const currentVersion = await peekStorageVersion(storageKey);
+      if (currentVersion !== null && currentVersion !== knownVersion) {
+        const err = new Error(`Concurrent update detected: ${storageKey}`);
+        err.isConflict = true;
+        throw err;
+      }
+    }
+    const updatedAt = Date.now();
+    await secureSave(storageKey, workspaceKey, next, {
+      requireKey: true,
+      updatedAt,
+      updatedBy: currentUser ? currentUser.username : null,
+    });
+    remoteVersionsRef.current[storageKey] = updatedAt;
+  };
+
+  const CONFLICT_MESSAGE = "This data was just updated by someone else — refresh the page and try again";
+
   const persistTickets = async (next) => {
-    setTickets(next);
     try {
-      await secureSave("tickets:list", workspaceKey, next, { requireKey: true });
+      await guardedCollectionSave("tickets:list", next);
+      setTickets(next);
     } catch (e) {
-      setError("Could not save data, please try again");
+      setError(e && e.isConflict ? CONFLICT_MESSAGE : "Could not save data, please try again");
     }
   };
 
@@ -3940,38 +4023,38 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   const persistHotelBookings = async (next) => {
-    setHotelBookings(next);
     try {
-      await secureSave("tickets:hotels", workspaceKey, next, { requireKey: true });
+      await guardedCollectionSave("tickets:hotels", next);
+      setHotelBookings(next);
     } catch (e) {
-      setHotelError("Could not save data, please try again");
+      setHotelError(e && e.isConflict ? CONFLICT_MESSAGE : "Could not save data, please try again");
     }
   };
 
   const persistVisaBookings = async (next) => {
-    setVisaBookings(next);
     try {
-      await secureSave("tickets:visas", workspaceKey, next, { requireKey: true });
+      await guardedCollectionSave("tickets:visas", next);
+      setVisaBookings(next);
     } catch (e) {
-      setVisaError("Could not save data, please try again");
+      setVisaError(e && e.isConflict ? CONFLICT_MESSAGE : "Could not save data, please try again");
     }
   };
 
   const persistCarBookings = async (next) => {
-    setCarBookings(next);
     try {
-      await secureSave("tickets:cars", workspaceKey, next, { requireKey: true });
+      await guardedCollectionSave("tickets:cars", next);
+      setCarBookings(next);
     } catch (e) {
-      setCarError("Could not save data, please try again");
+      setCarError(e && e.isConflict ? CONFLICT_MESSAGE : "Could not save data, please try again");
     }
   };
 
   const persistFiles = async (next) => {
-    setFiles(next);
     try {
-      await secureSave("tickets:files", workspaceKey, next, { requireKey: true });
+      await guardedCollectionSave("tickets:files", next);
+      setFiles(next);
     } catch (e) {
-      setFileError("Could not save data, please try again");
+      setFileError(e && e.isConflict ? CONFLICT_MESSAGE : "Could not save data, please try again");
     }
   };
 
@@ -4146,43 +4229,43 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const isYearLocked = (section, dateStr) => (closedYears[section] || []).includes((dateStr || "").slice(0, 4));
 
   const persistExpenses = async (next) => {
-    setExpenses(next);
     try {
-      await secureSave("tickets:expenses", workspaceKey, next, { requireKey: true });
+      await guardedCollectionSave("tickets:expenses", next);
+      setExpenses(next);
     } catch (e) {
-      setAccountsError("Could not save data, please try again");
+      setAccountsError(e && e.isConflict ? CONFLICT_MESSAGE : "Could not save data, please try again");
     }
   };
   const persistSupplierPayments = async (next) => {
-    setSupplierPayments(next);
     try {
-      await secureSave("tickets:supplierPayments", workspaceKey, next, { requireKey: true });
+      await guardedCollectionSave("tickets:supplierPayments", next);
+      setSupplierPayments(next);
     } catch (e) {
-      setAccountsError("Could not save data, please try again");
+      setAccountsError(e && e.isConflict ? CONFLICT_MESSAGE : "Could not save data, please try again");
     }
   };
   const persistCustomerPayments = async (next) => {
-    setCustomerPayments(next);
     try {
-      await secureSave("tickets:customerPayments", workspaceKey, next, { requireKey: true });
+      await guardedCollectionSave("tickets:customerPayments", next);
+      setCustomerPayments(next);
     } catch (e) {
-      setAccountsError("Could not save data, please try again");
+      setAccountsError(e && e.isConflict ? CONFLICT_MESSAGE : "Could not save data, please try again");
     }
   };
   const persistTreasuryAccounts = async (next) => {
-    setTreasuryAccounts(next);
     try {
-      await secureSave("tickets:treasuryAccounts", workspaceKey, next, { requireKey: true });
+      await guardedCollectionSave("tickets:treasuryAccounts", next);
+      setTreasuryAccounts(next);
     } catch (e) {
-      setAccountsError("Could not save data, please try again");
+      setAccountsError(e && e.isConflict ? CONFLICT_MESSAGE : "Could not save data, please try again");
     }
   };
   const persistTreasuryEntries = async (next) => {
-    setTreasuryEntries(next);
     try {
-      await secureSave("tickets:treasuryEntries", workspaceKey, next, { requireKey: true });
+      await guardedCollectionSave("tickets:treasuryEntries", next);
+      setTreasuryEntries(next);
     } catch (e) {
-      setAccountsError("Could not save data, please try again");
+      setAccountsError(e && e.isConflict ? CONFLICT_MESSAGE : "Could not save data, please try again");
     }
   };
 
