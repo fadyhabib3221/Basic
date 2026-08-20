@@ -11733,14 +11733,16 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
 
           <div className="flex flex-wrap items-end gap-2 mt-2">
             {form.multiDestination ? (
-              <div className="flex flex-col gap-2 w-full">
-                {/* Each row is one flight leg with its OWN From/To pair — legs no longer share
+              <>
+                {/* Each group is one flight leg with its OWN From/To pair — legs no longer share
                     a point, so editing one leg's airport never changes the leg next to it.
                     Stored flat in form.destinations: leg i's From is cell 2*i, its To is
-                    cell 2*i + 1. */}
+                    cell 2*i + 1. Rendered as direct siblings (not a stacked column) so every
+                    leg sits in the same row as the Add-flight button and the Airline/Flight
+                    number fields, wrapping only if the row runs out of width. */}
                 {legsFromPairs(form.destinations).map((_, i) => (
                   <div key={i} className="flex items-end gap-1">
-                    <span className="text-[10px] font-semibold text-stone-400 w-12 mb-1.5 shrink-0">
+                    <span className="text-[10px] font-semibold text-stone-400 mb-1.5 shrink-0">
                       Flight {i + 1}
                     </span>
                     <div>
@@ -11778,11 +11780,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                 <button
                   type="button"
                   onClick={addDestinationStop}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 self-start"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 mb-1.5 shrink-0"
                 >
-                  <Plus size={14} /> Add stop
+                  <Plus size={14} /> Add flight
                 </button>
-              </div>
+              </>
             ) : (
               <>
                 <div>
