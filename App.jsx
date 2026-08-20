@@ -973,6 +973,12 @@ const getEmptyForm = () => ({
   isReissued: false,
   oldTicketNumber: "",
   oldTicketIssueDate: "",
+  // EMD (Electronic Miscellaneous Document) tied to the exchange — shown only while
+  // isReissued is on. emdNumber is free text (airline-issued document number),
+  // emdAmount is numeric (kept as a string like the other price fields, parsed with
+  // parseFloat wherever it's totalled/displayed).
+  emdNumber: "",
+  emdAmount: "",
   // Refund tracking: a list of refund records (each with two amounts — refunded by the
   // airline, refunded to the customer), entered right in the ticket form next to the
   // reissue box. Empty while nothing's been refunded. A single booking can have several
@@ -4773,6 +4779,9 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           ["Airline", t.airline ? (getAirlineNameByIata(t.airline) || t.airline) : "-"],
           ["Ticket issue date", t.date ? formatDisplayDateFull(t.date) : "-"],
           ...(t.isReissued ? [["Exchanged from", t.oldTicketNumber || "an older ticket"]] : []),
+          ...(t.isReissued && (t.emdNumber || t.emdAmount)
+            ? [["EMD", `${t.emdNumber || "-"}${t.emdAmount !== "" && t.emdAmount != null ? ` (${fmt(parseFloat(t.emdAmount) || 0)})` : ""}`]]
+            : []),
         ],
       },
       {
@@ -10919,7 +10928,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="w-4 h-4 accent-stone-600"
                   checked={!form.isReissued && !refundBoxOpen}
                   onChange={() => {
-                    setForm({ ...form, isReissued: false, oldTicketNumber: "", oldTicketIssueDate: "" });
+                    setForm({ ...form, isReissued: false, oldTicketNumber: "", oldTicketIssueDate: "", emdNumber: "", emdAmount: "" });
                     clearAllRefundRows();
                     setRefundBoxOpen(false);
                     setRefundRows([{ number: "", airlineAmount: "", customerAmount: "", customerIndex: 0 }]);
@@ -10951,7 +10960,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   className="w-4 h-4 accent-red-700"
                   checked={refundBoxOpen}
                   onChange={() => {
-                    setForm({ ...form, isReissued: false, oldTicketNumber: "", oldTicketIssueDate: "" });
+                    setForm({ ...form, isReissued: false, oldTicketNumber: "", oldTicketIssueDate: "", emdNumber: "", emdAmount: "" });
                     setRefundBoxOpen(true);
                   }}
                 />
@@ -10980,6 +10989,26 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       ? "Not found among saved tickets"
                       : "Enter the old ticket number above"}
                   </div>
+                </div>
+                <div>
+                  <label className="text-xs text-stone-500 block mb-1">EMD Number</label>
+                  <input
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={form.emdNumber}
+                    onChange={(e) => setForm({ ...form, emdNumber: e.target.value })}
+                    placeholder="e.g. 077-2345678901"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-stone-500 block mb-1">EMD Amount</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    value={form.emdAmount}
+                    onChange={(e) => setForm({ ...form, emdAmount: e.target.value })}
+                    placeholder="0.00"
+                  />
                 </div>
               </div>
             )}
@@ -16487,6 +16516,15 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       {viewingTicket.oldTicketIssueDate
                         ? formatDisplayDate(viewingTicket.oldTicketIssueDate)
                         : "not found"}
+                      {(viewingTicket.emdNumber || viewingTicket.emdAmount) && (
+                        <>
+                          {" · "}
+                          EMD: {viewingTicket.emdNumber || "-"}
+                          {viewingTicket.emdAmount !== "" && viewingTicket.emdAmount != null
+                            ? ` (${fmt(parseFloat(viewingTicket.emdAmount) || 0)})`
+                            : ""}
+                        </>
+                      )}
                     </p>
                   </div>
                 )}
