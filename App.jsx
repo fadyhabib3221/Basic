@@ -979,7 +979,9 @@ const getEmptyForm = () => ({
   id: null,
   employee: "",
   company: "",
-  supplier: "",
+  // Defaults to "Amadeus" since it's the supplier used on nearly every ticket — still
+  // freely changeable per ticket via the dropdown (or "Other" for a one-off name).
+  supplier: "Amadeus",
   customersCount: 1,
   customers: [emptyCustomerRow()],
   from: "",
