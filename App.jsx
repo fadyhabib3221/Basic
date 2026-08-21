@@ -979,9 +979,7 @@ const getEmptyForm = () => ({
   id: null,
   employee: "",
   company: "",
-  // Defaults to "Amadeus" since it's the supplier used on nearly every ticket — still
-  // freely changeable per ticket via the dropdown (or "Other" for a one-off name).
-  supplier: "Amadeus",
+  supplier: "",
   customersCount: 1,
   customers: [emptyCustomerRow()],
   from: "",
@@ -6544,12 +6542,27 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const handleBackup = () => {
     if (!currentUser.isAdmin && !isOwnerUser) return;
     const payload = {
-      backupFormat: "flight-tickets-v1",
+      backupFormat: "flight-tickets-v2",
       exportedAt: new Date().toISOString(),
       exportedBy: currentUser.name,
       tickets,
       employees,
       suggestions,
+      hotelBookings,
+      visaBookings,
+      carBookings,
+      files,
+      requests,
+      closedYears,
+      expenses,
+      supplierPayments,
+      customerPayments,
+      treasuryAccounts,
+      treasuryEntries,
+      iataBalance,
+      iataHistory,
+      usdToEgpRate,
+      usdToEgpRateDate,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -6560,7 +6573,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    recordActivity("Backup", "created", `Exported a full backup (${tickets.length} tickets, ${employees.length} employees)`);
+    recordActivity(
+      "Backup",
+      "created",
+      `Exported a full backup (${tickets.length} tickets, ${employees.length} employees, ${hotelBookings.length} hotel bookings, ${visaBookings.length} visa bookings, ${carBookings.length} car bookings, ${files.length} files)`
+    );
   };
 
   const triggerRestore = () => {
@@ -6591,67 +6608,70 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         customers: [],
         airlines: Array.isArray(s.airlines) ? s.airlines : [],
         cities: Array.isArray(s.cities) ? s.cities : [],
+        suppliers: Array.isArray(s.suppliers) ? s.suppliers : [],
+        flightSuppliers: Array.isArray(s.flightSuppliers) ? s.flightSuppliers : [...SUPPLIERS],
+        hotelNames: Array.isArray(s.hotelNames) ? s.hotelNames : [],
+        visaSuppliers: Array.isArray(s.visaSuppliers) ? s.visaSuppliers : [],
+        carSuppliers: Array.isArray(s.carSuppliers) ? s.carSuppliers : [],
       };
+      const suggestionsCount =
+        normalizedSuggestions.companies.length +
+        normalizedSuggestions.customers.length +
+        normalizedSuggestions.airlines.length +
+        normalizedSuggestions.cities.length +
+        normalizedSuggestions.suppliers.length +
+        normalizedSuggestions.flightSuppliers.length +
+        normalizedSuggestions.hotelNames.length +
+        normalizedSuggestions.visaSuppliers.length +
+        normalizedSuggestions.carSuppliers.length;
 
-      // MERGE, not replace: any ticket/employee/suggestion added since this backup was
-      // taken must survive the restore. Tickets and employees are keyed by their unique
-      // id/username — when the same key exists on both sides, keep whichever copy has the
-      // newer updatedAt (falling back to the current live record when neither has one, on
-      // the assumption that live data is more recent than a file that was exported earlier).
-      const newerOf = (current, incoming) => {
-        const curT = current && current.updatedAt ? current.updatedAt : 0;
-        const incT = incoming && incoming.updatedAt ? incoming.updatedAt : 0;
-        return incT > curT ? incoming : current;
-      };
-
-      const mergedTicketsMap = new Map(tickets.map((t) => [t.id, t]));
-      let ticketsAdded = 0, ticketsUpdated = 0;
-      for (const incoming of parsed.tickets) {
-        if (!incoming || !incoming.id) continue;
-        const current = mergedTicketsMap.get(incoming.id);
-        if (!current) {
-          mergedTicketsMap.set(incoming.id, incoming);
-          ticketsAdded++;
-        } else {
-          const winner = newerOf(current, incoming);
-          if (winner !== current) ticketsUpdated++;
-          mergedTicketsMap.set(incoming.id, winner);
-        }
-      }
-      const mergedTickets = [...mergedTicketsMap.values()];
-
-      const mergedEmployeesMap = new Map(employees.map((e) => [e.username, e]));
-      let employeesAdded = 0;
-      for (const incoming of parsed.employees) {
-        if (!incoming || !incoming.username) continue;
-        if (!mergedEmployeesMap.has(incoming.username)) {
-          mergedEmployeesMap.set(incoming.username, incoming);
-          employeesAdded++;
-        }
-        // On a username collision, keep the current live account as-is (don't overwrite a
-        // live password/permissions with an older backup copy — that could lock someone out).
-      }
-      const mergedEmployees = [...mergedEmployeesMap.values()];
-
-      const unionUnique = (a, b) => [...new Set([...(a || []), ...(b || [])])];
-      const mergedSuggestions = {
-        companies: unionUnique(suggestions.companies, normalizedSuggestions.companies),
-        customers: [],
-        airlines: unionUnique(suggestions.airlines, normalizedSuggestions.airlines),
-        cities: unionUnique(suggestions.cities, normalizedSuggestions.cities),
-      };
+      // Every other data domain the app stores. Older backups (flight-tickets-v1) only
+      // ever had tickets/employees/suggestions, so everything here defaults to the
+      // current in-memory value (or an empty/default shape) instead of wiping data that
+      // simply wasn't present in an old export.
+      const hotelBookingsNext = Array.isArray(parsed.hotelBookings) ? parsed.hotelBookings : hotelBookings;
+      const visaBookingsNext = Array.isArray(parsed.visaBookings) ? parsed.visaBookings : visaBookings;
+      const carBookingsNext = Array.isArray(parsed.carBookings) ? parsed.carBookings : carBookings;
+      const filesNext = Array.isArray(parsed.files) ? parsed.files : files;
+      const requestsNext = Array.isArray(parsed.requests) ? parsed.requests : requests;
+      const closedYearsNext = parsed.closedYears && typeof parsed.closedYears === "object" ? parsed.closedYears : closedYears;
+      const expensesNext = Array.isArray(parsed.expenses) ? parsed.expenses : expenses;
+      const supplierPaymentsNext = Array.isArray(parsed.supplierPayments) ? parsed.supplierPayments : supplierPayments;
+      const customerPaymentsNext = Array.isArray(parsed.customerPayments) ? parsed.customerPayments : customerPayments;
+      const treasuryAccountsNext = Array.isArray(parsed.treasuryAccounts) ? parsed.treasuryAccounts : treasuryAccounts;
+      const treasuryEntriesNext = Array.isArray(parsed.treasuryEntries) ? parsed.treasuryEntries : treasuryEntries;
+      const iataBalanceNext = parsed.iataBalance !== undefined ? parsed.iataBalance : iataBalance;
+      const iataHistoryNext = parsed.iataHistory && typeof parsed.iataHistory === "object" ? parsed.iataHistory : iataHistory;
 
       requestConfirm(
-        `This will merge the backup file into your current data: ${ticketsAdded} new ticket(s) and ${employeesAdded} new employee account(s) will be added` +
-          (ticketsUpdated ? `, and ${ticketsUpdated} ticket(s) will be updated with a newer version from the file` : "") +
-          `. Nothing currently in your live data will be removed. Continue?`,
+        "This will replace all current data (tickets, hotel/visa/car bookings, files, employee accounts, expenses, payments, treasury, and settings) with the data in this backup file. This cannot be undone. Continue?",
         async () => {
-          await persistTickets(mergedTickets);
-          await persistEmployees(mergedEmployees);
-          await persistSuggestions(mergedSuggestions);
-          recordActivity("Backup", "restored", `Merged a backup into live data (+${ticketsAdded} tickets, ~${ticketsUpdated} updated, +${employeesAdded} employees)`);
+          await persistTickets(parsed.tickets);
+          await persistEmployees(parsed.employees);
+          await persistSuggestions(normalizedSuggestions);
+          await persistHotelBookings(hotelBookingsNext);
+          await persistVisaBookings(visaBookingsNext);
+          await persistCarBookings(carBookingsNext);
+          await persistFiles(filesNext);
+          await persistRequests(requestsNext);
+          await persistClosedYears(closedYearsNext);
+          await persistExpenses(expensesNext);
+          await persistSupplierPayments(supplierPaymentsNext);
+          await persistCustomerPayments(customerPaymentsNext);
+          await persistTreasuryAccounts(treasuryAccountsNext);
+          await persistTreasuryEntries(treasuryEntriesNext);
+          await persistIataBalance(iataBalanceNext);
+          await persistIataHistory(iataHistoryNext);
+          if (parsed.usdToEgpRate !== undefined && parsed.usdToEgpRate !== null) {
+            await persistUsdRate(parsed.usdToEgpRate);
+          }
+          recordActivity(
+            "Backup",
+            "restored",
+            `Restored a backup (${parsed.tickets.length} tickets, ${parsed.employees.length} employees, ${hotelBookingsNext.length} hotel bookings, ${visaBookingsNext.length} visa bookings, ${carBookingsNext.length} car bookings, ${filesNext.length} files) — replaced all current data`
+          );
           setRestoreSuccess(
-            `Backup merged successfully: ${ticketsAdded} new ticket(s), ${ticketsUpdated} updated, ${employeesAdded} new employee account(s). Nothing was deleted.`
+            `Backup restored successfully: ${parsed.tickets.length} tickets, ${parsed.employees.length} employee accounts, ${hotelBookingsNext.length} hotel bookings, ${visaBookingsNext.length} visa bookings, ${carBookingsNext.length} car bookings, ${filesNext.length} files, and ${suggestionsCount} saved suggestions.`
           );
           setConfirmDialog(null);
         }
@@ -6745,13 +6765,10 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : (form.from || "").trim() && (form.to || "").trim();
     const cleanDestinations = filledLegPairs.flatMap(([a, b]) => [a.trim(), b.trim()]);
     const paxCounts = ticketPaxCounts({ customers });
-    // Sold price is optional (a ticket can be logged before the sale price is finalized);
-    // Net price stays required since it's the agency's own cost and every profit
-    // calculation depends on it.
-    const childPriceValid = paxCounts.child === 0 || form.childNetPrice !== "";
-    const infantPriceValid = paxCounts.infant === 0 || form.infantNetPrice !== "";
-    if (!customersValid || !routeValid || form.netPrice === "" || !childPriceValid || !infantPriceValid) {
-      setError("Please enter at least the customer name(s), a ticket number or PNR reference for each, destinations, and net price (including child/infant net prices if any passenger is marked Child or Infant)");
+    const childPriceValid = paxCounts.child === 0 || (form.childNetPrice !== "" && form.childSoldPrice !== "");
+    const infantPriceValid = paxCounts.infant === 0 || (form.infantNetPrice !== "" && form.infantSoldPrice !== "");
+    if (!customersValid || !routeValid || form.netPrice === "" || form.soldPrice === "" || !childPriceValid || !infantPriceValid) {
+      setError("Please enter at least the customer name(s), a ticket number or PNR reference for each, destinations, and prices (including child/infant prices if any passenger is marked Child or Infant)");
       return;
     }
     // Keep the original owner when editing an existing ticket (so an admin editing someone
@@ -11397,6 +11414,9 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           >
             <Upload size={14} /> {ticketScanLoading ? "Reading..." : "Upload Ticket Mask"}
           </button>
+          {ticketScanError && (
+            <p className="text-[10px] text-red-600 basis-full">{ticketScanError}</p>
+          )}
         </div>
 
         {showFlightLookup && (
@@ -12533,10 +12553,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             />
           </div>
 
-          <div className="flex flex-wrap gap-2 mt-4">
-            {ticketScanError && (
-              <p className="text-xs text-red-600 basis-full">{ticketScanError}</p>
-            )}
+          <div className="flex gap-2 mt-4">
             <button
               onClick={handleSubmit}
               className="bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-sm font-semibold rounded-xl px-4 py-2 shadow-sm shadow-teal-800/30 ring-1 ring-inset ring-white/10 transition-colors flex items-center gap-1.5"
