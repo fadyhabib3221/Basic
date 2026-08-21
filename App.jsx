@@ -6743,10 +6743,13 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
       : (form.from || "").trim() && (form.to || "").trim();
     const cleanDestinations = filledLegPairs.flatMap(([a, b]) => [a.trim(), b.trim()]);
     const paxCounts = ticketPaxCounts({ customers });
-    const childPriceValid = paxCounts.child === 0 || (form.childNetPrice !== "" && form.childSoldPrice !== "");
-    const infantPriceValid = paxCounts.infant === 0 || (form.infantNetPrice !== "" && form.infantSoldPrice !== "");
-    if (!customersValid || !routeValid || form.netPrice === "" || form.soldPrice === "" || !childPriceValid || !infantPriceValid) {
-      setError("Please enter at least the customer name(s), a ticket number or PNR reference for each, destinations, and prices (including child/infant prices if any passenger is marked Child or Infant)");
+    // Sold price is optional (a ticket can be logged before the sale price is finalized);
+    // Net price stays required since it's the agency's own cost and every profit
+    // calculation depends on it.
+    const childPriceValid = paxCounts.child === 0 || form.childNetPrice !== "";
+    const infantPriceValid = paxCounts.infant === 0 || form.infantNetPrice !== "";
+    if (!customersValid || !routeValid || form.netPrice === "" || !childPriceValid || !infantPriceValid) {
+      setError("Please enter at least the customer name(s), a ticket number or PNR reference for each, destinations, and net price (including child/infant net prices if any passenger is marked Child or Infant)");
       return;
     }
     // Keep the original owner when editing an existing ticket (so an admin editing someone
