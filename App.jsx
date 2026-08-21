@@ -8,6 +8,10 @@ import * as XLSX from "xlsx-js-style";
 // الدقة أضعف من الـ AI vision لأنه OCR تقليدي (بيقرا الحروف بس، مش بيفهم شكل التذكرة)،
 // فمحتاج بعده regex عشان نحاول نلقط الحقول (اسم الراكب، رقم التذكرة، PNR، المطارات، التاريخ).
 import { createWorker } from "tesseract.js";
+// مكتبة توليد QR Code محليًا في المتصفح (بدون أي اتصال بأي سيرفر خارجي) — بنستخدمها
+// عشان نرسم كود الـ QR الخاص بإعداد الـ 2FA كصورة data-URL بدل ما نعرض المفتاح
+// كنص طويل بس.
+import QRCode from "qrcode";
 
 // Every read/write in this file goes through window.storage (the artifact persistent-storage
 // API). That API is only injected when the artifact is rendered inside claude.ai's artifact
@@ -2984,6 +2988,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // own account — managed alongside the password-change modal above.
   const [show2faSetup, setShow2faSetup] = useState(false);
   const [totpSetupSecret, setTotpSetupSecret] = useState("");
+  const [totpSetupQr, setTotpSetupQr] = useState(""); // data URL of the QR code for the current setup secret
   const [totpSetupCode, setTotpSetupCode] = useState("");
   const [totpSetupError, setTotpSetupError] = useState("");
   const [totpSetupSuccess, setTotpSetupSuccess] = useState("");
@@ -6692,17 +6697,27 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   };
 
   // ---------- Two-factor authentication (authenticator app), own account only ----------
-  const startTotpSetup = () => {
+  const startTotpSetup = async () => {
     setTotpSetupError("");
     setTotpSetupSuccess("");
     setTotpSetupCode("");
-    setTotpSetupSecret(generateTotpSecret());
+    const secret = generateTotpSecret();
+    setTotpSetupSecret(secret);
+    setTotpSetupQr("");
     setShow2faSetup(true);
+    try {
+      const uri = buildTotpUri(secret, currentUser.username);
+      const dataUrl = await QRCode.toDataURL(uri, { margin: 1, width: 220 });
+      setTotpSetupQr(dataUrl);
+    } catch (e) {
+      // QR generation is a convenience — the manual key below still works either way
+    }
   };
 
   const cancelTotpSetup = () => {
     setShow2faSetup(false);
     setTotpSetupSecret("");
+    setTotpSetupQr("");
     setTotpSetupCode("");
     setTotpSetupError("");
   };
@@ -6724,6 +6739,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     recordActivity("Employees", "edited", "Enabled two-factor authentication (authenticator app) on their own account");
     setShow2faSetup(false);
     setTotpSetupSecret("");
+    setTotpSetupQr("");
     setTotpSetupCode("");
     setTotpSetupSuccess("Two-factor authentication is on. You'll be asked for a code from your app next time you sign in.");
   };
@@ -6752,7 +6768,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setPasswordError(""); setPasswordSuccess("");
     setCurrentPasswordInput(""); setNewPasswordInput(""); setConfirmPasswordInput("");
     setShow2faSetup(false);
-    setTotpSetupSecret(""); setTotpSetupCode(""); setTotpSetupError(""); setTotpSetupSuccess("");
+    setTotpSetupSecret(""); setTotpSetupQr(""); setTotpSetupCode(""); setTotpSetupError(""); setTotpSetupSuccess("");
     setTotpDisablePassword(""); setTotpDisableError("");
   };
 
@@ -17777,19 +17793,29 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   return (
                     <div className="mt-2 space-y-3">
                       <p className="text-xs text-stone-500">
-                        Open your authenticator app (Google Authenticator, Microsoft Authenticator, Authy, etc.), add a new account, and type in this key by hand:
+                        Open your authenticator app (Google Authenticator, Microsoft Authenticator, Authy, etc.) and scan this code:
                       </p>
-                      <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2">
-                        <code className="text-xs font-mono tracking-wider text-stone-700 flex-1 break-all">{totpSetupSecret}</code>
-                        <button
-                          type="button"
-                          title="Copy key"
-                          onClick={() => navigator.clipboard && navigator.clipboard.writeText(totpSetupSecret)}
-                          className="text-stone-400 hover:text-teal-800 shrink-0"
-                        >
-                          <Copy size={14} />
-                        </button>
+                      <div className="flex justify-center">
+                        {totpSetupQr ? (
+                          <img src={totpSetupQr} alt="2FA setup QR code" className="w-40 h-40 rounded-lg border border-stone-200 p-2 bg-white" />
+                        ) : (
+                          <div className="w-40 h-40 rounded-lg border border-stone-200 flex items-center justify-center text-stone-300 text-xs">Generating…</div>
+                        )}
                       </div>
+                      <details className="text-xs text-stone-500">
+                        <summary className="cursor-pointer select-none text-teal-800 hover:text-teal-900">Can't scan? Enter this key by hand</summary>
+                        <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 mt-2">
+                          <code className="text-xs font-mono tracking-wider text-stone-700 flex-1 break-all">{totpSetupSecret}</code>
+                          <button
+                            type="button"
+                            title="Copy key"
+                            onClick={() => navigator.clipboard && navigator.clipboard.writeText(totpSetupSecret)}
+                            className="text-stone-400 hover:text-teal-800 shrink-0"
+                          >
+                            <Copy size={14} />
+                          </button>
+                        </div>
+                      </details>
                       {totpSetupError && <div className="bg-red-50 text-red-700 text-xs rounded-xl px-3 py-2">{totpSetupError}</div>}
                       <div>
                         <label className="text-xs text-stone-500 block mb-1">Enter the 6-digit code your app shows now, to confirm</label>
