@@ -6590,20 +6590,66 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         airlines: Array.isArray(s.airlines) ? s.airlines : [],
         cities: Array.isArray(s.cities) ? s.cities : [],
       };
-      const suggestionsCount =
-        normalizedSuggestions.companies.length +
-        normalizedSuggestions.customers.length +
-        normalizedSuggestions.airlines.length +
-        normalizedSuggestions.cities.length;
+
+      // MERGE, not replace: any ticket/employee/suggestion added since this backup was
+      // taken must survive the restore. Tickets and employees are keyed by their unique
+      // id/username — when the same key exists on both sides, keep whichever copy has the
+      // newer updatedAt (falling back to the current live record when neither has one, on
+      // the assumption that live data is more recent than a file that was exported earlier).
+      const newerOf = (current, incoming) => {
+        const curT = current && current.updatedAt ? current.updatedAt : 0;
+        const incT = incoming && incoming.updatedAt ? incoming.updatedAt : 0;
+        return incT > curT ? incoming : current;
+      };
+
+      const mergedTicketsMap = new Map(tickets.map((t) => [t.id, t]));
+      let ticketsAdded = 0, ticketsUpdated = 0;
+      for (const incoming of parsed.tickets) {
+        if (!incoming || !incoming.id) continue;
+        const current = mergedTicketsMap.get(incoming.id);
+        if (!current) {
+          mergedTicketsMap.set(incoming.id, incoming);
+          ticketsAdded++;
+        } else {
+          const winner = newerOf(current, incoming);
+          if (winner !== current) ticketsUpdated++;
+          mergedTicketsMap.set(incoming.id, winner);
+        }
+      }
+      const mergedTickets = [...mergedTicketsMap.values()];
+
+      const mergedEmployeesMap = new Map(employees.map((e) => [e.username, e]));
+      let employeesAdded = 0;
+      for (const incoming of parsed.employees) {
+        if (!incoming || !incoming.username) continue;
+        if (!mergedEmployeesMap.has(incoming.username)) {
+          mergedEmployeesMap.set(incoming.username, incoming);
+          employeesAdded++;
+        }
+        // On a username collision, keep the current live account as-is (don't overwrite a
+        // live password/permissions with an older backup copy — that could lock someone out).
+      }
+      const mergedEmployees = [...mergedEmployeesMap.values()];
+
+      const unionUnique = (a, b) => [...new Set([...(a || []), ...(b || [])])];
+      const mergedSuggestions = {
+        companies: unionUnique(suggestions.companies, normalizedSuggestions.companies),
+        customers: [],
+        airlines: unionUnique(suggestions.airlines, normalizedSuggestions.airlines),
+        cities: unionUnique(suggestions.cities, normalizedSuggestions.cities),
+      };
+
       requestConfirm(
-        "This will replace all current tickets and employee accounts with the data in this backup file. This cannot be undone. Continue?",
+        `This will merge the backup file into your current data: ${ticketsAdded} new ticket(s) and ${employeesAdded} new employee account(s) will be added` +
+          (ticketsUpdated ? `, and ${ticketsUpdated} ticket(s) will be updated with a newer version from the file` : "") +
+          `. Nothing currently in your live data will be removed. Continue?`,
         async () => {
-          await persistTickets(parsed.tickets);
-          await persistEmployees(parsed.employees);
-          await persistSuggestions(normalizedSuggestions);
-          recordActivity("Backup", "restored", `Restored a backup (${parsed.tickets.length} tickets, ${parsed.employees.length} employees) — replaced all current data`);
+          await persistTickets(mergedTickets);
+          await persistEmployees(mergedEmployees);
+          await persistSuggestions(mergedSuggestions);
+          recordActivity("Backup", "restored", `Merged a backup into live data (+${ticketsAdded} tickets, ~${ticketsUpdated} updated, +${employeesAdded} employees)`);
           setRestoreSuccess(
-            `Backup restored successfully: ${parsed.tickets.length} tickets, ${parsed.employees.length} employee accounts, and ${suggestionsCount} saved suggestions.`
+            `Backup merged successfully: ${ticketsAdded} new ticket(s), ${ticketsUpdated} updated, ${employeesAdded} new employee account(s). Nothing was deleted.`
           );
           setConfirmDialog(null);
         }
