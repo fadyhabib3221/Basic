@@ -14,16 +14,21 @@ export const firebaseConfig = {
     measurementId: "G-6BXHXRL9Q4"
 };
 
-// Recommended Firestore security rules (Firestore console -> Rules tab).
-// This keeps the "storage" collection open to read/write, since the app already has
-// its own username/password login screen guarding access to the UI. If you want
-// stronger protection, look into Firebase Authentication + rules that check auth.uid.
+// Firestore security rules (Firestore console -> Rules tab -> paste this -> Publish).
+// Requires a signed-in Firebase Auth session (storage.js signs every browser in
+// anonymously and automatically — no extra login screen). This blocks anyone who
+// isn't running the actual app from reading/writing the database directly, even
+// though the app's own username/password screen is a separate, stronger layer on
+// top of this for who gets into the UI itself.
+//
+// Before this works, enable it once: Firebase console -> Authentication ->
+// Sign-in method -> enable "Anonymous".
 /*
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /storage/{docId} {
-      allow read, write: if true;
+      allow read, write: if request.auth != null;
     }
   }
 }

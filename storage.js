@@ -1,4 +1,5 @@
 import { initializeApp } from "firebase/app";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import {
   getFirestore,
   doc,
@@ -15,6 +16,25 @@ import { firebaseConfig } from "./firebaseConfig";
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
+
+// Firestore rules require request.auth != null (see firebaseConfig.js comment), so every
+// browser tab needs a Firebase Auth session before it can read/write "shared" data. This
+// is separate from — and invisible to — the app's own username/password login screen: it
+// just proves "this request came from someone running the actual app", not "this is a
+// specific known employee". Signed in anonymously, automatically, once per browser, before
+// any Firestore call goes out.
+let readyResolve;
+const authReady = new Promise((resolve) => { readyResolve = resolve; });
+onAuthStateChanged(auth, (user) => {
+  if (user) { readyResolve(); return; }
+  signInAnonymously(auth).catch((err) => {
+    console.error("Firebase anonymous sign-in failed:", err);
+    // Resolve anyway so calls proceed and surface Firestore's own permission error,
+    // rather than hanging forever waiting for an auth state that will never arrive.
+    readyResolve();
+  });
+});
 
 // The app's storage calls look like:
 //   window.storage.get(key, shared)
@@ -34,6 +54,7 @@ async function get(key, shared = false) {
     const value = localStorage.getItem(LOCAL_PREFIX + key);
     return value === null ? null : { key, value, shared: false };
   }
+  await authReady;
   const snap = await getDoc(doc(db, "storage", key));
   if (!snap.exists()) return null;
   return { key, value: snap.data().value, shared: true };
@@ -44,6 +65,7 @@ async function set(key, value, shared = false) {
     localStorage.setItem(LOCAL_PREFIX + key, value);
     return { key, value, shared: false };
   }
+  await authReady;
   await setDoc(doc(db, "storage", key), { value });
   return { key, value, shared: true };
 }
@@ -53,6 +75,7 @@ async function del(key, shared = false) {
     localStorage.removeItem(LOCAL_PREFIX + key);
     return { key, deleted: true, shared: false };
   }
+  await authReady;
   await deleteDoc(doc(db, "storage", key));
   return { key, deleted: true, shared: true };
 }
@@ -69,6 +92,7 @@ async function list(prefix = "", shared = false) {
     }
     return { keys, prefix, shared: false };
   }
+  await authReady;
   // Range query on the document ID to emulate a "starts with" prefix match.
   const col = collection(db, "storage");
   const q = query(
