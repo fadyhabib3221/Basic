@@ -1610,19 +1610,24 @@ const emptyNewEmployee = {
 // fully visible and easy to use — this is the one place permissions for an existing
 // employee are changed. Closes itself if the employee record disappears (e.g. deleted
 // from another tab) or is promoted to a main account (which no longer uses these toggles).
-const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, onSetSection, onSetSectionPerm, onSave, onDelete }) => {
+const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, onSetSection, onSetSectionPerm, onSave, onDelete, onResetTotp }) => {
   // Name/username/password are edited right here, not in the employee table — the
   // table's name cell is a plain, non-editable label that only opens this modal.
   const [draft, setDraft] = useState({ name: "", username: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [totpResetBusy, setTotpResetBusy] = useState(false);
+  const [totpResetError, setTotpResetError] = useState("");
+  const [totpResetSuccess, setTotpResetSuccess] = useState("");
 
   useEffect(() => {
     if (emp) {
       setDraft({ name: emp.name, username: emp.username, password: "" });
       setShowPassword(false);
       setSaveError("");
+      setTotpResetError("");
+      setTotpResetSuccess("");
     }
   }, [emp && emp.username]);
 
@@ -1639,6 +1644,20 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
     setSaving(false);
     setSaveError(err || "");
     if (!err) onClose();
+  };
+
+  // Admin-only recovery path for a lost/broken phone: turns 2FA off for this
+  // employee directly, without touching their password. They can sign in with just
+  // their password afterward and set 2FA up again themselves once they're back in.
+  const handleResetTotp = async () => {
+    if (!onResetTotp) return;
+    setTotpResetBusy(true);
+    setTotpResetError("");
+    setTotpResetSuccess("");
+    const err = await onResetTotp();
+    setTotpResetBusy(false);
+    if (err) setTotpResetError(err);
+    else setTotpResetSuccess("Two-factor authentication has been turned off for this employee.");
   };
 
   return (
@@ -1702,6 +1721,34 @@ const EmployeePermissionsModal = ({ emp, onClose, onSetRole, onSetPermission, on
                 {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
             </div>
+          </div>
+          {/* Two-factor authentication — read-only status here plus, for the admin,
+              a direct way to turn it off for this employee (e.g. a lost phone means
+              they can no longer produce a code and would otherwise be locked out). */}
+          <div>
+            <label className="text-xs text-stone-500 block mb-1">Two-factor authentication</label>
+            {emp.totpEnabled ? (
+              <div className="space-y-1.5">
+                <p className="text-xs text-emerald-700 flex items-center gap-1">
+                  <ShieldCheck size={13} /> Enabled on this account
+                </p>
+                {totpResetError && <div className="bg-red-50 text-red-700 text-xs rounded-xl px-2.5 py-1.5">{totpResetError}</div>}
+                {totpResetSuccess && <div className="bg-emerald-50 text-emerald-700 text-xs rounded-xl px-2.5 py-1.5">{totpResetSuccess}</div>}
+                {!totpResetSuccess && onResetTotp && (
+                  <button
+                    type="button"
+                    onClick={handleResetTotp}
+                    disabled={totpResetBusy}
+                    title="Turn off 2FA for this employee — e.g. if their phone is lost, so they can sign in with just their password again"
+                    className="text-xs font-semibold rounded-xl border border-red-300 text-red-600 hover:bg-red-50 px-3 py-1.5 disabled:opacity-50"
+                  >
+                    {totpResetBusy ? "Resetting…" : "Reset 2FA (lost phone, etc.)"}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-stone-400">Off — this employee hasn't set up an authenticator app.</p>
+            )}
           </div>
           <div>
             <label className="text-xs text-stone-500 block mb-1">Grade</label>
@@ -2994,6 +3041,16 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   const [totpSetupSuccess, setTotpSetupSuccess] = useState("");
   const [totpDisablePassword, setTotpDisablePassword] = useState("");
   const [totpDisableError, setTotpDisableError] = useState("");
+  // Mandatory "set up 2FA" popup shown once, the very first time an account signs in
+  // (i.e. it has never seen this prompt before and doesn't already have 2FA on).
+  // Separate state from the Settings-page 2FA controls above so this popup never
+  // interferes with (or is interfered with by) that page's own in-progress setup.
+  const [showFirstLoginTotpPrompt, setShowFirstLoginTotpPrompt] = useState(false);
+  const [firstLoginTotpStep, setFirstLoginTotpStep] = useState("intro"); // "intro" | "setup"
+  const [firstLoginTotpSecret, setFirstLoginTotpSecret] = useState("");
+  const [firstLoginTotpQr, setFirstLoginTotpQr] = useState("");
+  const [firstLoginTotpCode, setFirstLoginTotpCode] = useState("");
+  const [firstLoginTotpError, setFirstLoginTotpError] = useState("");
   const [currentPasswordInput, setCurrentPasswordInput] = useState("");
   const [newPasswordInput, setNewPasswordInput] = useState("");
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
@@ -5538,6 +5595,15 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     setPendingTotpLogin(null);
     setOtpCodeInput("");
     setOtpError("");
+    // First-ever sign-in for this account (never seen the 2FA prompt before, and
+    // doesn't already have 2FA on): surface the mandatory setup popup once. Any later
+    // login skips this, whether they enabled 2FA, skipped it, or an admin reset it —
+    // totpPromptSeen only gets cleared back to false by the admin/Owner "Reset 2FA"
+    // recovery action, since that's meant to also give a fresh nudge to re-enable it.
+    if (!match.totpEnabled && !match.totpPromptSeen) {
+      setShowFirstLoginTotpPrompt(true);
+      setFirstLoginTotpStep("intro");
+    }
     try {
       const lastSectionRes = await window.storage.get(`tickets:lastSection:${match.username}`, false).catch(() => null);
       const lastSection = lastSectionRes && lastSectionRes.value;
@@ -6662,6 +6728,32 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     return null;
   };
 
+  // Lets an admin (or Owner, for non-admin employees) directly turn off 2FA on
+  // someone else's account — e.g. the employee lost their phone and can no longer
+  // produce a code, so they're locked out of signing in. Unlike a password reset,
+  // this leaves their password untouched; it only clears the authenticator secret so
+  // they can sign in with just their password and set 2FA up again themselves
+  // afterward. Never usable on the admin's own account — that stays behind the
+  // dedicated Disable 2FA control (which requires re-entering the password) so an
+  // admin can't casually strip their own protection from this list.
+  const handleAdminResetTotp = async (username) => {
+    if (!currentUser.isAdmin && !isOwnerUser) return "Only the main account can reset 2FA for another account";
+    if (username === currentUser.username) return "Use the Two-factor authentication section of your own account to turn this off";
+    const target = (employees || []).find((e) => e.username === username);
+    if (!target) return "Employee not found";
+    if (isOwnerUser && target.isAdmin) return "Only a main account can reset another main account's 2FA";
+    if (!target.totpEnabled) return null;
+    const next = (employees || []).map((e) =>
+      // Also clears totpPromptSeen, so this employee gets the first-login-style setup
+      // popup again on their next sign-in — a gentle nudge to re-enable 2FA once
+      // they're back in, on their new phone or authenticator app.
+      e.username === username ? { ...e, totpEnabled: false, totpSecret: null, totpPromptSeen: false } : e
+    );
+    await persistEmployees(next);
+    recordActivity("Employees", "edited", `Reset two-factor authentication for @${username} (e.g. lost phone)`);
+    return null;
+  };
+
   const handleChangePassword = async () => {
     setPasswordError("");
     setPasswordSuccess("");
@@ -6759,6 +6851,62 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     recordActivity("Employees", "edited", "Disabled two-factor authentication on their own account");
     setTotpDisablePassword("");
     setTotpSetupSuccess("Two-factor authentication has been turned off.");
+  };
+
+  // ---------- First-login "set up 2FA" popup ----------
+  // Shown once per account, right after the very first successful sign-in that ever
+  // reaches completeLogin (see the totpPromptSeen check there) — not on every login,
+  // and never again once the employee has either enabled 2FA or explicitly skipped it.
+  const startFirstLoginTotpSetup = async () => {
+    setFirstLoginTotpError("");
+    setFirstLoginTotpCode("");
+    const secret = generateTotpSecret();
+    setFirstLoginTotpSecret(secret);
+    setFirstLoginTotpQr("");
+    setFirstLoginTotpStep("setup");
+    try {
+      const uri = buildTotpUri(secret, currentUser.username);
+      const dataUrl = await QRCode.toDataURL(uri, { margin: 1, width: 220 });
+      setFirstLoginTotpQr(dataUrl);
+    } catch (e) {
+      // QR generation is a convenience — the manual key below still works either way
+    }
+  };
+
+  const closeFirstLoginTotpPrompt = () => {
+    setShowFirstLoginTotpPrompt(false);
+    setFirstLoginTotpStep("intro");
+    setFirstLoginTotpSecret("");
+    setFirstLoginTotpQr("");
+    setFirstLoginTotpCode("");
+    setFirstLoginTotpError("");
+  };
+
+  // Confirms the code and turns 2FA on, exactly like confirmTotpSetup — plus marks
+  // the prompt as seen so it never appears again for this account.
+  const confirmFirstLoginTotpSetup = async () => {
+    setFirstLoginTotpError("");
+    const ok = await verifyTotpCode(firstLoginTotpSecret, firstLoginTotpCode);
+    if (!ok) {
+      setFirstLoginTotpError("That code didn't match. Double-check your phone's clock and try again.");
+      return;
+    }
+    const next = (employees || []).map((e) =>
+      e.username === currentUser.username ? { ...e, totpEnabled: true, totpSecret: firstLoginTotpSecret, totpPromptSeen: true } : e
+    );
+    await persistEmployees(next);
+    recordActivity("Employees", "edited", "Enabled two-factor authentication (authenticator app) on their own account");
+    closeFirstLoginTotpPrompt();
+  };
+
+  // "Skip for now" — the employee can still turn 2FA on later from Settings; this
+  // just stops the popup from nagging them on every subsequent login.
+  const skipFirstLoginTotpPrompt = async () => {
+    const next = (employees || []).map((e) =>
+      e.username === currentUser.username ? { ...e, totpPromptSeen: true } : e
+    );
+    await persistEmployees(next);
+    closeFirstLoginTotpPrompt();
   };
 
   // Resets every field of the password/2FA modal (not just the password fields) so
@@ -10780,6 +10928,19 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                                   <ShieldCheck size={12} /> Make main
                                 </button>
                               )
+                            )}
+                            {e.isAdmin && currentUser.isAdmin && e.username !== currentUser.username && e.totpEnabled && (
+                              <button
+                                onClick={async () => {
+                                  setManageError("");
+                                  const err = await handleAdminResetTotp(e.username);
+                                  if (err) setManageError(err);
+                                }}
+                                title="Reset 2FA for this account — e.g. if their phone is lost"
+                                className="text-stone-400 hover:text-red-600 text-[11px] font-semibold border border-stone-200 rounded-lg px-1.5 py-1"
+                              >
+                                Reset 2FA
+                              </button>
                             )}
                             {e.isAdmin && currentUser.isAdmin && (
                               <button onClick={() => startEditEmployee(e)} className="text-stone-400 hover:text-teal-800 p-1">
@@ -17721,6 +17882,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             }
             return err;
           }}
+          onResetTotp={() => handleAdminResetTotp(openPermissionsFor)}
           onDelete={() => {
             const target = (employees || []).find((e) => e.username === openPermissionsFor);
             setOpenPermissionsFor(null);
@@ -17731,6 +17893,95 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             });
           }}
         />
+      )}
+
+      {showFirstLoginTotpPrompt && currentUser && (
+        // Not dismissible by clicking the backdrop (no onClick here, unlike the other
+        // modals) — the employee has to actively choose "Set up now" or "Skip for
+        // now" so it can't be closed by accident on this first appearance.
+        <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl border border-stone-200 p-5 w-full max-w-sm max-h-[90vh] overflow-y-auto">
+            {firstLoginTotpStep === "intro" ? (
+              <>
+                <div className="flex items-center gap-2 mb-1">
+                  <Smartphone size={17} className="text-teal-800" />
+                  <h3 className="font-semibold text-stone-900">Secure your account</h3>
+                </div>
+                <p className="text-xs text-stone-500 mb-4">
+                  Add two-factor authentication with an authenticator app (Google Authenticator, Microsoft Authenticator, Authy, etc.) for an extra layer of protection when you sign in. You can turn this on now, or later from your account settings.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={startFirstLoginTotpSetup}
+                    className="flex-1 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-xs font-semibold rounded-xl px-3 py-2"
+                  >
+                    Set up now
+                  </button>
+                  <button
+                    onClick={skipFirstLoginTotpPrompt}
+                    className="px-3 py-2 text-xs font-semibold rounded-xl border border-stone-300 text-stone-600 hover:bg-stone-50"
+                  >
+                    Skip for now
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 mb-3">
+                  <Smartphone size={17} className="text-teal-800" />
+                  <h3 className="font-semibold text-stone-900">Set up 2FA</h3>
+                </div>
+                <div className="space-y-3">
+                  <p className="text-xs text-stone-500">
+                    Open your authenticator app and scan this code:
+                  </p>
+                  <div className="flex justify-center">
+                    {firstLoginTotpQr ? (
+                      <img src={firstLoginTotpQr} alt="2FA setup QR code" className="w-40 h-40 rounded-lg border border-stone-200 p-2 bg-white" />
+                    ) : (
+                      <div className="w-40 h-40 rounded-lg border border-stone-200 flex items-center justify-center text-stone-300 text-xs">Generating…</div>
+                    )}
+                  </div>
+                  <details className="text-xs text-stone-500">
+                    <summary className="cursor-pointer select-none text-teal-800 hover:text-teal-900">Can't scan? Enter this key by hand</summary>
+                    <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 mt-2">
+                      <code className="text-xs font-mono tracking-wider text-stone-700 flex-1 break-all">{firstLoginTotpSecret}</code>
+                      <button
+                        type="button"
+                        title="Copy key"
+                        onClick={() => navigator.clipboard && navigator.clipboard.writeText(firstLoginTotpSecret)}
+                        className="text-stone-400 hover:text-teal-800 shrink-0"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                  </details>
+                  {firstLoginTotpError && <div className="bg-red-50 text-red-700 text-xs rounded-xl px-3 py-2">{firstLoginTotpError}</div>}
+                  <div>
+                    <label className="text-xs text-stone-500 block mb-1">Enter the 6-digit code your app shows now, to confirm</label>
+                    <input
+                      className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-center tracking-[0.4em] font-semibold focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      value={firstLoginTotpCode}
+                      onChange={(e) => setFirstLoginTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      onKeyDown={(e) => e.key === "Enter" && confirmFirstLoginTotpSetup()}
+                      placeholder="000000" inputMode="numeric" maxLength={6} autoFocus
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={confirmFirstLoginTotpSetup}
+                      className="flex-1 bg-gradient-to-b from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white text-xs font-semibold rounded-xl px-3 py-2">
+                      Enable 2FA
+                    </button>
+                    <button onClick={skipFirstLoginTotpPrompt}
+                      className="px-3 py-2 text-xs font-semibold rounded-xl border border-stone-300 text-stone-600 hover:bg-stone-50">
+                      Skip for now
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {showChangePassword && (
