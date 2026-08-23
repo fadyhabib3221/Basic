@@ -3313,6 +3313,19 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // row — including an old, reissued ticket that's normally hidden from the table — can
   // be scrolled to and briefly highlighted.
   const [highlightedRowKey, setHighlightedRowKey] = useState(null);
+  // Which row(s) in the main tickets table the user has manually marked/selected by
+  // clicking anywhere in the row (not the customer name, which opens details instead).
+  // Purely a visual "mark this row" aid — click again to unmark. Uses the same
+  // "ticket:<TICKETNUMBER>" / "refund:<TICKETNUMBER>" row keys as highlightedRowKey.
+  const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set());
+  const toggleRowSelected = (rowKey) => {
+    setSelectedRowKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  };
   const highlightTimeoutRef = useRef(null);
   const jumpToRow = (key) => {
     if (!key) return;
@@ -9764,15 +9777,22 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         rid: `${t.id}-${i}`,
         bookingId: t.id,
         orderIndex: i,
-        render: (rn, idx) => (
+        render: (rn, idx) => {
+        const isSelected = selectedRowKeys.has(ticketKey);
+        return (
         <tr
           key={`${t.id}-${i}`}
           data-row-key={ticketKey}
-          className={`border-t leading-tight ${t.voided ? "opacity-50 grayscale" : ""} ${
+          onClick={() => toggleRowSelected(ticketKey)}
+          className={`border-t leading-tight cursor-pointer ${t.voided ? "opacity-50 grayscale" : ""} ${
+            isSelected ? "ring-2 ring-inset ring-teal-500" : ""
+          } ${
             isYearLocked("flights", t.date)
               ? `border-stone-200 bg-stone-200/70 grayscale hover:bg-stone-200 ${i > 0 ? "border-t-0" : ""}`
               : isHighlighted
               ? `border-green-300 bg-green-100 ring-1 ring-inset ring-green-400 hover:bg-green-100 ${i > 0 ? "border-t-0" : ""}`
+              : isSelected
+              ? `border-teal-300 bg-teal-100/70 hover:bg-teal-100 ${i > 0 ? "border-t-0" : ""}`
               : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${
                   // Subtle zebra striping on plain rows — every other row gets a
                   // faint tint so a long table stays easy to track across, without
@@ -9859,7 +9879,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </td>
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`}>{t.supplier || "-"}</td>
         </tr>
-        ),
+        );},
       });
     });
     getRefunds(t)
@@ -9883,15 +9903,22 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         rid: `${t.id}-refund-${ri}`,
         bookingId: t.id,
         orderIndex: 1000 + ri,
-        render: (rn, idx) => (
+        render: (rn, idx) => {
+        const isSelected = selectedRowKeys.has(refundKey);
+        return (
         <tr
           key={`${t.id}-refund-${ri}`}
           data-row-key={refundKey}
-          className={`border-t border-dashed leading-tight ${t.voided ? "opacity-50 grayscale" : ""} ${
+          onClick={() => toggleRowSelected(refundKey)}
+          className={`border-t border-dashed leading-tight cursor-pointer ${t.voided ? "opacity-50 grayscale" : ""} ${
+            isSelected ? "ring-2 ring-inset ring-teal-500" : ""
+          } ${
             isYearLocked("flights", t.date)
               ? "border-stone-200 bg-stone-200/70 grayscale hover:bg-stone-200"
               : isHighlighted
               ? "border-green-300 bg-green-100 ring-1 ring-inset ring-green-400 hover:bg-green-100"
+              : isSelected
+              ? "border-teal-300 bg-teal-100/70 hover:bg-teal-100"
               // Refund status now reads from the "↳ R" badge below plus the red text,
               // rather than a full red row tint — matches the same "badge, not full
               // row" treatment used for reissued/multi-passenger tickets above.
@@ -9943,7 +9970,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </td>
           <td className={`px-1 py-0 ${rowText} whitespace-nowrap`}>{t.supplier || "-"}</td>
         </tr>
-        ),
+        );},
       });
     });
     return rows;
