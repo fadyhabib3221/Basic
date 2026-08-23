@@ -9751,10 +9751,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
     customers.forEach((c, i) => {
       const ticketKey = `ticket:${(c.ticketNumber || "").trim().toUpperCase()}`;
       const isHighlighted = !!c.ticketNumber && highlightedRowKey === ticketKey;
-      // Reissued rows get a darker sky tint (row + text) so they read clearly at a
-      // glance; refund/other rows keep the normal stone text color.
-      const cellText = t.isReissued ? "text-sky-900" : "text-stone-600";
-      const nameText = t.isReissued ? "text-sky-950" : "text-stone-800";
+      // Status (reissued, multi-passenger) is now communicated by the small badges
+      // next to the customer name / ticket number rather than by tinting the whole
+      // row — keeps a long table calmer to scan, with color reserved for things that
+      // need it most (the locked/grayscale and jump-to-highlight states below).
+      const cellText = "text-stone-600";
+      const nameText = "text-stone-800";
       rows.push({
         sortDate: t.date || "",
         ticketNumber: c.ticketNumber || "",
@@ -9772,23 +9774,21 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               ? `border-stone-200 bg-stone-200/70 grayscale hover:bg-stone-200 ${i > 0 ? "border-t-0" : ""}`
               : isHighlighted
               ? `border-green-300 bg-green-100 ring-1 ring-inset ring-green-400 hover:bg-green-100 ${i > 0 ? "border-t-0" : ""}`
-              : t.isReissued
-              ? `border-sky-300 bg-sky-100 hover:bg-sky-200 ${i > 0 ? "border-t-0" : ""}`
               : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${
-                  isMulti
-                    ? "bg-amber-50 hover:bg-amber-100"
-                    // Subtle zebra striping on otherwise-plain rows only — every other
-                    // row gets a faint tint so a long table stays easy to track across,
-                    // without competing with the stronger colors used for actual states
-                    // (multi-passenger, reissued, refunded, locked, highlighted) above.
-                    : idx % 2 === 1
-                    ? "bg-stone-50/70 hover:bg-teal-50/60"
-                    : "hover:bg-teal-50/60"
+                  // Subtle zebra striping on plain rows — every other row gets a
+                  // faint tint so a long table stays easy to track across, without
+                  // competing with the stronger colors reserved for locked/highlighted
+                  // rows above (reissued and multi-passenger now read from their badges).
+                  idx % 2 === 1 ? "bg-stone-50/70 hover:bg-teal-50/60" : "hover:bg-teal-50/60"
                 }`
           }`}
         >
           <td className={`px-1 py-0 ${cellText} text-stone-400 whitespace-nowrap`}>{rn}</td>
-          <td className={`px-1 py-0 ${cellText} whitespace-nowrap`} title={t.employee || ""}>{employeeInitials(t.employee)}</td>
+          <td className={`px-1 py-0 ${cellText} whitespace-nowrap`} title={t.employee || ""}>
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-stone-100 text-[10px] font-semibold text-stone-500">
+              {employeeInitials(t.employee)}
+            </span>
+          </td>
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`}>{t.date ? formatDisplayDate(t.date) : "-"}</td>
           <td className={`px-1 py-0 font-medium ${nameText} whitespace-nowrap`}>
             <span className="inline-flex items-center gap-1.5">
@@ -9846,7 +9846,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`}>{routeLabel(t)}</td>
           <td className={`px-1 py-0 ${cellText} text-right whitespace-nowrap`}>{fmt(ticketSoldTotal(t))} {t.soldCurrency || "EGP"}</td>
           <td className={`px-1 py-0 ${cellText} text-right whitespace-nowrap`}>{fmt(ticketNetTotal(t))} {t.netCurrency || "EGP"}</td>
-          <td className="px-1 py-0 font-semibold text-emerald-700 text-right whitespace-nowrap">{fmt(ticketProfitEgp(t))} EGP</td>
+          <td className={`px-1 py-0 font-semibold text-right whitespace-nowrap ${ticketProfitEgp(t) < 0 ? "text-red-700" : "text-emerald-700"}`}>{fmt(ticketProfitEgp(t))} EGP</td>
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`}>
             {t.company && t.company.trim() ? (
               t.company
@@ -9890,11 +9890,18 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               ? "border-stone-200 bg-stone-200/70 grayscale hover:bg-stone-200"
               : isHighlighted
               ? "border-green-300 bg-green-100 ring-1 ring-inset ring-green-400 hover:bg-green-100"
-              : "border-red-300 bg-red-100/70 hover:bg-red-200/70"
+              // Refund status now reads from the "↳ R" badge below plus the red text,
+              // rather than a full red row tint — matches the same "badge, not full
+              // row" treatment used for reissued/multi-passenger tickets above.
+              : `border-red-200 ${idx % 2 === 1 ? "bg-stone-50/70 hover:bg-red-50" : "hover:bg-red-50"}`
           }`}
         >
           <td className={`px-1 py-0 ${rowText} whitespace-nowrap`}>{rn}</td>
-          <td className={`px-1 py-0 ${rowText} whitespace-nowrap`} title={t.employee || ""}>{employeeInitials(t.employee)}</td>
+          <td className={`px-1 py-0 ${rowText} whitespace-nowrap`} title={t.employee || ""}>
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-stone-100 text-[10px] font-semibold text-stone-500">
+              {employeeInitials(t.employee)}
+            </span>
+          </td>
           <td className={`px-1 py-0 ${rowText} whitespace-nowrap`}>{refund.date ? formatDisplayDate(refund.date) : "-"}</td>
           <td className={`px-1 py-0 font-medium ${rowTextBold} whitespace-nowrap`}>{(refundedCustomer && refundedCustomer.name) || "-"}</td>
           <td className={`px-1 py-0 ${rowText} font-mono whitespace-nowrap`}>
@@ -9918,7 +9925,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           <td className={`px-1 py-0 ${rowText} whitespace-nowrap`}>{routeLabel(t)}</td>
           <td className={`px-1 py-0 ${rowText} text-right whitespace-nowrap`}>{fmt(refund.customerAmount)}</td>
           <td className={`px-1 py-0 ${rowText} text-right whitespace-nowrap`}>{fmt(refund.airlineAmount)}</td>
-          <td className={`px-1 py-0 font-semibold ${rowTextBold} text-right whitespace-nowrap`}>
+          <td className={`px-1 py-0 font-semibold text-right whitespace-nowrap ${(parseFloat(refund.airlineAmount) || 0) - (parseFloat(refund.customerAmount) || 0) < 0 ? "text-red-700" : "text-emerald-700"}`}>
             {fmt((parseFloat(refund.airlineAmount) || 0) - (parseFloat(refund.customerAmount) || 0))}
           </td>
           <td className={`px-1 py-0 ${rowText} whitespace-nowrap`}>
