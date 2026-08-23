@@ -9762,7 +9762,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         rid: `${t.id}-${i}`,
         bookingId: t.id,
         orderIndex: i,
-        render: (rn) => (
+        render: (rn, idx) => (
         <tr
           key={`${t.id}-${i}`}
           data-row-key={ticketKey}
@@ -9774,7 +9774,17 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               ? `border-green-300 bg-green-100 ring-1 ring-inset ring-green-400 hover:bg-green-100 ${i > 0 ? "border-t-0" : ""}`
               : t.isReissued
               ? `border-sky-300 bg-sky-100 hover:bg-sky-200 ${i > 0 ? "border-t-0" : ""}`
-              : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${isMulti ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-teal-50/60"}`
+              : `border-stone-100 ${i > 0 ? "border-t-0" : ""} ${
+                  isMulti
+                    ? "bg-amber-50 hover:bg-amber-100"
+                    // Subtle zebra striping on otherwise-plain rows only — every other
+                    // row gets a faint tint so a long table stays easy to track across,
+                    // without competing with the stronger colors used for actual states
+                    // (multi-passenger, reissued, refunded, locked, highlighted) above.
+                    : idx % 2 === 1
+                    ? "bg-stone-50/70 hover:bg-teal-50/60"
+                    : "hover:bg-teal-50/60"
+                }`
           }`}
         >
           <td className={`px-1 py-0 ${cellText} text-stone-400 whitespace-nowrap`}>{rn}</td>
@@ -9870,7 +9880,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         rid: `${t.id}-refund-${ri}`,
         bookingId: t.id,
         orderIndex: 1000 + ri,
-        render: (rn) => (
+        render: (rn, idx) => (
         <tr
           key={`${t.id}-refund-${ri}`}
           data-row-key={refundKey}
@@ -13197,19 +13207,19 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             <div className="overflow-x-auto rounded-xl border border-stone-200" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}>
               <table className="w-full min-w-max text-xs border-collapse">
                 <thead>
-                  <tr className="bg-teal-50/60 text-teal-800 text-[11px] uppercase tracking-wide border-b-2 border-teal-200">
-                    <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">RN</th>
-                    <ThFilter label="By" options={employeesAvailable} selected={selectedEmployee} onChange={setSelectedEmployee} />
-                    <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Date</th>
-                    <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Customer</th>
-                    <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Ticket #</th>
-                    <ThFilter label="Airline" options={airlinesAvailable} selected={selectedAirline} onChange={setSelectedAirline} />
-                    <th className="text-left px-1 py-0.5 font-semibold whitespace-nowrap">Route</th>
-                    <th className="text-right px-1 py-0.5 font-semibold whitespace-nowrap">Sold price</th>
-                    <th className="text-right px-1 py-0.5 font-semibold whitespace-nowrap">Net price</th>
-                    <th className="text-right px-1 py-0.5 font-semibold whitespace-nowrap">Profit</th>
-                    <ThFilter label="Company" options={companiesAvailable} selected={selectedCompany} onChange={setSelectedCompany} />
-                    <ThFilter label="Supplier" options={suppliersAvailable} selected={selectedSupplier} onChange={setSelectedSupplier} />
+                  <tr className="bg-teal-50 text-teal-800 text-[11px] uppercase tracking-wide border-b-2 border-teal-200">
+                    <th className="sticky top-0 z-10 bg-teal-50 text-left px-1 py-0.5 font-semibold whitespace-nowrap">RN</th>
+                    <ThFilter label="By" options={employeesAvailable} selected={selectedEmployee} onChange={setSelectedEmployee} className="sticky top-0 z-10 bg-teal-50" />
+                    <th className="sticky top-0 z-10 bg-teal-50 text-left px-1 py-0.5 font-semibold whitespace-nowrap">Date</th>
+                    <th className="sticky top-0 z-10 bg-teal-50 text-left px-1 py-0.5 font-semibold whitespace-nowrap">Customer</th>
+                    <th className="sticky top-0 z-10 bg-teal-50 text-left px-1 py-0.5 font-semibold whitespace-nowrap">Ticket #</th>
+                    <ThFilter label="Airline" options={airlinesAvailable} selected={selectedAirline} onChange={setSelectedAirline} className="sticky top-0 z-10 bg-teal-50" />
+                    <th className="sticky top-0 z-10 bg-teal-50 text-left px-1 py-0.5 font-semibold whitespace-nowrap">Route</th>
+                    <th className="sticky top-0 z-10 bg-teal-50 text-right px-1 py-0.5 font-semibold whitespace-nowrap">Sold price</th>
+                    <th className="sticky top-0 z-10 bg-teal-50 text-right px-1 py-0.5 font-semibold whitespace-nowrap">Net price</th>
+                    <th className="sticky top-0 z-10 bg-teal-50 text-right px-1 py-0.5 font-semibold whitespace-nowrap">Profit</th>
+                    <ThFilter label="Company" options={companiesAvailable} selected={selectedCompany} onChange={setSelectedCompany} className="sticky top-0 z-10 bg-teal-50" />
+                    <ThFilter label="Supplier" options={suppliersAvailable} selected={selectedSupplier} onChange={setSelectedSupplier} className="sticky top-0 z-10 bg-teal-50" />
                   </tr>
                 </thead>
                 <tbody>
@@ -13261,7 +13271,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                         // Different bookings on the same date: order by ticket number, reversed.
                         return (b.ticketNumber || "").localeCompare(a.ticketNumber || "", undefined, { numeric: true, sensitivity: "base" });
                       })
-                      .map((row) => row.render(rnByRid[row.rid]));
+                      .map((row, idx) => row.render(rnByRid[row.rid], idx));
                   })()}
                 </tbody>
               </table>
