@@ -3313,19 +3313,25 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
   // row — including an old, reissued ticket that's normally hidden from the table — can
   // be scrolled to and briefly highlighted.
   const [highlightedRowKey, setHighlightedRowKey] = useState(null);
-  // Which row(s) in the main tickets table the user has manually marked/selected by
+  // Which single row in the main tickets table the user has manually marked, by
   // clicking anywhere in the row (not the customer name, which opens details instead).
-  // Purely a visual "mark this row" aid — click again to unmark. Uses the same
-  // "ticket:<TICKETNUMBER>" / "refund:<TICKETNUMBER>" row keys as highlightedRowKey.
-  const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set());
-  const toggleRowSelected = (rowKey) => {
-    setSelectedRowKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(rowKey)) next.delete(rowKey);
-      else next.add(rowKey);
-      return next;
-    });
-  };
+  // Only one row can be marked at a time — clicking any other row moves the mark there,
+  // and a document-level listener below clears it entirely when the click lands outside
+  // any marked-row's <tr> (e.g. clicking blank space, another section, a button, etc.).
+  // Uses the same "ticket:<TICKETNUMBER>" / "refund:<TICKETNUMBER>" row keys as
+  // highlightedRowKey.
+  const [selectedRowKey, setSelectedRowKey] = useState(null);
+  const markRowSelected = (rowKey) => setSelectedRowKey(rowKey);
+  useEffect(() => {
+    if (!selectedRowKey) return;
+    const clearIfOutside = (e) => {
+      if (!e.target.closest || !e.target.closest("tr[data-row-key]")) {
+        setSelectedRowKey(null);
+      }
+    };
+    document.addEventListener("click", clearIfOutside, true);
+    return () => document.removeEventListener("click", clearIfOutside, true);
+  }, [selectedRowKey]);
   const highlightTimeoutRef = useRef(null);
   const jumpToRow = (key) => {
     if (!key) return;
@@ -9778,12 +9784,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         bookingId: t.id,
         orderIndex: i,
         render: (rn, idx) => {
-        const isSelected = selectedRowKeys.has(ticketKey);
+        const isSelected = selectedRowKey === ticketKey;
         return (
         <tr
           key={`${t.id}-${i}`}
           data-row-key={ticketKey}
-          onClick={() => toggleRowSelected(ticketKey)}
+          onClick={() => markRowSelected(ticketKey)}
           className={`border-t leading-tight cursor-pointer ${t.voided ? "opacity-50 grayscale" : ""} ${
             isSelected ? "ring-2 ring-inset ring-teal-500" : ""
           } ${
@@ -9904,12 +9910,12 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         bookingId: t.id,
         orderIndex: 1000 + ri,
         render: (rn, idx) => {
-        const isSelected = selectedRowKeys.has(refundKey);
+        const isSelected = selectedRowKey === refundKey;
         return (
         <tr
           key={`${t.id}-refund-${ri}`}
           data-row-key={refundKey}
-          onClick={() => toggleRowSelected(refundKey)}
+          onClick={() => markRowSelected(refundKey)}
           className={`border-t border-dashed leading-tight cursor-pointer ${t.voided ? "opacity-50 grayscale" : ""} ${
             isSelected ? "ring-2 ring-inset ring-teal-500" : ""
           } ${
