@@ -9768,8 +9768,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <tr
           key={`${t.id}-${i}`}
           data-row-key={ticketKey}
-          onClick={() => openTicketDetail(t)}
-          className={`border-t leading-tight cursor-pointer ${t.voided ? "opacity-50 grayscale" : ""} ${
+          className={`border-t leading-tight ${t.voided ? "opacity-50 grayscale" : ""} ${
             isYearLocked("flights", t.date)
               ? `border-stone-200 bg-stone-200/70 grayscale hover:bg-stone-200 ${i > 0 ? "border-t-0" : ""}`
               : isHighlighted
@@ -9791,7 +9790,11 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
           </td>
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`}>{t.date ? formatDisplayDate(t.date) : "-"}</td>
           <td className={`px-1 py-0 font-medium ${nameText} whitespace-nowrap`}>
-            <span className="inline-flex items-center gap-1.5">
+            <span
+              onClick={() => openTicketDetail(t)}
+              title="Click to open ticket details"
+              className="inline-flex items-center gap-1.5 cursor-pointer hover:underline hover:text-teal-800"
+            >
               {c.name || "-"}
               {t.voided && i === 0 && (
                 <span
@@ -9844,9 +9847,9 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
           </td>
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`}>{routeLabel(t)}</td>
-          <td className={`px-1 py-0 ${cellText} text-right whitespace-nowrap`}>{fmt(ticketSoldTotal(t))} {t.soldCurrency || "EGP"}</td>
-          <td className={`px-1 py-0 ${cellText} text-right whitespace-nowrap`}>{fmt(ticketNetTotal(t))} {t.netCurrency || "EGP"}</td>
-          <td className={`px-1 py-0 font-semibold text-right whitespace-nowrap ${ticketProfitEgp(t) < 0 ? "text-red-700" : "text-emerald-700"}`}>{fmt(ticketProfitEgp(t))} EGP</td>
+          <td className={`px-1 py-0 font-bold ${cellText} text-right whitespace-nowrap`}>{fmt(ticketNetTotal(t))} {t.netCurrency || "EGP"}</td>
+          <td className={`px-1 py-0 font-bold ${cellText} text-right whitespace-nowrap`}>{fmt(ticketSoldTotal(t))} {t.soldCurrency || "EGP"}</td>
+          <td className={`px-1 py-0 font-bold text-right whitespace-nowrap ${ticketProfitEgp(t) < 0 ? "text-red-700" : "text-emerald-700"}`}>{fmt(ticketProfitEgp(t))} EGP</td>
           <td className={`px-1 py-0 ${cellText} whitespace-nowrap`}>
             {t.company && t.company.trim() ? (
               t.company
@@ -9884,8 +9887,7 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
         <tr
           key={`${t.id}-refund-${ri}`}
           data-row-key={refundKey}
-          onClick={() => openTicketDetail(t)}
-          className={`border-t border-dashed leading-tight cursor-pointer ${t.voided ? "opacity-50 grayscale" : ""} ${
+          className={`border-t border-dashed leading-tight ${t.voided ? "opacity-50 grayscale" : ""} ${
             isYearLocked("flights", t.date)
               ? "border-stone-200 bg-stone-200/70 grayscale hover:bg-stone-200"
               : isHighlighted
@@ -9903,7 +9905,15 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             </span>
           </td>
           <td className={`px-1 py-0 ${rowText} whitespace-nowrap`}>{refund.date ? formatDisplayDate(refund.date) : "-"}</td>
-          <td className={`px-1 py-0 font-medium ${rowTextBold} whitespace-nowrap`}>{(refundedCustomer && refundedCustomer.name) || "-"}</td>
+          <td className={`px-1 py-0 font-medium ${rowTextBold} whitespace-nowrap`}>
+            <span
+              onClick={() => openTicketDetail(t)}
+              title="Click to open ticket details"
+              className="cursor-pointer hover:underline"
+            >
+              {(refundedCustomer && refundedCustomer.name) || "-"}
+            </span>
+          </td>
           <td className={`px-1 py-0 ${rowText} font-mono whitespace-nowrap`}>
             <span className="inline-flex items-center gap-1.5">
               {refundTicketNumber}
@@ -9923,9 +9933,9 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
             {t.airline ? (getAirlineIata(t.airline) || t.airline) : "-"}
           </td>
           <td className={`px-1 py-0 ${rowText} whitespace-nowrap`}>{routeLabel(t)}</td>
-          <td className={`px-1 py-0 ${rowText} text-right whitespace-nowrap`}>{fmt(refund.customerAmount)}</td>
-          <td className={`px-1 py-0 ${rowText} text-right whitespace-nowrap`}>{fmt(refund.airlineAmount)}</td>
-          <td className={`px-1 py-0 font-semibold text-right whitespace-nowrap ${(parseFloat(refund.airlineAmount) || 0) - (parseFloat(refund.customerAmount) || 0) < 0 ? "text-red-700" : "text-emerald-700"}`}>
+          <td className={`px-1 py-0 font-bold ${rowText} text-right whitespace-nowrap`}>{fmt(refund.airlineAmount)}</td>
+          <td className={`px-1 py-0 font-bold ${rowText} text-right whitespace-nowrap`}>{fmt(refund.customerAmount)}</td>
+          <td className={`px-1 py-0 font-bold text-right whitespace-nowrap ${(parseFloat(refund.airlineAmount) || 0) - (parseFloat(refund.customerAmount) || 0) < 0 ? "text-red-700" : "text-emerald-700"}`}>
             {fmt((parseFloat(refund.airlineAmount) || 0) - (parseFloat(refund.customerAmount) || 0))}
           </td>
           <td className={`px-1 py-0 ${rowText} whitespace-nowrap`}>
@@ -13222,8 +13232,8 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     <th className="sticky top-0 z-10 bg-teal-50 text-left px-1 py-0.5 font-semibold whitespace-nowrap">Ticket #</th>
                     <ThFilter label="Airline" options={airlinesAvailable} selected={selectedAirline} onChange={setSelectedAirline} className="sticky top-0 z-10 bg-teal-50" />
                     <th className="sticky top-0 z-10 bg-teal-50 text-left px-1 py-0.5 font-semibold whitespace-nowrap">Route</th>
-                    <th className="sticky top-0 z-10 bg-teal-50 text-right px-1 py-0.5 font-semibold whitespace-nowrap">Sold price</th>
                     <th className="sticky top-0 z-10 bg-teal-50 text-right px-1 py-0.5 font-semibold whitespace-nowrap">Net price</th>
+                    <th className="sticky top-0 z-10 bg-teal-50 text-right px-1 py-0.5 font-semibold whitespace-nowrap">Sold price</th>
                     <th className="sticky top-0 z-10 bg-teal-50 text-right px-1 py-0.5 font-semibold whitespace-nowrap">Profit</th>
                     <ThFilter label="Company" options={companiesAvailable} selected={selectedCompany} onChange={setSelectedCompany} className="sticky top-0 z-10 bg-teal-50" />
                     <ThFilter label="Supplier" options={suppliersAvailable} selected={selectedSupplier} onChange={setSelectedSupplier} className="sticky top-0 z-10 bg-teal-50" />
