@@ -14086,19 +14086,34 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
               )}
               {(() => {
                 const { sorted, rnByRowId } = rankByServiceDate(filteredHotelBookings, "bookingDate");
-                return sorted.map((h) => (
+                return sorted.map((h) => {
+                const hotelRowKey = `hotel:${h.id}`;
+                const isSelected = selectedRowKey === hotelRowKey;
+                return (
                 <tr
                   key={h.id}
-                  className={`border-b border-stone-100 cursor-pointer ${isYearLocked("hotels", h.bookingDate) ? "bg-stone-200/70 grayscale hover:bg-stone-200" : "hover:bg-stone-50"}`}
-                  onClick={() => { setViewingFileContext(null); setViewingHotelBooking(h); }}
+                  onClick={() => markRowSelected(hotelRowKey)}
+                  className={`border-b border-stone-100 cursor-pointer ${
+                    isYearLocked("hotels", h.bookingDate)
+                      ? "bg-stone-200/70 grayscale hover:bg-stone-200"
+                      : isSelected
+                      ? "bg-teal-100/70 ring-2 ring-inset ring-teal-500 hover:bg-teal-100"
+                      : "hover:bg-stone-50"
+                  }`}
                 >
                   <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{rnByRowId[h.id]}</td>
                   <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">
-                    {h.customer && h.customer.trim() ? (
-                      h.customer
-                    ) : (
-                      <span className="text-stone-400 italic">Individual</span>
-                    )}
+                    <span
+                      onClick={() => { setViewingFileContext(null); setViewingHotelBooking(h); }}
+                      title="Click to open booking details"
+                      className="cursor-pointer hover:underline hover:text-teal-800"
+                    >
+                      {h.customer && h.customer.trim() ? (
+                        h.customer
+                      ) : (
+                        <span className="text-stone-400 italic">Individual</span>
+                      )}
+                    </span>
                   </td>
                   <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">{h.hotel}</td>
                   <td className="px-1.5 py-0.5 text-stone-600 whitespace-nowrap">{h.supplier}</td>
@@ -14112,13 +14127,14 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                       ? `${formatDisplayDate(hotelDateRange(h).start)} → ${formatDisplayDate(hotelDateRange(h).end)}`
                       : "-"}
                   </td>
-                  <td className="px-1.5 py-0.5 text-stone-600 text-right whitespace-nowrap">{fmt(hotelNetTotal(h))}</td>
-                  <td className="px-1.5 py-0.5 text-stone-600 text-right whitespace-nowrap">{fmt(hotelSoldTotal(h))}</td>
-                  <td className="px-1.5 py-0.5 font-semibold text-emerald-700 text-right whitespace-nowrap">
+                  <td className="px-1.5 py-0.5 font-bold text-stone-600 text-right whitespace-nowrap">{fmt(hotelNetTotal(h))}</td>
+                  <td className="px-1.5 py-0.5 font-bold text-stone-600 text-right whitespace-nowrap">{fmt(hotelSoldTotal(h))}</td>
+                  <td className="px-1.5 py-0.5 font-bold text-emerald-700 text-right whitespace-nowrap">
                     {fmt(hotelProfitTotal(h))}
                   </td>
                 </tr>
-                ));
+                );
+                });
               })()}
             </tbody>
           </table>
@@ -14903,26 +14919,40 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     const net = visaNetTotal(v);
                     const sold = visaSoldTotal(v);
                     const profit = visaProfitTotal(v);
+                    const visaRowKey = `visa:${v.id}`;
+                    const isSelected = selectedRowKey === visaRowKey;
                     return (
                       <tr
                         key={v.id}
-                        className={`cursor-pointer ${isYearLocked("visa", v.bookingDate) ? "bg-stone-200/70 grayscale hover:bg-stone-200" : "hover:bg-stone-50"}`}
-                        onClick={() => { setViewingFileContext(null); setViewingVisaBooking(v); }}
+                        onClick={() => markRowSelected(visaRowKey)}
+                        className={`cursor-pointer ${
+                          isYearLocked("visa", v.bookingDate)
+                            ? "bg-stone-200/70 grayscale hover:bg-stone-200"
+                            : isSelected
+                            ? "bg-teal-100/70 ring-2 ring-inset ring-teal-500 hover:bg-teal-100"
+                            : "hover:bg-stone-50"
+                        }`}
                       >
                         <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{rnByRowId[v.id]}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap" title={v.employee || ""}>{employeeInitials(v.employee)}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">{(v.customers || []).length}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">
-                          {(v.customers || []).map((c) => c.name || "-").join(", ")}
+                          <span
+                            onClick={() => { setViewingFileContext(null); setViewingVisaBooking(v); }}
+                            title="Click to open booking details"
+                            className="cursor-pointer hover:underline hover:text-teal-800"
+                          >
+                            {(v.customers || []).map((c) => c.name || "-").join(", ")}
+                          </span>
                         </td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">{v.visaType}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">
                           {v.bookingDate ? formatDisplayDate(v.bookingDate) : "-"}
                         </td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">{v.supplier}</td>
-                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">{fmt(net)} {v.netCurrency}</td>
-                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">{fmt(sold)} {v.soldCurrency}</td>
-                        <td className="px-1.5 py-0.5 text-right font-semibold text-emerald-700 whitespace-nowrap">{fmt(profit)} EGP</td>
+                        <td className="px-1.5 py-0.5 text-right font-bold text-stone-700 whitespace-nowrap">{fmt(net)} {v.netCurrency}</td>
+                        <td className="px-1.5 py-0.5 text-right font-bold text-stone-700 whitespace-nowrap">{fmt(sold)} {v.soldCurrency}</td>
+                        <td className="px-1.5 py-0.5 text-right font-bold text-emerald-700 whitespace-nowrap">{fmt(profit)} EGP</td>
                       </tr>
                     );
                     });
@@ -15686,17 +15716,33 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                     const net = carNetTotal(c);
                     const sold = carSoldTotal(c);
                     const profit = carProfitTotal(c);
+                    const carRowKey = `car:${c.id}`;
+                    const isSelected = selectedRowKey === carRowKey;
                     return (
                       <tr
                         key={c.id}
-                        className={`leading-tight cursor-pointer ${isYearLocked("cars", c.bookingDate) ? "bg-stone-200/70 grayscale hover:bg-stone-200" : "hover:bg-stone-50"}`}
-                        onClick={() => { setViewingFileContext(null); setViewingCarBooking(c); }}
+                        onClick={() => markRowSelected(carRowKey)}
+                        className={`leading-tight cursor-pointer ${
+                          isYearLocked("cars", c.bookingDate)
+                            ? "bg-stone-200/70 grayscale hover:bg-stone-200"
+                            : isSelected
+                            ? "bg-teal-100/70 ring-2 ring-inset ring-teal-500 hover:bg-teal-100"
+                            : "hover:bg-stone-50"
+                        }`}
                       >
                         <td className="px-1.5 py-0.5 text-stone-400 whitespace-nowrap">{rnByRowId[c.id]}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">
                           {c.entryDate ? formatDisplayDate(c.entryDate) : "-"}
                         </td>
-                        <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">{c.customerName}</td>
+                        <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">
+                          <span
+                            onClick={() => { setViewingFileContext(null); setViewingCarBooking(c); }}
+                            title="Click to open booking details"
+                            className="cursor-pointer hover:underline hover:text-teal-800"
+                          >
+                            {c.customerName}
+                          </span>
+                        </td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">{c.phone || "-"}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">{c.routeFrom} → {c.routeTo}</td>
                         <td className="px-1.5 py-0.5 text-stone-700 whitespace-nowrap">{c.carType}</td>
@@ -15717,15 +15763,15 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                             ? `${c.returnDate ? formatDisplayDate(c.returnDate) : "-"}${c.returnTime ? ` · ${c.returnTime}` : ""}`
                             : "-"}
                         </td>
-                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">
+                        <td className="px-1.5 py-0.5 text-right font-bold text-stone-700 whitespace-nowrap">
                           {c.collection ? `${fmt(parseFloat(c.collection) || 0)} ${c.currency}` : "-"}
                         </td>
-                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">
+                        <td className="px-1.5 py-0.5 text-right font-bold text-stone-700 whitespace-nowrap">
                           {c.driverTip ? `${fmt(parseFloat(c.driverTip) || 0)} ${c.currency}` : "-"}
                         </td>
-                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">{fmt(net)} {c.netCurrency}</td>
-                        <td className="px-1.5 py-0.5 text-right text-stone-700 whitespace-nowrap">{fmt(sold)} {c.soldCurrency}</td>
-                        <td className="px-1.5 py-0.5 text-right font-semibold text-emerald-700 whitespace-nowrap">{fmt(profit)} EGP</td>
+                        <td className="px-1.5 py-0.5 text-right font-bold text-stone-700 whitespace-nowrap">{fmt(net)} {c.netCurrency}</td>
+                        <td className="px-1.5 py-0.5 text-right font-bold text-stone-700 whitespace-nowrap">{fmt(sold)} {c.soldCurrency}</td>
+                        <td className="px-1.5 py-0.5 text-right font-bold text-emerald-700 whitespace-nowrap">{fmt(profit)} EGP</td>
                       </tr>
                     );
                     });
@@ -16981,19 +17027,31 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   {filteredSupplierLedger.length === 0 ? (
                     <tr><td colSpan={5} className="text-center text-stone-400 py-6">{at("noSuppliers")}</td></tr>
                   ) : (
-                    filteredSupplierLedger.map((s) => (
+                    filteredSupplierLedger.map((s) => {
+                      const supplierRowKey = `supplier:${s.supplier}`;
+                      const isSelected = selectedRowKey === supplierRowKey;
+                      return (
                       <tr
                         key={s.supplier}
-                        onClick={() => setViewingSupplier(s.supplier)}
-                        className="hover:bg-teal-50 cursor-pointer"
+                        onClick={() => markRowSelected(supplierRowKey)}
+                        className={`cursor-pointer ${isSelected ? "bg-teal-100/70 ring-2 ring-inset ring-teal-500 hover:bg-teal-100" : "hover:bg-teal-50"}`}
                       >
-                        <td className="px-3 py-2 font-semibold text-stone-800 whitespace-nowrap">{s.supplier}</td>
+                        <td className="px-3 py-2 font-semibold text-stone-800 whitespace-nowrap">
+                          <span
+                            onClick={() => setViewingSupplier(s.supplier)}
+                            title="Click to open supplier details"
+                            className="cursor-pointer hover:underline hover:text-teal-800"
+                          >
+                            {s.supplier}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 text-stone-500 text-xs whitespace-nowrap">{s.sections.map((x) => sectionLabel(x)).join(accountsLang === "en" ? ", " : "، ") || "-"}</td>
-                        <td className="px-3 py-2 text-stone-700 whitespace-nowrap">{fmt(s.totalOwed)}</td>
-                        <td className="px-3 py-2 text-emerald-700 whitespace-nowrap">{fmt(s.paid)}</td>
+                        <td className="px-3 py-2 font-bold text-stone-700 whitespace-nowrap">{fmt(s.totalOwed)}</td>
+                        <td className="px-3 py-2 font-bold text-emerald-700 whitespace-nowrap">{fmt(s.paid)}</td>
                         <td className={`px-3 py-2 font-bold whitespace-nowrap ${s.balance > 0 ? "text-red-600" : "text-stone-400"}`}>{fmt(s.balance)}</td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -17028,19 +17086,31 @@ function TicketsApp({ onChangeServer, currentServerUrl } = {}) {
                   {filteredCustomerLedger.length === 0 ? (
                     <tr><td colSpan={5} className="text-center text-stone-400 py-6">{at("noCustomers")}</td></tr>
                   ) : (
-                    filteredCustomerLedger.map((c) => (
+                    filteredCustomerLedger.map((c) => {
+                      const customerRowKey = `customer:${c.customer}`;
+                      const isSelected = selectedRowKey === customerRowKey;
+                      return (
                       <tr
                         key={c.customer}
-                        onClick={() => setViewingCustomer(c.customer)}
-                        className="hover:bg-teal-50 cursor-pointer"
+                        onClick={() => markRowSelected(customerRowKey)}
+                        className={`cursor-pointer ${isSelected ? "bg-teal-100/70 ring-2 ring-inset ring-teal-500 hover:bg-teal-100" : "hover:bg-teal-50"}`}
                       >
-                        <td className="px-3 py-2 font-semibold text-stone-800 whitespace-nowrap">{c.customer}</td>
+                        <td className="px-3 py-2 font-semibold text-stone-800 whitespace-nowrap">
+                          <span
+                            onClick={() => setViewingCustomer(c.customer)}
+                            title="Click to open customer details"
+                            className="cursor-pointer hover:underline hover:text-teal-800"
+                          >
+                            {c.customer}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 text-stone-500 text-xs whitespace-nowrap">{c.sections.map((x) => sectionLabel(x)).join(accountsLang === "en" ? ", " : "، ") || "-"}</td>
-                        <td className="px-3 py-2 text-stone-700 whitespace-nowrap">{fmt(c.totalDue)}</td>
-                        <td className="px-3 py-2 text-emerald-700 whitespace-nowrap">{fmt(c.paid)}</td>
+                        <td className="px-3 py-2 font-bold text-stone-700 whitespace-nowrap">{fmt(c.totalDue)}</td>
+                        <td className="px-3 py-2 font-bold text-emerald-700 whitespace-nowrap">{fmt(c.paid)}</td>
                         <td className={`px-3 py-2 font-bold whitespace-nowrap ${c.balance > 0 ? "text-red-600" : "text-stone-400"}`}>{fmt(c.balance)}</td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>
